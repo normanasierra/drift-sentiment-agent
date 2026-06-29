@@ -26,13 +26,24 @@ with st.sidebar:
     ticker = st.text_input("Ticker", value="AAPL").strip().upper()
     run = st.button("Analyze", type="primary")
     st.markdown("---")
+    tolerance_days = st.slider(
+        "DTE tolerance (± days)", min_value=5, max_value=60, value=20, step=5,
+        help="A bucket's monthly expiration must fall within ±this many days of "
+             "its target DTE (320/120/90/30). If none does, the nearest is used "
+             "and flagged as a fallback.",
+    )
+    hide_out_of_tol = st.checkbox(
+        "Strict: hide out-of-tolerance buckets", value=False,
+        help="Drop buckets whose nearest monthly is outside the tolerance window.",
+    )
+    st.markdown("---")
     st.caption("API key is read from `.env` (POLYGON_API_KEY).")
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _analyze(tk: str):
+def _analyze(tk: str, tolerance: int):
     spot, contracts = polygon_client.fetch_chain(tk)
-    report = build_report(tk, spot, contracts, polygon_client.today())
+    report = build_report(tk, spot, contracts, polygon_client.today(), tolerance)
     return report
 
 
@@ -44,7 +55,7 @@ def _daily_bars(tk: str):
 if run and ticker:
     try:
         with st.spinner(f"Fetching option chain for {ticker}…"):
-            report = _analyze(ticker)
+            report = _analyze(ticker, tolerance_days)
     except PolygonError as e:
         st.error(str(e))
         st.stop()
@@ -58,6 +69,22 @@ if run and ticker:
             f"{ticker}. The chain may be sparse or illiquid."
         )
         st.stop()
+
+    # Strict mode: drop buckets outside the DTE tolerance window.
+    n_dropped = sum(1 for b in report.buckets if not b.within_tolerance)
+    if hide_out_of_tol and n_dropped:
+        report.buckets = [b for b in report.buckets if b.within_tolerance]
+        if not report.buckets:
+            st.warning(
+                f"All buckets fall outside the ±{tolerance_days}-day tolerance. "
+                "Loosen the slider or uncheck strict mode."
+            )
+            st.stop()
+    elif n_dropped:
+        st.info(
+            f"⚠️ {n_dropped} bucket(s) have no monthly within ±{tolerance_days} "
+            "days of target — shown using the nearest expiration (fallback)."
+        )
 
     # --- Header metrics (Section 8: shares + total notional + GEX) ---
     c1, c2, c3, c4 = st.columns(4)
@@ -80,6 +107,10 @@ if run and ticker:
             {
                 "Bucket": b.label,
                 "Sentiment": f"{b.sentiment} ({b.actual_dte}d)",
+                "Match": (
+                    f"✓ {b.dte_offset:+d}d" if b.within_tolerance
+                    else f"⚠️ {b.dte_offset:+d}d"
+                ),
                 "Expiration": b.expiration.isoformat(),
                 "Call Wall": b.call_wall.strike,
                 "Put Wall": b.put_wall.strike,

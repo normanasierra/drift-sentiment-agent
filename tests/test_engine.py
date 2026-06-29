@@ -267,6 +267,38 @@ def test_thinkscript_header_carries_ticker_and_spot():
 
 # --- end-to-end report (offline synthetic chain) -----------------------------
 
+def test_within_tolerance_flag_marks_close_and_far_buckets():
+    as_of = date(2026, 1, 1)
+    # 320-target resolves to ~323 DTE (3 days off -> within ±20);
+    # 30-target resolves to ~15 DTE (15 days off -> within ±20).
+    near = date(2026, 1, 16)    # 15 DTE
+    far = date(2026, 11, 20)    # 323 DTE
+    contracts = []
+    for exp in (near, far):
+        contracts += [
+            _c(110, "call", 500, exp), _c(90, "put", 400, exp),
+        ]
+    rep = build_report("T", spot=100.0, contracts=contracts, as_of=as_of)
+    by_target = {b.target_dte: b for b in rep.buckets}
+    assert by_target[320].within_tolerance      # 323 vs 320 -> 3d off
+    assert by_target[320].dte_offset == 3
+    assert by_target[30].within_tolerance        # 15 vs 30 -> -15d off
+    assert by_target[30].dte_offset == -15
+
+
+def test_tight_tolerance_flags_fallback_buckets():
+    as_of = date(2026, 1, 1)
+    far = date(2026, 11, 20)     # 323 DTE -> 3d off target 320
+    near = date(2026, 1, 16)     # 15 DTE -> 15d off target 30
+    contracts = []
+    for exp in (near, far):
+        contracts += [_c(110, "call", 500, exp), _c(90, "put", 400, exp)]
+    rep = build_report("T", 100.0, contracts, as_of, tolerance_days=10)
+    by_target = {b.target_dte: b for b in rep.buckets}
+    assert by_target[320].within_tolerance       # 3d off, within ±10
+    assert not by_target[30].within_tolerance     # 15d off, outside ±10
+
+
 def test_build_report_end_to_end():
     as_of = date(2026, 1, 1)
     # Two monthly expirations: ~30 DTE and ~320 DTE.

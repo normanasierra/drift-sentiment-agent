@@ -67,6 +67,8 @@ class BucketResult:
     total_notional: float
     drift: str = ""              # human-readable drift classification
     breakout: bool = False       # spot outside the [put_wall, call_wall] range
+    within_tolerance: bool = True  # |actual_dte - target_dte| <= tolerance window
+    dte_offset: int = 0          # actual_dte - target_dte (signed days off target)
     # --- Gamma Exposure (GEX) ---
     gex_by_strike: dict[float, float] = field(default_factory=_empty_gex)
     total_gex: float = 0.0       # net dealer GEX, $ per 1% move (calls +, puts -)

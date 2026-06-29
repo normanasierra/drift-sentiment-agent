@@ -8,16 +8,24 @@ from . import chain_filter, drift, gex, magneto, scenarios, stats, walls
 from .models import BucketResult, Contract, DriftReport
 
 
+DEFAULT_TOLERANCE_DAYS = 20
+
+
 def build_report(
     ticker: str,
     spot: float,
     contracts: list[Contract],
     as_of: date,
+    tolerance_days: int = DEFAULT_TOLERANCE_DAYS,
 ) -> DriftReport:
     """Run the full pipeline and return a DriftReport.
 
     `contracts` is the raw chain (calls + puts, all expirations). Filtering to
     monthly contracts and bucketing by DTE happens here.
+
+    Each bucket uses the monthly expiration nearest its target DTE. If that
+    nearest monthly is more than `tolerance_days` from the target, the bucket is
+    kept (using the nearest available) but flagged `within_tolerance = False`.
     """
     report = DriftReport(ticker=ticker.upper(), spot=spot, as_of=as_of)
 
@@ -35,6 +43,8 @@ def build_report(
 
         iv = stats.atm_iv(bucket_contracts, spot)
         actual_dte = (exp - as_of).days
+        dte_offset = actual_dte - target_dte
+        within_tol = abs(dte_offset) <= tolerance_days
         sigma = stats.projected_sigma(spot, iv, actual_dte)
 
         drift_desc, breakout = drift.classify_drift(
@@ -53,6 +63,8 @@ def build_report(
                 target_dte=target_dte,
                 expiration=exp,
                 actual_dte=actual_dte,
+                within_tolerance=within_tol,
+                dte_offset=dte_offset,
                 call_wall=cw,
                 put_wall=pw,
                 magneto_strike=mag_strike,
@@ -88,7 +100,15 @@ def format_text_report(report: DriftReport) -> str:
     lines.append("")
 
     for b in report.buckets:
-        lines.append(f"--- {b.label} | exp {b.expiration.isoformat()} ({b.actual_dte} DTE) ---")
+        tol = (
+            f"on-target {b.dte_offset:+d}d"
+            if b.within_tolerance
+            else f"FALLBACK {b.dte_offset:+d}d off (out of tolerance)"
+        )
+        lines.append(
+            f"--- {b.label} | exp {b.expiration.isoformat()} "
+            f"({b.actual_dte} DTE, {tol}) ---"
+        )
         lines.append(f"  Sentiment classification: {b.sentiment} ({b.actual_dte} days)")
         lines.append(f"  Call Wall: {b.call_wall.strike:.2f} (OI {b.call_wall.open_interest:,})")
         lines.append(f"  Put Wall:  {b.put_wall.strike:.2f} (OI {b.put_wall.open_interest:,})")
