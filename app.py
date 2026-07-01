@@ -7,8 +7,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from drift_sentiment import market_context, market_data, polygon_client
+from drift_sentiment.alignment import build_alignment
 from drift_sentiment.chart import build_chart_html
-from drift_sentiment.market_context_ui import render_market_context_html
+from drift_sentiment.market_context_ui import (
+    render_alignment_html,
+    render_market_context_html,
+)
 from drift_sentiment.plotting import build_box_plots, build_gex_profiles
 from drift_sentiment.polygon_client import PolygonError
 from drift_sentiment.report import build_report, format_text_report
@@ -101,6 +105,9 @@ if run and ticker:
         with st.spinner("Loading pre-market institutional briefing…"):
             mctx = _market_context()
         components.html(render_market_context_html(mctx), height=860, scrolling=True)
+        # Institutional Alignment: read-only comparison of the three engines.
+        align = build_alignment(mctx, report)
+        components.html(render_alignment_html(align), height=430, scrolling=True)
     except Exception as e:  # noqa: BLE001 - isolate the macro layer entirely
         st.info(f"Market Context Engine unavailable right now ({e}).")
     st.markdown("---")

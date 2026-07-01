@@ -6,6 +6,7 @@ block (rendered via st.components.html). No scoring or network logic here.
 
 from __future__ import annotations
 
+from .alignment import Alignment, EngineRead
 from .market_context import Component, MarketContext
 
 _BULL = "#16c784"
@@ -174,4 +175,71 @@ def render_market_context_html(ctx: MarketContext) -> str:
 #mce .muted {{ color: #57606a; border: none; }}
 #mce .foot {{ font-size: 10.5px; color: #4b5563; margin-top: 10px; text-align: center; }}
 @media (max-width: 900px) {{ #mce .grid {{ grid-template-columns: repeat(2, 1fr); }} }}
+</style>"""
+
+
+def _align_color(label: str) -> str:
+    return {"Strong Alignment": _BULL, "Conflict": _BEAR}.get(label, _NEUTRAL)
+
+
+def _read_card(r: EngineRead) -> str:
+    col = _score_color(r.score)
+    return f"""
+    <div class="card aread">
+      <div class="ar-name">{r.name}</div>
+      <div class="ar-row">
+        <span class="ar-score" style="color:{col}">{r.score:.0f}</span>
+        <span class="chip" style="background:{col}22;color:{col};border-color:{col}55">{r.bias.upper()}</span>
+      </div>
+      <div class="bar"><div class="fill" style="width:{max(2, min(100, r.score)):.0f}%;background:{col}"></div></div>
+      <div class="ar-detail">{r.detail}</div>
+    </div>"""
+
+
+def render_alignment_html(a: Alignment) -> str:
+    col = _align_color(a.label)
+    cards = "".join(_read_card(r) for r in a.reads)
+    return f"""
+<div id=" align" class="mce-scope">
+  <div class="al-hero" style="border-color:{col}44">
+    <div class="al-left">
+      <div class="al-title">INSTITUTIONAL ALIGNMENT</div>
+      <div class="al-score" style="color:{col}">{a.score}<span class="of">/100</span></div>
+      <div class="al-label" style="color:{col}">{a.label}</div>
+    </div>
+    <div class="al-right">
+      <div class="al-verdict">{a.verdict}</div>
+      <div class="al-guide" style="background:{col}14;border-color:{col}44">{a.guidance}</div>
+    </div>
+  </div>
+  <div class="al-grid">{cards}</div>
+</div>
+
+<style>
+.mce-scope {{
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: #0b0e14; color: #e6edf3; padding: 18px; border-radius: 14px; border: 1px solid #1c2430;
+}}
+.mce-scope .card {{ background: #11161f; border: 1px solid #1c2430; border-radius: 12px; padding: 14px; }}
+.mce-scope .chip {{ font-size: 9px; font-weight: 800; letter-spacing: .5px; padding: 3px 7px; border-radius: 20px; border: 1px solid; white-space: nowrap; }}
+.mce-scope .bar {{ height: 5px; background: #1c2430; border-radius: 4px; overflow: hidden; }}
+.mce-scope .fill {{ height: 100%; border-radius: 4px; }}
+.mce-scope .of {{ font-size: 22px; color: #57606a; font-weight: 600; }}
+.mce-scope .al-hero {{
+  display: flex; justify-content: space-between; gap: 24px; align-items: center;
+  background: linear-gradient(135deg,#11161f 0%,#0d1017 100%);
+  border: 1px solid; border-radius: 14px; padding: 20px 24px; margin-bottom: 14px;
+}}
+.mce-scope .al-title {{ font-size: 12px; letter-spacing: 3px; color: #7d8896; font-weight: 700; }}
+.mce-scope .al-score {{ font-size: 60px; font-weight: 800; line-height: 1; margin: 4px 0; }}
+.mce-scope .al-label {{ font-size: 20px; font-weight: 700; }}
+.mce-scope .al-right {{ flex: 1; max-width: 55%; }}
+.mce-scope .al-verdict {{ font-size: 15px; font-weight: 600; color: #c9d3de; margin-bottom: 12px; line-height: 1.4; }}
+.mce-scope .al-guide {{ font-size: 13px; color: #e6edf3; padding: 12px 14px; border-radius: 10px; border: 1px solid; }}
+.mce-scope .al-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
+.mce-scope .ar-name {{ font-size: 12px; font-weight: 700; color: #c9d3de; margin-bottom: 8px; }}
+.mce-scope .ar-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }}
+.mce-scope .ar-score {{ font-size: 32px; font-weight: 800; line-height: 1; }}
+.mce-scope .ar-detail {{ font-size: 11px; color: #8b95a1; margin-top: 8px; line-height: 1.4; min-height: 30px; }}
+@media (max-width: 900px) {{ .mce-scope .al-hero {{ flex-direction: column; align-items: flex-start; }} .mce-scope .al-right {{ max-width: 100%; }} .mce-scope .al-grid {{ grid-template-columns: 1fr; }} }}
 </style>"""

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import time
 
 import requests
 from dotenv import load_dotenv
@@ -35,20 +36,33 @@ def _api_key() -> str:
     return key
 
 
-def _grouped(day: datetime.date, key: str, timeout: int) -> dict[str, dict] | None:
+def _grouped(
+    day: datetime.date, key: str, timeout: int, *, max_retries: int = 3
+) -> dict[str, dict] | None:
     """All US stock daily bars for `day`, keyed by ticker.
 
     Returns None when the day is not yet available on this plan (403 — the free
     tier's delay window covers the most recent day or two) so the caller can walk
     back to an older, entitled day. Empty dict on a valid non-trading day.
+    Retries with backoff on 429 (the free tier allows ~5 requests/minute).
     """
     url = f"{BASE_URL}/v2/aggs/grouped/locale/us/market/stocks/{day.isoformat()}"
-    resp = requests.get(url, params={"adjusted": "true", "apiKey": key}, timeout=timeout)
-    if resp.status_code == 403:
-        return None  # not entitled yet (delayed data) — skip to an earlier day
-    if resp.status_code != 200:
-        raise MarketDataError(f"Grouped daily for {day} failed ({resp.status_code}).")
-    return {b["T"]: b for b in (resp.json().get("results") or [])}
+    for attempt in range(max_retries + 1):
+        resp = requests.get(url, params={"adjusted": "true", "apiKey": key}, timeout=timeout)
+        if resp.status_code == 403:
+            return None  # not entitled yet (delayed) — skip to an earlier day
+        if resp.status_code == 429:
+            if attempt == max_retries:
+                raise MarketDataError(
+                    "Rate limited by Polygon (free tier ≈5 req/min). Try again "
+                    "in a minute."
+                )
+            time.sleep(13 * (attempt + 1))  # back off through the 1-minute window
+            continue
+        if resp.status_code != 200:
+            raise MarketDataError(f"Grouped daily for {day} failed ({resp.status_code}).")
+        return {b["T"]: b for b in (resp.json().get("results") or [])}
+    return None
 
 
 def today() -> datetime.date:

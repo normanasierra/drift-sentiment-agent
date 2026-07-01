@@ -393,3 +393,63 @@ def test_detect_events_finds_known_fomc():
     # FOMC 2026-07-29 is on the published schedule; from 2026-07-22 it's +7d.
     events = mce.detect_events(date(2026, 7, 22), horizon_days=10)
     assert any("FOMC" in e.name for e in events)
+
+
+# --- institutional alignment engine (read-only) ------------------------------
+
+from drift_sentiment import alignment as align_mod
+from drift_sentiment.market_context import MarketContext
+
+
+def _fake_ctx(score, bias):
+    return MarketContext(
+        score=score, confidence=80, bias=bias, headline="x", components=[],
+        top_factors=[], top_risks=[], events=[], last_date="", prev_date="",
+    )
+
+
+def _report_with(magneto, spot=275.0, zero_gamma=268.0, total_gex=5e7, breakout_drift=""):
+    b = _bucket(magneto_strike=magneto, zero_gamma=zero_gamma, total_gex=total_gex,
+                breakout=bool(breakout_drift), drift=breakout_drift)
+    return DriftReport(ticker="T", spot=spot, as_of=date(2026, 6, 29), buckets=[b])
+
+
+def test_options_read_bullish_when_magneto_above_spot():
+    r = _report_with(magneto=320.0, spot=275.0)
+    read = align_mod.read_options_structure(r)
+    assert read.bias == "bullish" and read.score > 50
+
+
+def test_options_read_bearish_when_magneto_below_spot():
+    r = _report_with(magneto=230.0, spot=275.0)
+    read = align_mod.read_options_structure(r)
+    assert read.bias == "bearish" and read.score < 50
+
+
+def test_dealer_read_supportive_when_positive_gamma_above_flip():
+    r = _report_with(magneto=300.0, spot=290.0, zero_gamma=270.0, total_gex=5e7)
+    read = align_mod.read_dealer_positioning(r)
+    assert read.score > 50  # spot above flip + positive gamma = supportive
+
+
+def test_strong_alignment_when_all_bullish():
+    ctx = _fake_ctx(84, "Risk-On")
+    r = _report_with(magneto=320.0, spot=290.0, zero_gamma=270.0, total_gex=5e7)
+    a = align_mod.build_alignment(ctx, r)
+    assert a.score >= 75
+    assert a.label == "Strong Alignment"
+
+
+def test_conflict_when_macro_bull_but_options_bear():
+    ctx = _fake_ctx(82, "Risk-On")
+    r = _report_with(magneto=230.0, spot=290.0, zero_gamma=300.0, total_gex=-5e7)
+    a = align_mod.build_alignment(ctx, r)
+    assert a.score < 60
+    assert a.label in ("Conflict", "Partial Alignment")
+
+
+def test_alignment_score_in_range():
+    ctx = _fake_ctx(50, "Neutral")
+    r = _report_with(magneto=275.0, spot=275.0)
+    a = align_mod.build_alignment(ctx, r)
+    assert 0 <= a.score <= 100
