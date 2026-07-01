@@ -68,10 +68,10 @@ def build_chart_html(
     data_json = json.dumps(payload)
 
     return """
-<div id="wrap" style="font-family: system-ui, sans-serif;">
+<div id="wrap" style="font-family: system-ui, sans-serif;background:#0b0e14;color:#e6edf3;padding:12px;border-radius:12px;border:1px solid #1c2430;">
   <div id="toggles" style="display:flex;flex-wrap:wrap;gap:14px;margin:4px 0 10px;"></div>
   <div id="chart" style="height:460px;width:100%;"></div>
-  <div style="font-size:11px;color:#888;margin-top:6px;">
+  <div style="font-size:11px;color:#8b95a1;margin-top:6px;">
     Solid = Walls · Dashed = Magneto · Dotted = ±σ · Long-dash = Gamma (Zero-Γ flip &amp; Γ walls) · Shaded = pin zone (support↔resistance). Toggle buckets above.
   </div>
 </div>
@@ -80,10 +80,10 @@ def build_chart_html(
 const DATA = __DATA__;
 
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-  layout: { background: { color: '#ffffff' }, textColor: '#333' },
-  grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
-  rightPriceScale: { borderColor: '#ccc' },
-  timeScale: { borderColor: '#ccc', timeVisible: false },
+  layout: { background: { color: '#0b0e14' }, textColor: '#c9d3de' },
+  grid: { vertLines: { color: '#161c26' }, horzLines: { color: '#161c26' } },
+  rightPriceScale: { borderColor: '#2a3441' },
+  timeScale: { borderColor: '#2a3441', timeVisible: false },
   autoSize: true,
 });
 
@@ -96,7 +96,7 @@ series.setData(DATA.bars);
 
 // Spot reference line (always on).
 series.createPriceLine({
-  price: DATA.spot, color: '#000', lineWidth: 1,
+  price: DATA.spot, color: '#e6edf3', lineWidth: 1,
   lineStyle: LightweightCharts.LineStyle.Solid,
   axisLabelVisible: true, title: 'Spot',
 });
