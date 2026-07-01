@@ -11,6 +11,7 @@ import re
 from drift_sentiment import (
     chain_filter, drift, gex, magneto, scenarios, stats, thinkscript, walls,
 )
+from drift_sentiment import market_context as mce
 from drift_sentiment.models import BucketResult, Contract, DriftReport, Wall
 from drift_sentiment.report import build_report
 
@@ -321,3 +322,74 @@ def test_build_report_end_to_end():
         assert b.gex_by_strike
         assert b.total_gex != 0.0
         assert b.gex_regime in ("positive", "negative")
+
+
+# --- market context engine (independent macro layer) -------------------------
+
+def _mc_payload(overrides=None, default=1.0):
+    """Synthetic moves payload covering the full macro universe."""
+    overrides = overrides or {}
+    moves = {}
+    for s in mce.all_symbols():
+        p = overrides.get(s, default)
+        moves[s] = {"prev": 100.0, "last": 100.0 * (1 + p / 100), "pct": p}
+    return {"moves": moves, "last_date": "2026-06-29", "prev_date": "2026-06-26"}
+
+
+def test_classify_thresholds():
+    assert mce.classify(0.5) == "bullish"
+    assert mce.classify(-0.5) == "bearish"
+    assert mce.classify(0.05) == "neutral"
+
+
+def test_directional_score_monotonic():
+    up = mce.directional_score([1.0, 1.2, 0.8, 1.5])
+    flat = mce.directional_score([0.0, 0.05, -0.03, 0.0])
+    down = mce.directional_score([-1.0, -1.2, -0.8, -1.5])
+    assert up > 60 and down < 40 and 40 <= flat <= 60
+    assert up > flat > down
+
+
+def test_volatility_score_inverts_vixy():
+    assert mce.volatility_score(-3.0) > 60   # falling vol -> bullish
+    assert mce.volatility_score(3.0) < 40    # rising vol -> bearish
+    assert mce.volatility_score(None) == 50.0
+
+
+def test_treasury_score_sign():
+    assert mce.treasury_score(0.6) > 50      # bonds up -> yields down -> supportive
+    assert mce.treasury_score(-0.6) < 50
+    assert mce.treasury_score(None) == 50.0
+
+
+def test_bullish_environment_is_risk_on():
+    ctx = mce.build_market_context(
+        _mc_payload(overrides={mce.VOL_PROXY: -4.0}, default=1.2),
+        date(2026, 6, 29),
+    )
+    assert ctx.score >= 60
+    assert ctx.bias == "Risk-On"
+    assert 0 <= ctx.confidence <= 99
+    assert len(ctx.components) == 8
+    assert ctx.top_factors
+
+
+def test_bearish_environment_is_risk_off():
+    ctx = mce.build_market_context(
+        _mc_payload(overrides={mce.VOL_PROXY: 6.0}, default=-1.2),
+        date(2026, 6, 29),
+    )
+    assert ctx.score <= 45
+    assert ctx.bias == "Risk-Off"
+
+
+def test_score_and_confidence_in_range():
+    ctx = mce.build_market_context(_mc_payload(default=0.0), date(2026, 6, 29))
+    assert 0 <= ctx.score <= 100
+    assert 0 <= ctx.confidence <= 99
+
+
+def test_detect_events_finds_known_fomc():
+    # FOMC 2026-07-29 is on the published schedule; from 2026-07-22 it's +7d.
+    events = mce.detect_events(date(2026, 7, 22), horizon_days=10)
+    assert any("FOMC" in e.name for e in events)

@@ -6,8 +6,9 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from drift_sentiment import polygon_client
+from drift_sentiment import market_context, market_data, polygon_client
 from drift_sentiment.chart import build_chart_html
+from drift_sentiment.market_context_ui import render_market_context_html
 from drift_sentiment.plotting import build_box_plots, build_gex_profiles
 from drift_sentiment.polygon_client import PolygonError
 from drift_sentiment.report import build_report, format_text_report
@@ -52,6 +53,13 @@ def _daily_bars(tk: str):
     return polygon_client.fetch_daily_bars(tk)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _market_context():
+    """Independent macro layer — never feeds into the options pipeline."""
+    payload = market_data.fetch_moves(market_context.all_symbols())
+    return market_context.build_market_context(payload, market_data.today())
+
+
 if run and ticker:
     try:
         with st.spinner(f"Fetching option chain for {ticker}…"):
@@ -85,6 +93,17 @@ if run and ticker:
             f"⚠️ {n_dropped} bucket(s) have no monthly within ±{tolerance_days} "
             "days of target — shown using the nearest expiration (fallback)."
         )
+
+    # === MARKET CONTEXT ENGINE — independent macro layer, ABOVE the report ===
+    # Wrapped defensively: a macro-data failure must never break the options
+    # report (the Institutional Decision Engine stays the single source of truth).
+    try:
+        with st.spinner("Loading pre-market institutional briefing…"):
+            mctx = _market_context()
+        components.html(render_market_context_html(mctx), height=860, scrolling=True)
+    except Exception as e:  # noqa: BLE001 - isolate the macro layer entirely
+        st.info(f"Market Context Engine unavailable right now ({e}).")
+    st.markdown("---")
 
     # --- Header metrics (Section 8: shares + total notional + GEX) ---
     c1, c2, c3, c4 = st.columns(4)
