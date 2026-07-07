@@ -1,0 +1,50 @@
+name: Daily Market Brief
+
+# Runs the daily pre-market brief on GitHub's servers (no dependency on any
+# personal machine). Secrets are stored as encrypted GitHub Actions secrets.
+on:
+  schedule:
+    # 13:03 UTC = 09:03 America/La_Paz (UTC-4), Monday–Friday.
+    # (GitHub cron is always UTC. Off-:00 minute to avoid scheduler congestion.)
+    - cron: '3 13 * * 1-5'
+  workflow_dispatch: {}   # manual "Run workflow" button, for testing
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate the brief (Anthropic API + web search)
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: python scripts/daily_brief/generate_brief.py
+
+      - name: Email the full brief
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          BRIEF_EMAIL_TO: ${{ secrets.BRIEF_EMAIL_TO }}
+        run: >
+          python scripts/daily_brief/send_email.py
+          --subject "Brief de Mercado - $(date -u +%Y-%m-%d)"
+          --body-file output/brief_email.html --html
+
+      - name: WhatsApp the key points
+        env:
+          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+        run: python scripts/daily_brief/send_whatsapp.py --text-file output/brief_whatsapp.txt
+
+      # If any step above failed, ping WhatsApp so a bad run is never silent.
+      - name: Alert on failure
+        if: failure()
+        env:
+          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+        run: echo "Brief de mercado FALLO hoy en GitHub Actions. Revisa los logs del repo." | python scripts/daily_brief/send_whatsapp.py
