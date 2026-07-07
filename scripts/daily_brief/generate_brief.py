@@ -22,7 +22,7 @@ import urllib.request
 from pathlib import Path
 
 API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-5"
+MODEL = "claude-haiku-4-5-20251001"  # OAuth (subscription) token has API access to haiku, not sonnet-5
 REPO = Path(__file__).resolve().parents[2]
 PROMPT_FILE = REPO / "scripts" / "daily_brief" / "brief_prompt.md"
 OUT_DIR = REPO / "output"
