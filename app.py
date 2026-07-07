@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
+# On Streamlit Community Cloud the API key is set as a secret; bridge it into the
+# environment so the (UI-agnostic) network modules can read it via os.getenv.
+# Locally this is a no-op — the key comes from .env instead.
+try:
+    if "POLYGON_API_KEY" in st.secrets:
+        os.environ.setdefault("POLYGON_API_KEY", str(st.secrets["POLYGON_API_KEY"]))
+except Exception:  # noqa: BLE001 - no secrets file locally is fine
+    pass
 
 from drift_sentiment import market_context, market_data, polygon_client
 from drift_sentiment.alignment import build_alignment
@@ -45,19 +56,19 @@ with st.sidebar:
     st.caption("API key is read from `.env` (POLYGON_API_KEY).")
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def _analyze(tk: str, tolerance: int):
     spot, contracts = polygon_client.fetch_chain(tk)
     report = build_report(tk, spot, contracts, polygon_client.today(), tolerance)
     return report
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def _daily_bars(tk: str):
     return polygon_client.fetch_daily_bars(tk)
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def _market_context():
     """Independent macro layer — never feeds into the options pipeline."""
     payload = market_data.fetch_moves(market_context.all_symbols())
