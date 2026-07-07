@@ -72,9 +72,13 @@ def _between(text: str, start: str, end: str) -> str:
 
 
 def generate() -> None:
-    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    local = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=4)
+    today = local.strftime("%Y-%m-%d")
     prompt = (
-        f"CONTEXTO: hoy es {today} (fecha UTC).\n\n"
+        f"CONTEXTO: hoy es {today}, hora local aprox {local.strftime('%H:%M')} (UTC-4).\n"
+        "Ajusta el enfoque a la hora: antes de 9:30am = pre-mercado; durante la "
+        "sesion (9:30am-4pm) = actualizacion intradia con precios en curso; despues "
+        "del cierre = resumen del dia.\n\n"
         + PROMPT_FILE.read_text(encoding="utf-8")
         + OUTPUT_RULE
     )
