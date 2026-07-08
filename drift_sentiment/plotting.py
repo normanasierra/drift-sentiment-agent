@@ -75,15 +75,28 @@ def build_box_plots(buckets: list[BucketResult], spot: float):
                whiskerprops=dict(color=_MUTED),
                capprops=dict(color=_MUTED),
                medianprops=dict(color="#ffb020", linewidth=1.6))
+        # Open-interest walls (solid).
         ax.axhline(b.call_wall.strike, color="green", lw=1.4,
                    label=f"Call Wall {b.call_wall.strike:.1f}")
         ax.axhline(b.put_wall.strike, color="red", lw=1.4,
                    label=f"Put Wall {b.put_wall.strike:.1f}")
-        ax.axhline(b.magneto_strike, color="purple", ls="--", lw=1.4,
-                   label=f"Magneto {b.magneto_strike:.1f}")
+        # Magneto — width/opacity scale with absorption so a WEAK magnet (flow
+        # spread thin, no real congruence) fades instead of looking authoritative.
+        mag_lw = {"strong": 2.6, "moderate": 1.7}.get(b.magneto_quality, 1.0)
+        mag_alpha = {"strong": 1.0, "moderate": 0.8}.get(b.magneto_quality, 0.45)
+        ax.axhline(b.magneto_strike, color="#c86bfa", ls="--", lw=mag_lw, alpha=mag_alpha,
+                   label=(f"Magneto {b.magneto_strike:.1f} "
+                          f"({b.magneto_quality} {b.magneto_strength * 100:.0f}%)"))
+        # GEX blend: zero-gamma flip + call/put gamma walls (dotted, distinct hues).
         if b.zero_gamma is not None:
-            ax.axhline(b.zero_gamma, color="#666", ls="-.", lw=1.4,
+            ax.axhline(b.zero_gamma, color="#9aa4b2", ls="-.", lw=1.4,
                        label=f"Zero-Γ {b.zero_gamma:.1f}")
+        if b.call_gamma_wall is not None:
+            ax.axhline(b.call_gamma_wall, color="#00e5ff", ls=":", lw=1.5,
+                       label=f"Call Γ Wall {b.call_gamma_wall:.1f}")
+        if b.put_gamma_wall is not None:
+            ax.axhline(b.put_gamma_wall, color="#ffa726", ls=":", lw=1.5,
+                       label=f"Put Γ Wall {b.put_gamma_wall:.1f}")
         ax.scatter([1], [spot], color="white", edgecolors="#0b0e14", zorder=5,
                    label=f"Spot {spot:.1f}")
         ax.set_title(f"{b.label}  (exp {b.expiration.isoformat()}, {b.actual_dte}d)")
@@ -135,6 +148,12 @@ def build_gex_profiles(buckets: list[BucketResult], spot: float):
         if b.zero_gamma is not None:
             ax.axhline(b.zero_gamma, color="#9aa4b2", ls="-.", lw=1.4,
                        label=f"Zero-Γ {b.zero_gamma:.1f}")
+        # Magneto overlaid on the gamma profile (faded when absorption is weak),
+        # so you see the magnet vs. the gamma structure at a glance.
+        mag_lw = {"strong": 2.6, "moderate": 1.7}.get(b.magneto_quality, 1.0)
+        mag_alpha = {"strong": 1.0, "moderate": 0.8}.get(b.magneto_quality, 0.45)
+        ax.axhline(b.magneto_strike, color="#c86bfa", ls="--", lw=mag_lw, alpha=mag_alpha,
+                   label=f"Magneto {b.magneto_strike:.1f} ({b.magneto_quality})")
         ax.axvline(0, color="#6b7684", lw=0.8)
         ax.set_title(
             f"{b.label}  (net {b.total_gex / 1e6:+,.1f}M, {b.gex_regime} γ)"

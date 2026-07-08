@@ -154,6 +154,7 @@ if run and ticker:
                 "Put Wall": b.put_wall.strike,
                 "Magneto": b.magneto_strike,
                 "Magneto Notional": round(b.magneto_notional),
+                "Imán (fuerza)": f"{b.magneto_quality} · {b.magneto_strength * 100:.0f}%",
                 "Shares": b.total_shares,
                 "Net Notional": round(b.total_notional),
                 "1σ Move": round(b.sigma, 2) if b.sigma else None,
@@ -186,7 +187,14 @@ if run and ticker:
     # --- Drift classification per bucket ---
     st.subheader("Drift classification")
     for b in report.buckets:
-        icon = "🚀" if b.breakout else ("🧲" if b.magneto_notional > 0 else "⛔")
+        if b.breakout:
+            icon = "🚀"
+        elif b.magneto_quality == "weak":
+            icon = "🌫️"  # weak absorption — the magnet isn't a clear/reliable level
+        elif b.magneto_notional > 0:
+            icon = "🧲"
+        else:
+            icon = "⛔"
         with st.expander(f"{icon} {b.label} — {b.expiration.isoformat()}"):
             st.write(b.drift)
 

@@ -33,6 +33,23 @@ def magneto(contracts: list[Contract]) -> tuple[float, float] | None:
     return strike, acc[strike]
 
 
+def magneto_strength(contracts: list[Contract]) -> float:
+    """How dominant the Magneto strike is — a 0..1 'absorption/clarity' score.
+
+    It's the share of total absolute net notional that sits at the single
+    strongest strike: ``|net at Magneto| / Σ|net per strike|``. Near 1 means the
+    flow is tightly concentrated (a real magnet); near 0 means it's spread thin
+    across strikes — i.e. no genuine absorption, so the Magneto level is weak and
+    shouldn't be trusted. Returns 0.0 when there's no notional.
+    """
+    acc = net_notional_by_strike(contracts)
+    magnitudes = [abs(v) for v in acc.values()]
+    total = sum(magnitudes)
+    if total <= 0:
+        return 0.0
+    return max(magnitudes) / total
+
+
 def total_shares(contracts: list[Contract]) -> int:
     return sum(c.shares for c in contracts)
 

@@ -40,6 +40,7 @@ def build_report(
         if mag is None:
             continue
         mag_strike, mag_notional = mag
+        mag_strength = magneto.magneto_strength(bucket_contracts)
 
         iv = stats.atm_iv(bucket_contracts, spot)
         actual_dte = (exp - as_of).days
@@ -69,6 +70,7 @@ def build_report(
                 put_wall=pw,
                 magneto_strike=mag_strike,
                 magneto_notional=mag_notional,
+                magneto_strength=mag_strength,
                 iv_atm=iv,
                 sigma=sigma,
                 total_shares=magneto.total_shares(bucket_contracts),
@@ -112,7 +114,10 @@ def format_text_report(report: DriftReport) -> str:
         lines.append(f"  Sentiment classification: {b.sentiment} ({b.actual_dte} days)")
         lines.append(f"  Call Wall: {b.call_wall.strike:.2f} (OI {b.call_wall.open_interest:,})")
         lines.append(f"  Put Wall:  {b.put_wall.strike:.2f} (OI {b.put_wall.open_interest:,})")
-        lines.append(f"  Magneto:   {b.magneto_strike:.2f} (net notional {b.magneto_notional:,.0f})")
+        lines.append(
+            f"  Magneto:   {b.magneto_strike:.2f} (net notional {b.magneto_notional:,.0f}"
+            f" | {b.magneto_quality} absorption {b.magneto_strength * 100:.0f}%)"
+        )
         lines.append(f"  Shares in zone: {b.total_shares:,}")
         lines.append(f"  Net notional in zone: {b.total_notional:,.0f}")
         if b.sigma is not None:

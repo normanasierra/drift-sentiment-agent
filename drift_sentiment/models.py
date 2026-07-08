@@ -75,6 +75,19 @@ class BucketResult:
     call_gamma_wall: float | None = None  # strike of max positive GEX (resistance)
     put_gamma_wall: float | None = None   # strike of max negative GEX (support)
     zero_gamma: float | None = None       # gamma-flip price level
+    magneto_strength: float = 0.0         # 0..1 net-notional concentration at the Magneto
+
+    @property
+    def magneto_quality(self) -> str:
+        """Label the Magneto's reliability from its concentration score.
+
+        'strong'/'moderate' = real absorption; 'weak' = flow too spread out for
+        the level to mean much (common in low-volatility names)."""
+        if self.magneto_strength >= 0.30:
+            return "strong"
+        if self.magneto_strength >= 0.15:
+            return "moderate"
+        return "weak"
 
     @property
     def gex_regime(self) -> str:

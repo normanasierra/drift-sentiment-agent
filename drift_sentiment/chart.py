@@ -13,10 +13,15 @@ _BUCKET_COLORS = ["#2962FF", "#00897B", "#F57C00", "#AD1457"]
 
 def _bucket_levels(b: BucketResult, spot: float, color: str) -> dict:
     """Build the overlay payload (price lines) for one bucket."""
+    # Magneto width scales with absorption strength; a weak magnet stays thin so
+    # it doesn't read as a hard level when there's no real congruence.
+    mag_width = {"strong": 3, "moderate": 2}.get(b.magneto_quality, 1)
     lines = [
         {"price": b.call_wall.strike, "title": "Call Wall", "style": "solid"},
         {"price": b.put_wall.strike, "title": "Put Wall", "style": "solid"},
-        {"price": b.magneto_strike, "title": "Magneto", "style": "dashed"},
+        {"price": b.magneto_strike,
+         "title": f"Magneto ({b.magneto_quality} {b.magneto_strength * 100:.0f}%)",
+         "style": "dashed", "width": mag_width},
     ]
     if b.sigma:
         lines += [
@@ -121,7 +126,7 @@ function showBucket(i) {
   const lines = b.lines.map(l => series.createPriceLine({
     price: l.price,
     color: b.color,
-    lineWidth: (l.style === 'solid' || l.style === 'largeDashed') ? 2 : 1,
+    lineWidth: l.width || ((l.style === 'solid' || l.style === 'largeDashed') ? 2 : 1),
     lineStyle: STYLE[l.style],
     axisLabelVisible: true,
     title: l.title,
