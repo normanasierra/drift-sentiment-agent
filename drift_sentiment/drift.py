@@ -30,23 +30,23 @@ def classify_drift(
             direction = "downside"
         return (
             f"BREAKOUT ({direction}): spot {spot:.2f} is outside the wall range "
-            f"[{lo:.2f}, {hi:.2f}]. Expect an aggressive move toward the next "
-            f"wall at {target:.2f}.",
+            f"[{lo:.0f}, {hi:.0f}]. Expect an aggressive move toward the next "
+            f"wall at {target:.0f}.",
             True,
         )
 
     # Intra-range: evaluate Magneto polarity.
     if magneto_notional > 0:
         return (
-            f"INTRA-RANGE / ATTRACTION: Magneto positive at {magneto_strike:.2f} "
+            f"INTRA-RANGE / ATTRACTION: Magneto positive at {magneto_strike:.0f} "
             f"(net notional {magneto_notional:,.0f}). Price tends to gravitate "
             f"toward the Magneto (mean reversion).",
             False,
         )
     return (
-        f"INTRA-RANGE / REJECTION: Magneto negative at {magneto_strike:.2f} "
+        f"INTRA-RANGE / REJECTION: Magneto negative at {magneto_strike:.0f} "
         f"(net notional {magneto_notional:,.0f}). Price is pushed away toward the "
-        f"range extremities [{lo:.2f}, {hi:.2f}].",
+        f"range extremities [{lo:.0f}, {hi:.0f}].",
         False,
     )
 

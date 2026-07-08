@@ -164,8 +164,11 @@ def build_box_plots(buckets: list[BucketResult], spot: float, theme: str = "dark
         for (name, value, color, cat), ly in zip(order, label_y):
             extra = (f"  ({b.magneto_quality} {b.magneto_strength * 100:.0f}%)"
                      if name == "Magneto" else "")
+            # Walls & Magneto rounded to whole points (no cents); other levels keep .1
+            vstr = (f"{value:.0f}" if name in ("Call Wall", "Put Wall", "Magneto")
+                    else f"{value:.1f}")
             ax.annotate(
-                f"{name}  {value:.1f}{extra}",
+                f"{name}  {vstr}{extra}",
                 xy=(RIGHT, value), xytext=(LABEL_X, ly),
                 fontsize=13, color=color, va="center", ha="left", fontweight="bold",
                 bbox=dict(boxstyle="round,pad=0.28", fc=p["chip"], ec=color,

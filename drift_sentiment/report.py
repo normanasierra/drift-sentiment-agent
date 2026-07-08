@@ -137,10 +137,10 @@ def format_text_report(report: DriftReport) -> str:
             f"({b.actual_dte} DTE, {tol}) ---"
         )
         lines.append(f"  Sentiment classification: {b.sentiment} ({b.actual_dte} days)")
-        lines.append(f"  Call Wall: {b.call_wall.strike:.2f} (OI {b.call_wall.open_interest:,})")
-        lines.append(f"  Put Wall:  {b.put_wall.strike:.2f} (OI {b.put_wall.open_interest:,})")
+        lines.append(f"  Call Wall: {b.call_wall.strike:.0f} (OI {b.call_wall.open_interest:,})")
+        lines.append(f"  Put Wall:  {b.put_wall.strike:.0f} (OI {b.put_wall.open_interest:,})")
         lines.append(
-            f"  Magneto:   {b.magneto_strike:.2f} (net notional {b.magneto_notional:,.0f}"
+            f"  Magneto:   {b.magneto_strike:.0f} (net notional {b.magneto_notional:,.0f}"
             f" | {b.magneto_quality} absorption {b.magneto_strength * 100:.0f}%)"
         )
         lines.append(f"  Shares in zone: {b.total_shares:,}")

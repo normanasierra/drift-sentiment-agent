@@ -208,9 +208,9 @@
         <td class="px-3 py-2 font-medium whitespace-nowrap">${esc(b.label)}</td>
         <td class="px-3 py-2 whitespace-nowrap">${b.actual_dte}d${dteWarn}</td>
         <td class="px-3 py-2 font-semibold ${sentCls(b.sentiment)}">${esc(b.sentiment)}</td>
-        <td class="px-3 py-2 text-emerald-500 font-medium">${fmt(b.call_wall, 1)}</td>
-        <td class="px-3 py-2 text-rose-500 font-medium">${fmt(b.put_wall, 1)}</td>
-        <td class="px-3 py-2 whitespace-nowrap ${magCls}">${fmt(b.magneto, 1)} <span class="text-xs opacity-70">${Math.round(b.magneto_strength * 100)}%${magIcon}</span></td>
+        <td class="px-3 py-2 text-emerald-500 font-medium">${fmt(b.call_wall, 0)}</td>
+        <td class="px-3 py-2 text-rose-500 font-medium">${fmt(b.put_wall, 0)}</td>
+        <td class="px-3 py-2 whitespace-nowrap ${magCls}">${fmt(b.magneto, 0)} <span class="text-xs opacity-70">${Math.round(b.magneto_strength * 100)}%${magIcon}</span></td>
         <td class="px-3 py-2">${b.sigma == null ? 'N/D' : fmt(b.sigma, 1)}</td>
         <td class="px-3 py-2 ${b.sigma == null ? 'text-slate-400' : biasCls(b.gex_m)}">${b.sigma == null ? 'N/D' : fmt(b.gex_m, 1)}</td>
         <td class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 min-w-[220px]">
