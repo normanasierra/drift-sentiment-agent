@@ -7,13 +7,18 @@ and serves the multi-page frontend under web/. Run via start-app.cmd (uvicorn).
 from __future__ import annotations
 
 import datetime
+import hashlib
+import hmac
 import io
+import os
 import time
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi import FastAPI, Request
+from fastapi.responses import (
+    HTMLResponse, JSONResponse, RedirectResponse, Response,
+)
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -57,7 +62,53 @@ _jinja = Environment(
 
 
 def render(name: str, **ctx) -> HTMLResponse:
+    ctx.setdefault("auth_on", bool(APP_PASSWORD))
     return HTMLResponse(_jinja.get_template(name).render(**ctx))
+
+
+# ----------------------------- auth ----------------------------------------
+# Password gate. Set WAKANDA_PASSWORD in .env to require a login; leave it unset
+# and the app stays open (no gate). The session cookie is an HMAC-signed token so
+# it can't be forged; the signing key is derived from the password (stable across
+# restarts, and changing the password invalidates old sessions).
+APP_PASSWORD = os.getenv("WAKANDA_PASSWORD", "").strip()
+_SECRET = hashlib.sha256(("wakanda-auth:" + APP_PASSWORD).encode()).hexdigest()
+_COOKIE = "wakanda_auth"
+_MAX_AGE = 30 * 86400  # 30 days
+
+
+def _sign(payload: str) -> str:
+    return hmac.new(_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def _make_token() -> str:
+    payload = str(int(time.time()))
+    return f"{payload}.{_sign(payload)}"
+
+
+def _valid_token(token: str | None) -> bool:
+    if not token or "." not in token:
+        return False
+    payload, _, sig = token.partition(".")
+    if not hmac.compare_digest(sig, _sign(payload)):
+        return False
+    try:
+        return (time.time() - int(payload)) < _MAX_AGE
+    except ValueError:
+        return False
+
+
+@app.middleware("http")
+async def _require_login(request: Request, call_next):
+    if APP_PASSWORD:
+        path = request.url.path
+        allowed = path == "/login" or path.startswith("/static/")
+        if not allowed and not _valid_token(request.cookies.get(_COOKIE)):
+            if path.startswith("/api/"):
+                return JSONResponse({"error": "auth required"}, status_code=401)
+            return RedirectResponse("/login", status_code=303)
+    return await call_next(request)
+
 
 # Small TTL cache so a single Analyze reuses one chain fetch across report+plots.
 _CACHE: dict[str, tuple[float, float, object]] = {}
@@ -88,6 +139,32 @@ def _load(ticker: str, ttl: int = 120):
 @app.get("/", response_class=HTMLResponse)
 def home():
     return render("index.html", page="drift", title="Drift Sentiment + GEX")
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    if not APP_PASSWORD:
+        return RedirectResponse("/", status_code=303)
+    return render("login.html", error=False)
+
+
+@app.post("/login")
+async def login_submit(request: Request):
+    form = await request.form()
+    pw = (form.get("password") or "").strip()
+    if APP_PASSWORD and hmac.compare_digest(pw, APP_PASSWORD):
+        resp = RedirectResponse("/", status_code=303)
+        resp.set_cookie(_COOKIE, _make_token(), max_age=_MAX_AGE,
+                        httponly=True, samesite="lax")
+        return resp
+    return render("login.html", error=True)
+
+
+@app.get("/logout")
+def logout():
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie(_COOKIE)
+    return resp
 
 
 # ----------------------------- api -----------------------------------------

@@ -53,6 +53,10 @@
       </select>
       <button id="themeBtn" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-lg"
               title="Cambiar modo claro/oscuro">🌙</button>
+      {% if auth_on %}
+      <a href="/logout" title="Cerrar sesión"
+         class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-lg">🔒</a>
+      {% endif %}
     </div>
   </header>
 

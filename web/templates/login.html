@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wakanda Forever — Acceso</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: { colors: {
+      brand: { DEFAULT: '#7c3aed', soft: '#a855f7' } } } } };
+  </script>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 p-4">
+  <form method="post" action="/login"
+        class="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
+    <div class="flex items-center gap-2 justify-center mb-1 text-2xl font-bold">
+      <span>🖤</span>
+      <span class="bg-gradient-to-r from-brand-soft to-emerald-400 bg-clip-text text-transparent">
+        Wakanda Forever</span>
+    </div>
+    <p class="text-center text-sm text-slate-400 mb-6">Acceso privado</p>
+
+    <label class="block text-sm text-slate-300 mb-1" for="password">Contraseña</label>
+    <input id="password" name="password" type="password" autofocus autocomplete="current-password"
+           class="w-full rounded-xl px-4 py-2.5 bg-slate-800 border border-slate-700 outline-none
+                  focus:ring-2 focus:ring-brand mb-4" />
+
+    {% if error %}
+    <p class="text-rose-400 text-sm mb-4">Contraseña incorrecta. Intenta de nuevo.</p>
+    {% endif %}
+
+    <button type="submit"
+            class="w-full rounded-xl px-4 py-2.5 font-semibold text-white bg-brand hover:bg-brand-soft">
+      Entrar
+    </button>
+  </form>
+</body>
+</html>
