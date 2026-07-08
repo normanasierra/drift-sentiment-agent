@@ -12,8 +12,9 @@ import streamlit.components.v1 as components
 # environment so the (UI-agnostic) network modules can read it via os.getenv.
 # Locally this is a no-op — the key comes from .env instead.
 try:
-    if "POLYGON_API_KEY" in st.secrets:
-        os.environ.setdefault("POLYGON_API_KEY", str(st.secrets["POLYGON_API_KEY"]))
+    for _k in ("MASSIVE_API_KEY", "POLYGON_API_KEY"):
+        if _k in st.secrets:
+            os.environ.setdefault(_k, str(st.secrets[_k]))
 except Exception:  # noqa: BLE001 - no secrets file locally is fine
     pass
 
