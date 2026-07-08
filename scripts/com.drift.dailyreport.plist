@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd job: run the daily market report at 9:00 AM local time every day.
+
+  Install:
+    cp scripts/com.drift.dailyreport.plist ~/Library/LaunchAgents/
+    launchctl load  ~/Library/LaunchAgents/com.drift.dailyreport.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.drift.dailyreport.plist
+
+  Run once now (test):
+    launchctl start com.drift.dailyreport
+
+  Note: the Mac must be awake at 9am for this to fire. If it's asleep, launchd
+  runs the job at the next wake. Use `pmset` or a Wake schedule if you need it
+  to fire while asleep.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.drift.dailyreport</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/normanasierra/Desktop/drift-sentiment-agent-main/scripts/daily_report.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/normanasierra/Desktop/drift-sentiment-agent-main/output/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/normanasierra/Desktop/drift-sentiment-agent-main/output/launchd.err.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
