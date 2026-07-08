@@ -71,14 +71,25 @@ def _between(text: str, start: str, end: str) -> str:
     return text[i + len(start): j].strip()
 
 
+def _real_data() -> str:
+    """Compact REAL market/portfolio data block; '' if unavailable (never raises)."""
+    try:
+        from gather_context import gather  # co-located module
+        return gather()
+    except Exception:  # noqa: BLE001 - real data is best-effort; brief must still run
+        return ""
+
+
 def generate() -> None:
     local = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=4)
     today = local.strftime("%Y-%m-%d")
+    real = _real_data()
     prompt = (
         f"CONTEXTO: hoy es {today}, hora local aprox {local.strftime('%H:%M')} (UTC-4).\n"
         "Ajusta el enfoque a la hora: antes de 9:30am = pre-mercado; durante la "
         "sesion (9:30am-4pm) = actualizacion intradia con precios en curso; despues "
         "del cierre = resumen del dia.\n\n"
+        + (real + "\n" if real else "")
         + PROMPT_FILE.read_text(encoding="utf-8")
         + OUTPUT_RULE
     )

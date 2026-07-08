@@ -20,9 +20,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Generate the brief (Anthropic API + web search)
+      - name: Install deps for real-data sources
+        run: pip install --quiet requests
+
+      - name: Generate the brief (Anthropic API + web search + real data)
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          HYPERLIQUID_ADDRESS: ${{ secrets.HYPERLIQUID_ADDRESS }}
+          SCHWAB_ACCESS_TOKEN: ${{ secrets.SCHWAB_ACCESS_TOKEN }}
         run: python scripts/daily_brief/generate_brief.py
 
       - name: Email the full brief
