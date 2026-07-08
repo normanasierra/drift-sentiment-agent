@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import date, datetime
 
 import requests
@@ -17,6 +18,31 @@ BASE_URL = "https://api.polygon.io"
 
 class PolygonError(RuntimeError):
     pass
+
+
+def _get_with_retry(url, params, timeout, retries: int = 4, backoff: float = 1.5):
+    """GET that retries transient failures before giving up.
+
+    Big option chains paginate over dozens of pages; a single dropped connection
+    ("Response ended prematurely") or a 429/5xx would otherwise fail the whole
+    fetch. Retries network errors and 429/5xx with linear backoff; returns the
+    response for any other status (caller checks it). Raises PolygonError only
+    after all attempts are exhausted.
+    """
+    last = None
+    for attempt in range(retries):
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+        except requests.RequestException as exc:  # connection/chunked/timeout
+            last = str(exc)
+            time.sleep(backoff * (attempt + 1))
+            continue
+        if resp.status_code == 429 or resp.status_code >= 500:
+            last = f"HTTP {resp.status_code}"
+            time.sleep(backoff * (attempt + 1))
+            continue
+        return resp
+    raise PolygonError(f"Request failed after {retries} attempts ({last}): {url}")
 
 
 def _api_key() -> str:
@@ -62,7 +88,7 @@ def fetch_chain(ticker: str, *, timeout: int = 30) -> tuple[float, list[Contract
     spot: float | None = None
 
     while url:
-        resp = requests.get(url, params=params, timeout=timeout)
+        resp = _get_with_retry(url, params, timeout)
         if resp.status_code != 200:
             raise PolygonError(
                 f"Polygon request failed ({resp.status_code}): {resp.text[:200]}"
@@ -183,7 +209,7 @@ def fetch_daily_bars(
         f"{start.isoformat()}/{end.isoformat()}"
     )
     params = {"adjusted": "true", "sort": "asc", "limit": 5000, "apiKey": key}
-    resp = requests.get(url, params=params, timeout=timeout)
+    resp = _get_with_retry(url, params, timeout)
     if resp.status_code != 200:
         raise PolygonError(
             f"Daily bars request failed ({resp.status_code}): {resp.text[:200]}"

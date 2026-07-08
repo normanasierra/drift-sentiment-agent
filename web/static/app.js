@@ -1,6 +1,6 @@
 /* Wakanda Forever — client logic.
  * Settings persistence (cookie) is the project STANDARD: any future setting must
- * go through the S.get/S.set helpers so Miguel never has to re-pick it.       */
+ * go through the S.get/S.set helpers so Norman never has to re-pick it.        */
 (() => {
   'use strict';
 
@@ -15,7 +15,6 @@
     const val = encodeURIComponent(JSON.stringify(obj));
     document.cookie = `${COOKIE}=${val}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
   }
-  // The project-standard settings store.
   const S = {
     _cache: readCookie(),
     get(key, def) { return key in this._cache ? this._cache[key] : def; },
@@ -43,10 +42,13 @@
     if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
     return `${s}$${a.toFixed(0)}`;
   };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const biasCls = (x) => x > 0 ? 'text-emerald-500' : x < 0 ? 'text-rose-500' : 'text-slate-400';
-  const sentCls = (s) => /bull/i.test(s) ? 'text-emerald-500'
-    : /bear/i.test(s) ? 'text-rose-500' : 'text-slate-400';
+  const sentCls = (s) => /bull|long/i.test(s) ? 'text-emerald-500'
+    : /bear|short/i.test(s) ? 'text-rose-500' : 'text-slate-400';
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+  const currentTheme = () => (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  const gexOn = () => ($('gexToggle') ? $('gexToggle').checked : true);
 
   // ---------------------------------------------------------------- theme + font
   function applyTheme(theme) {
@@ -65,9 +67,7 @@
     const h = new Date().getHours();
     const part = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
     const el = $('welcome');
-    // Set text only — keep the responsive `hidden sm:block` so it doesn't crowd
-    // the header on narrow screens (shows from the `sm` breakpoint up).
-    if (el) el.textContent = `${part}, Miguel 🖤`;
+    if (el) el.textContent = `${part}, Norman 🖤`;   // keep responsive `hidden sm:block`
   }
 
   // ---------------------------------------------------------------- autocomplete
@@ -82,15 +82,12 @@
       list.innerHTML = items.map((it, i) => `
         <li data-i="${i}" class="ac-item px-3 py-2 cursor-pointer flex items-baseline gap-2
              ${i === active ? 'bg-brand/10' : ''} hover:bg-slate-100 dark:hover:bg-slate-800">
-          <span class="font-bold text-brand-soft">${it.ticker}</span>
-          <span class="text-xs text-slate-500 dark:text-slate-400 truncate">${it.name || ''}</span>
+          <span class="font-bold text-brand-soft">${esc(it.ticker)}</span>
+          <span class="text-xs text-slate-500 dark:text-slate-400 truncate">${esc(it.name)}</span>
         </li>`).join('');
       open = true; list.classList.remove('hidden');
     };
-    const pick = (i) => {
-      const it = items[i]; if (!it) return;
-      input.value = it.ticker; close(); analyze();
-    };
+    const pick = (i) => { const it = items[i]; if (!it) return; input.value = it.ticker; close(); analyze(); };
 
     const fetchSuggest = debounce(async (q) => {
       try {
@@ -113,17 +110,14 @@
       else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); render(); }
       else if (e.key === 'Escape') { close(); }
     });
-    // mousedown (not click) so it fires before input blur closes the list.
     list.addEventListener('mousedown', (e) => {
       const li = e.target.closest('.ac-item'); if (!li) return;
       e.preventDefault(); pick(Number(li.dataset.i));
     });
-    // Close only when focus leaves the whole wrap — the dropdown is flush
-    // (top-full) so moving the mouse from input to list never crosses a gap.
     document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
   }
 
-  // ---------------------------------------------------------------- charts
+  // ---------------------------------------------------------------- candlestick
   let candleChart = null, candleSeries = null, priceLines = [];
   const LS = () => (window.LightweightCharts ? LightweightCharts.LineStyle : { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3 });
 
@@ -165,9 +159,12 @@
     const magW = { strong: 4, moderate: 2 }[b.magneto_quality] || 1;
     add(b.magneto, BRAND, s.Dashed, magW, `Magneto ${Math.round(b.magneto_strength * 100)}%`);
     if (b.sigma) { add(report.spot + b.sigma, '#94a3b8', s.Dotted, 1, '+σ'); add(report.spot - b.sigma, '#94a3b8', s.Dotted, 1, '−σ'); }
-    add(b.zero_gamma, '#9aa4b2', s.LargeDashed, 1, 'Zero-Γ');
-    add(b.call_gamma_wall, '#06b6d4', s.Dotted, 1, 'Call Γ');
-    add(b.put_gamma_wall, '#f59e0b', s.Dotted, 1, 'Put Γ');
+    // GEX info — only when the checkbox is on.
+    if (gexOn()) {
+      add(b.zero_gamma, '#9aa4b2', s.LargeDashed, 1, 'Zero-Γ');
+      add(b.call_gamma_wall, '#06b6d4', s.Dotted, 1, 'Call Γ');
+      add(b.put_gamma_wall, '#f59e0b', s.Dotted, 1, 'Put Γ');
+    }
   }
 
   function loadPlots(ticker) {
@@ -176,9 +173,8 @@
     $('gexImg').src = `/api/plot/gex?ticker=${encodeURIComponent(ticker)}&theme=${th}&_=${bust}`;
   }
 
-  // ---------------------------------------------------------------- render report
+  // ---------------------------------------------------------------- renders
   let lastReport = null, currentBucket = 0;
-  const currentTheme = () => (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
 
   function renderMetrics(r) {
     const card = (label, value, cls = '') => `
@@ -205,26 +201,61 @@
       const magIcon = b.magneto_quality === 'weak' ? ' 🌫️' : '';
       const sel = i === currentBucket ? 'bg-brand/5' : '';
       return `<tr data-i="${i}" class="bucketRow border-t border-slate-100 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 ${sel}">
-        <td class="px-3 py-2 font-medium whitespace-nowrap">${b.label}</td>
+        <td class="px-3 py-2 font-medium whitespace-nowrap">${esc(b.label)}</td>
         <td class="px-3 py-2 whitespace-nowrap">${b.actual_dte}d${dteWarn}</td>
-        <td class="px-3 py-2 font-semibold ${sentCls(b.sentiment)}">${b.sentiment}</td>
+        <td class="px-3 py-2 font-semibold ${sentCls(b.sentiment)}">${esc(b.sentiment)}</td>
         <td class="px-3 py-2 text-emerald-500 font-medium">${fmt(b.call_wall, 1)}</td>
         <td class="px-3 py-2 text-rose-500 font-medium">${fmt(b.put_wall, 1)}</td>
         <td class="px-3 py-2 whitespace-nowrap ${magCls}">${fmt(b.magneto, 1)} <span class="text-xs opacity-70">${Math.round(b.magneto_strength * 100)}%${magIcon}</span></td>
         <td class="px-3 py-2">${b.sigma == null ? '—' : fmt(b.sigma, 1)}</td>
         <td class="px-3 py-2 ${biasCls(b.gex_m)}">${fmt(b.gex_m, 1)}</td>
         <td class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 min-w-[220px]">
-          <span class="text-emerald-500">▲</span> ${b.bull}<br>
-          <span class="text-rose-500">▼</span> ${b.bear}</td>
+          <span class="text-emerald-500">▲</span> ${esc(b.bull)}<br>
+          <span class="text-rose-500">▼</span> ${esc(b.bear)}</td>
       </tr>`;
     }).join('');
     $('bucketBody').querySelectorAll('.bucketRow').forEach((row) => {
       row.addEventListener('click', () => {
         currentBucket = Number(row.dataset.i);
         drawLevels(lastReport, currentBucket);
-        renderBuckets(lastReport); // refresh highlight
+        renderBuckets(lastReport);
       });
     });
+  }
+
+  function renderClasificacion(r) {
+    const driftCls = (d) => /BREAKOUT/i.test(d) ? 'text-amber-500'
+      : /ATTRACTION/i.test(d) ? 'text-emerald-500'
+      : /REJECTION/i.test(d) ? 'text-rose-500' : 'text-slate-500 dark:text-slate-300';
+    $('clasificacion').innerHTML = r.buckets.map((b) => `
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-semibold">${esc(b.label)}</span>
+          <span class="text-xs font-bold uppercase ${sentCls(b.sentiment)}">${esc(b.sentiment)}</span>
+        </div>
+        <div class="text-xs text-slate-400 mb-2">exp ${esc(b.expiration)} · ${b.actual_dte}d
+          ${b.breakout ? '· <span class="text-amber-500 font-semibold">BREAKOUT</span>' : ''}</div>
+        <p class="text-sm ${driftCls(b.drift)}">${esc(b.drift)}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-2"><span class="font-semibold">Nota:</span> ${esc(b.drift_note)}</p>
+      </div>`).join('');
+  }
+
+  function renderReporte(r) { $('reportText').textContent = r.text || ''; }
+
+  // ---------------------------------------------------------------- tabs
+  function activateTab(name) {
+    document.querySelectorAll('.tabBtn').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+    document.querySelectorAll('.tabPanel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== name));
+    S.set('tab', name);
+    if (name === 'grafico' && candleChart) { candleChart.timeScale().fitContent(); }
+  }
+
+  // ---------------------------------------------------------------- analyze
+  function setLoading(on) {
+    const btn = $('analyzeBtn'); if (!btn) return;
+    btn.disabled = on;
+    $('analyzeSpinner').classList.toggle('hidden', !on);
+    $('analyzeLabel').textContent = on ? 'Analizando…' : 'Analizar';
   }
 
   async function analyze() {
@@ -232,20 +263,26 @@
     if (!ticker) return;
     input.value = ticker;
     S.set('lastTicker', ticker);
-    $('status').textContent = `Analizando ${ticker}…`;
-    $('analyzeBtn').disabled = true;
+    $('errBanner').classList.add('hidden');
+    setLoading(true);
     try {
       const r = await fetch(`/api/report?ticker=${encodeURIComponent(ticker)}`);
       const j = await r.json();
-      if (!r.ok || j.error) { $('status').innerHTML = `<span class="text-rose-500">Error: ${j.error || r.status}</span>`; return; }
+      if (!r.ok || j.error) {
+        $('errBanner').textContent = `No pude analizar ${ticker}: ${j.error || r.status}`;
+        $('errBanner').classList.remove('hidden');
+        return;
+      }
       lastReport = j; currentBucket = 0;
+      renderMetrics(j); renderBuckets(j); renderClasificacion(j); renderReporte(j);
+      buildCandle(j); loadPlots(ticker);
       $('results').classList.remove('hidden');
-      $('status').textContent = `${j.ticker} · spot $${fmt(j.spot)} · ${j.as_of}`;
-      renderMetrics(j); renderBuckets(j); buildCandle(j); loadPlots(ticker);
+      activateTab(S.get('tab', 'buckets'));
     } catch (e) {
-      $('status').innerHTML = `<span class="text-rose-500">Error de red</span>`;
+      $('errBanner').textContent = 'Error de red al conectar con el servidor.';
+      $('errBanner').classList.remove('hidden');
     } finally {
-      $('analyzeBtn').disabled = false;
+      setLoading(false);
     }
   }
 
@@ -273,12 +310,27 @@
 
   // ---------------------------------------------------------------- init
   function init() {
-    // Apply persisted settings (the standard) BEFORE anything renders.
     applyTheme(S.get('theme', 'dark'));
     applyFont(S.get('fontSize', 16));
     greeting();
     initAutocomplete();
     initFullscreen();
+
+    // Tabs
+    document.querySelectorAll('.tabBtn').forEach((b) => b.addEventListener('click', () => activateTab(b.dataset.tab)));
+    activateTab(S.get('tab', 'buckets'));
+
+    // GEX toggle (persisted)
+    const gexBox = $('gexToggle');
+    if (gexBox) {
+      gexBox.checked = S.get('showGex', true);
+      $('gexCard').classList.toggle('hidden', !gexBox.checked);
+      gexBox.addEventListener('change', () => {
+        S.set('showGex', gexBox.checked);
+        $('gexCard').classList.toggle('hidden', !gexBox.checked);
+        if (lastReport) drawLevels(lastReport, currentBucket);
+      });
+    }
 
     $('themeBtn')?.addEventListener('click', () => {
       const next = currentTheme() === 'dark' ? 'light' : 'dark';
@@ -288,12 +340,9 @@
     $('fontSize')?.addEventListener('change', (e) => {
       const px = Number(e.target.value); applyFont(px); S.set('fontSize', px);
     });
-    $('menuBtn')?.addEventListener('click', () => {
-      const m = $('sideMenu'); m.classList.toggle('hidden');
-    });
+    $('menuBtn')?.addEventListener('click', () => { $('sideMenu').classList.toggle('hidden'); });
     $('analyzeBtn')?.addEventListener('click', analyze);
 
-    // Restore last ticker so a reopened session lands where Miguel left off.
     const last = S.get('lastTicker', '');
     if (last) { $('ticker').value = last; analyze(); }
   }

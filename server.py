@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from drift_sentiment import polygon_client, report as report_mod, scenarios
+from drift_sentiment import drift, polygon_client, report as report_mod, scenarios
 from drift_sentiment.plotting import build_box_plots, build_gex_profiles
 
 BASE = "https://api.polygon.io"
@@ -127,6 +127,7 @@ def api_report(ticker: str = ""):
             "gex_m": round(b.total_gex / 1e6, 2), "gex_regime": b.gex_regime,
             "zero_gamma": b.zero_gamma, "call_gamma_wall": b.call_gamma_wall,
             "put_gamma_wall": b.put_gamma_wall, "drift": b.drift, "breakout": b.breakout,
+            "drift_note": drift.drift_correlation_note(b.magneto_notional, b.breakout),
             "bull": scenarios.format_targets(sc.bull, spot),
             "bear": scenarios.format_targets(sc.bear, spot),
             "base": f"{base_pin} | {sc.base_note}",
@@ -142,6 +143,7 @@ def api_report(ticker: str = ""):
         "total_notional": rep.total_notional, "total_shares": rep.total_shares,
         "total_gex_m": round(rep.total_gex / 1e6, 2), "gex_regime": rep.gex_regime,
         "buckets": buckets, "candles": candles,
+        "text": report_mod.format_text_report(rep),
     }
 
 

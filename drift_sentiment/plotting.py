@@ -10,12 +10,41 @@ import matplotlib.pyplot as plt
 from .models import BucketResult
 
 # Institutional palettes; background follows the app's light/dark mode.
+# `chip` is the callout-label background (distinct from `panel` so labels pop).
 _THEMES = {
-    "dark":  {"bg": "#0b0e14", "panel": "#11161f", "fg": "#e6edf3", "muted": "#c9d3de", "grid": "#2a3441"},
-    "light": {"bg": "#ffffff", "panel": "#f5f7fa", "fg": "#0b0e14", "muted": "#41505f", "grid": "#d4dae2"},
+    "dark":  {"bg": "#0b0e14", "panel": "#11161f", "fg": "#e6edf3", "muted": "#c9d3de", "grid": "#2a3441", "chip": "#0b0e14"},
+    "light": {"bg": "#ffffff", "panel": "#f5f7fa", "fg": "#0b0e14", "muted": "#41505f", "grid": "#d4dae2", "chip": "#ffffff"},
 }
 # Back-compat aliases (dark) for any inline use below.
 _BG, _PANEL, _FG, _MUTED, _GRID = (_THEMES["dark"][k] for k in ("bg", "panel", "fg", "muted", "grid"))
+
+# Level colors for the annotated projection chart (match the candlestick lines).
+_LVL = {
+    "call": "#22c55e", "put": "#ef4444", "magneto": "#c86bfa",
+    "zero": "#9aa4b2", "callg": "#22d3ee", "putg": "#fb923c",
+}
+
+
+def _declutter(values: list[float], gap: float, lo: float, hi: float) -> list[float]:
+    """Spread label positions so neighbours are >= `gap` apart, kept in [lo, hi].
+
+    `values` must be sorted ascending (the caller sorts with put-below/call-above
+    tie-breaking). Returns adjusted positions in the same order.
+    """
+    ys = list(values)
+    n = len(ys)
+    if n == 0:
+        return ys
+    for i in range(1, n):                     # push overlaps upward
+        if ys[i] - ys[i - 1] < gap:
+            ys[i] = ys[i - 1] + gap
+    overflow = ys[-1] - hi                     # if past the top, shove down
+    if overflow > 0:
+        ys = [y - overflow for y in ys]
+    for i in range(n - 2, -1, -1):             # fix overlaps created by the shove
+        if ys[i + 1] - ys[i] < gap:
+            ys[i] = ys[i + 1] - gap
+    return [min(max(y, lo), hi) for y in ys]
 
 
 def _apply_theme(fig, theme: str = "dark") -> None:
@@ -57,62 +86,104 @@ def _bucket_box_stats(b: BucketResult, spot: float) -> dict | None:
 
 
 def build_box_plots(buckets: list[BucketResult], spot: float, theme: str = "dark"):
-    """Return a matplotlib Figure with 4 box plots (one per DTE bucket).
+    """Return a Figure with one annotated projection panel per DTE bucket.
 
-    Each box spans ±1 sigma (q1..q3) with whiskers at ±3 sigma, median at spot.
-    Call Wall (green), Put Wall (red), and Magneto (purple dashed) are marked.
+    Each panel shows the spot ±σ box (whiskers at ±3σ) plus every key level as a
+    labeled callout: a 13pt chip in the right gutter whose leader line points to
+    the level's nearest (right) edge. Overlapping strikes are spread vertically
+    with put (red) below and call (green) above so nothing collides.
     """
+    p = _THEMES.get(theme, _THEMES["dark"])
     n = len(buckets)
     cols = 2
     rows = max(1, (n + cols - 1) // cols)
-    fig, axes = plt.subplots(rows, cols, figsize=(11, 4.5 * rows))
+    fig, axes = plt.subplots(rows, cols, figsize=(13, 5.0 * rows))
     axes = axes.flatten() if n > 1 else [axes]
 
-    for ax, b in zip(axes, buckets):
-        stats = _bucket_box_stats(b, spot)
-        if stats is None:
-            ax.text(0.5, 0.5, f"{b.label}\n(no IV data)", ha="center", va="center",
-                    color=_MUTED)
-            ax.set_axis_off()
-            continue
+    # Graph region [LEFT, RIGHT] holds the box + lines; [RIGHT, XMAX] is the
+    # label gutter. Leaders attach at RIGHT (the nearest edge to the labels).
+    LEFT, RIGHT, LABEL_X, XMAX = 0.55, 1.45, 1.62, 3.2
+    cat_rank = {"put": 0, "neutral": 1, "call": 2}  # ties: put lowest, call highest
+    line_style = {"Call Wall": "-", "Put Wall": "-", "Magneto": "--",
+                  "Zero-Γ": "-.", "Call Γ Wall": ":", "Put Γ Wall": ":", "Spot": "-"}
 
-        ax.bxp([stats], showfliers=False, patch_artist=True,
-               boxprops=dict(facecolor="#1f3a5f", edgecolor="#5b8fd6"),
-               whiskerprops=dict(color=_MUTED),
-               capprops=dict(color=_MUTED),
-               medianprops=dict(color="#ffb020", linewidth=1.6))
-        # Open-interest walls (solid).
-        ax.axhline(b.call_wall.strike, color="green", lw=1.4,
-                   label=f"Call Wall {b.call_wall.strike:.1f}")
-        ax.axhline(b.put_wall.strike, color="red", lw=1.4,
-                   label=f"Put Wall {b.put_wall.strike:.1f}")
-        # Magneto — width/opacity scale with absorption so a WEAK magnet (flow
-        # spread thin, no real congruence) fades instead of looking authoritative.
-        mag_lw = {"strong": 2.6, "moderate": 1.7}.get(b.magneto_quality, 1.0)
-        mag_alpha = {"strong": 1.0, "moderate": 0.8}.get(b.magneto_quality, 0.45)
-        ax.axhline(b.magneto_strike, color="#c86bfa", ls="--", lw=mag_lw, alpha=mag_alpha,
-                   label=(f"Magneto {b.magneto_strike:.1f} "
-                          f"({b.magneto_quality} {b.magneto_strength * 100:.0f}%)"))
-        # GEX blend: zero-gamma flip + call/put gamma walls (dotted, distinct hues).
-        if b.zero_gamma is not None:
-            ax.axhline(b.zero_gamma, color="#9aa4b2", ls="-.", lw=1.4,
-                       label=f"Zero-Γ {b.zero_gamma:.1f}")
-        if b.call_gamma_wall is not None:
-            ax.axhline(b.call_gamma_wall, color="#00e5ff", ls=":", lw=1.5,
-                       label=f"Call Γ Wall {b.call_gamma_wall:.1f}")
-        if b.put_gamma_wall is not None:
-            ax.axhline(b.put_gamma_wall, color="#ffa726", ls=":", lw=1.5,
-                       label=f"Put Γ Wall {b.put_gamma_wall:.1f}")
-        ax.scatter([1], [spot], color="white", edgecolors="#0b0e14", zorder=5,
-                   label=f"Spot {spot:.1f}")
+    for ax, b in zip(axes, buckets):
+        # --- collect levels: (name, value, color, category) ---
+        levels: list[tuple[str, float, str, str]] = []
+
+        def push(name, value, color, cat):
+            if value is not None:
+                levels.append((name, float(value), color, cat))
+
+        push("Call Wall", b.call_wall.strike, _LVL["call"], "call")
+        push("Put Wall", b.put_wall.strike, _LVL["put"], "put")
+        push("Magneto", b.magneto_strike, _LVL["magneto"], "neutral")
+        push("Zero-Γ", b.zero_gamma, _LVL["zero"], "neutral")
+        push("Call Γ Wall", b.call_gamma_wall, _LVL["callg"], "call")
+        push("Put Γ Wall", b.put_gamma_wall, _LVL["putg"], "put")
+        push("Spot", spot, p["fg"], "neutral")
+
+        # --- vertical range from levels + optional ±3σ whiskers ---
+        stats = _bucket_box_stats(b, spot)
+        vals = [v for _, v, _, _ in levels]
+        if stats is not None:
+            vals += [stats["whislo"], stats["whishi"]]
+        lo_all, hi_all = min(vals), max(vals)
+        rng = (hi_all - lo_all) or max(1.0, spot * 0.05)
+        ylo, yhi = lo_all - 0.12 * rng, hi_all + 0.12 * rng
+        ax.set_xlim(0.3, XMAX)
+        ax.set_ylim(ylo, yhi)
+
+        # --- box (±σ) centerpiece ---
+        if stats is not None:
+            ax.bxp([stats], positions=[1], widths=0.5, showfliers=False,
+                   patch_artist=True,
+                   boxprops=dict(facecolor="#1f3a5f", edgecolor="#5b8fd6", alpha=0.85),
+                   whiskerprops=dict(color=p["muted"]),
+                   capprops=dict(color=p["muted"]),
+                   medianprops=dict(color="#ffb020", linewidth=2.0))
+
+        # --- level lines confined to the graph region ---
+        for name, value, color, cat in levels:
+            lw, alpha = 1.6, 1.0
+            if name == "Magneto":
+                lw = {"strong": 2.6, "moderate": 1.8}.get(b.magneto_quality, 1.0)
+                alpha = {"strong": 1.0, "moderate": 0.85}.get(b.magneto_quality, 0.5)
+            elif name == "Spot":
+                lw = 1.2
+            ax.plot([LEFT, RIGHT], [value, value], color=color, lw=lw,
+                    ls=line_style.get(name, "-"), alpha=alpha, zorder=3,
+                    solid_capstyle="round")
+        ax.scatter([1], [spot], s=44, color="white", edgecolors="#0b0e14", zorder=6)
+
+        # --- callout labels: declutter with put-below / call-above on ties ---
+        order = sorted(levels, key=lambda d: (d[1], cat_rank[d[3]]))
+        inset = 0.04 * (yhi - ylo)
+        gap = 0.075 * (yhi - ylo)
+        label_y = _declutter([d[1] for d in order], gap, ylo + inset, yhi - inset)
+        for (name, value, color, cat), ly in zip(order, label_y):
+            extra = (f"  ({b.magneto_quality} {b.magneto_strength * 100:.0f}%)"
+                     if name == "Magneto" else "")
+            ax.annotate(
+                f"{name}  {value:.1f}{extra}",
+                xy=(RIGHT, value), xytext=(LABEL_X, ly),
+                fontsize=13, color=color, va="center", ha="left", fontweight="bold",
+                bbox=dict(boxstyle="round,pad=0.28", fc=p["chip"], ec=color,
+                          lw=1.1, alpha=0.96),
+                arrowprops=dict(arrowstyle="-", color=color, lw=1.3,
+                                shrinkA=1, shrinkB=1),
+                zorder=7,
+            )
+
         ax.set_title(f"{b.label}  (exp {b.expiration.isoformat()}, {b.actual_dte}d)")
         ax.set_ylabel("Price")
-        ax.legend(fontsize=7, loc="best")
+        ax.set_xticks([])
 
     for ax in axes[len(buckets):]:
         ax.set_axis_off()
 
-    fig.suptitle("Projected price distribution by DTE bucket (spot ±σ)", fontsize=13)
+    fig.suptitle("Projected price by DTE bucket — spot ±σ box with labeled levels",
+                 fontsize=14)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     _apply_theme(fig, theme)
     return fig

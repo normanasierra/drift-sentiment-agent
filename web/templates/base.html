@@ -22,6 +22,12 @@
     ::-webkit-scrollbar-thumb { background: #64748b55; border-radius: 6px; }
     .chart-card:fullscreen { padding: 20px; }
     .chart-card:fullscreen .chart-body { height: calc(100vh - 90px) !important; }
+    /* Tab buttons (plain CSS — Tailwind CDN can't compile custom component classes) */
+    .tabBtn { padding: .5rem .8rem; font-size: .875rem; font-weight: 600; white-space: nowrap;
+      border-bottom: 2px solid transparent; border-top-left-radius: .5rem; border-top-right-radius: .5rem;
+      color: #64748b; cursor: pointer; transition: color .15s, background .15s; }
+    .tabBtn:hover { background: rgba(148,163,184,.14); }
+    .tabBtn.active { color: #a855f7; border-bottom-color: #a855f7; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-100 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors">
