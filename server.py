@@ -38,6 +38,16 @@ INDICES = [
 
 app = FastAPI(title="Wakanda Forever")
 app.mount("/static", StaticFiles(directory=str(WEB / "static")), name="static")
+
+
+@app.middleware("http")
+async def _revalidate_static(request, call_next):
+    """Make the browser revalidate /static each load so Norman always gets the
+    latest app.js/CSS without a hard refresh (no-cache = 304 when unchanged)."""
+    resp = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
 # Plain Jinja2 (not Starlette's Jinja2Templates) — sidesteps a template-cache
 # incompatibility in this FastAPI/Starlette build and gives us full control.
 _jinja = Environment(
