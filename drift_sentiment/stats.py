@@ -24,18 +24,3 @@ def projected_sigma(spot: float, iv: float | None, dte: int) -> float | None:
     if iv is None or dte <= 0 or spot <= 0:
         return None
     return spot * iv * math.sqrt(dte / 365.0)
-
-
-def sigma_bands(spot: float, sigma: float | None) -> dict[str, float] | None:
-    """Price levels at ±1/2/3 sigma around spot, for box-plot rendering."""
-    if sigma is None:
-        return None
-    return {
-        "-3sigma": spot - 3 * sigma,
-        "-2sigma": spot - 2 * sigma,
-        "-1sigma": spot - 1 * sigma,
-        "spot": spot,
-        "+1sigma": spot + 1 * sigma,
-        "+2sigma": spot + 2 * sigma,
-        "+3sigma": spot + 3 * sigma,
-    }

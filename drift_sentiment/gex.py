@@ -118,16 +118,31 @@ def zero_gamma(
     Returns None if no flip exists in the scanned band.
     """
 
-    def net_at(level: float) -> float:
-        t = dte / 365.0
-        tot = 0.0
+    # Precompute the per-contract terms that DON'T depend on the scan level (the
+    # sanitized IV, vol*sqrt(T), and the drift term). Previously these — including
+    # the sqrt(T) inside bs_gamma() and the _iv_for() sanity checks — were redone
+    # for every one of the `steps` levels; hoisting them out is the whole speedup.
+    # The per-level arithmetic below is byte-for-byte identical to bs_gamma(), so
+    # the returned flip price is unchanged.
+    t = dte / 365.0
+    terms: list[tuple[float, float, float, int, bool]] = []
+    if t > 0 and spot > 0:
+        sqrt_t = math.sqrt(t)
         for c in contracts:
             iv = _iv_for(c, fallback_iv)
-            if iv is None:
+            if iv is None or iv <= 0:
                 continue
-            gamma = bs_gamma(level, c.strike, iv, t)
-            dollar = gamma * c.open_interest * SHARES_PER_CONTRACT * level * level * 0.01
-            tot += dollar if c.is_call else -dollar
+            vol_t = iv * sqrt_t
+            drift_term = 0.5 * iv * iv * t
+            terms.append((c.strike, vol_t, drift_term, c.open_interest, c.is_call))
+
+    def net_at(level: float) -> float:
+        tot = 0.0
+        for strike, vol_t, drift_term, oi, is_call in terms:
+            d1 = (math.log(level / strike) + drift_term) / vol_t
+            gamma = _norm_pdf(d1) / (level * vol_t)
+            dollar = gamma * oi * SHARES_PER_CONTRACT * level * level * 0.01
+            tot += dollar if is_call else -dollar
         return tot
 
     lo, hi = spot * lo_frac, spot * hi_frac
@@ -141,8 +156,3 @@ def zero_gamma(
             return prev_s + (s - prev_s) * (-prev_v) / (v - prev_v)
         prev_s, prev_v = s, v
     return None
-
-
-def regime(total_gex_value: float) -> str:
-    """'positive' (vol-suppressing) or 'negative' (vol-amplifying) gamma regime."""
-    return "positive" if total_gex_value >= 0 else "negative"
