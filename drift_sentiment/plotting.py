@@ -9,30 +9,36 @@ import matplotlib.pyplot as plt
 
 from .models import BucketResult
 
-# Dark institutional palette (matches the Market Context cards / candle chart).
-_BG, _PANEL, _FG, _MUTED, _GRID = "#0b0e14", "#11161f", "#e6edf3", "#c9d3de", "#2a3441"
+# Institutional palettes; background follows the app's light/dark mode.
+_THEMES = {
+    "dark":  {"bg": "#0b0e14", "panel": "#11161f", "fg": "#e6edf3", "muted": "#c9d3de", "grid": "#2a3441"},
+    "light": {"bg": "#ffffff", "panel": "#f5f7fa", "fg": "#0b0e14", "muted": "#41505f", "grid": "#d4dae2"},
+}
+# Back-compat aliases (dark) for any inline use below.
+_BG, _PANEL, _FG, _MUTED, _GRID = (_THEMES["dark"][k] for k in ("bg", "panel", "fg", "muted", "grid"))
 
 
-def _apply_dark(fig) -> None:
-    """Recolor a finished figure for a black institutional background."""
-    fig.patch.set_facecolor(_BG)
+def _apply_theme(fig, theme: str = "dark") -> None:
+    """Recolor a finished figure for the given app theme (light/dark)."""
+    p = _THEMES.get(theme, _THEMES["dark"])
+    fig.patch.set_facecolor(p["bg"])
     for ax in fig.axes:
-        ax.set_facecolor(_PANEL)
-        ax.tick_params(colors=_MUTED)
+        ax.set_facecolor(p["panel"])
+        ax.tick_params(colors=p["muted"])
         for spine in ax.spines.values():
-            spine.set_color(_GRID)
-        ax.title.set_color(_FG)
-        ax.xaxis.label.set_color(_MUTED)
-        ax.yaxis.label.set_color(_MUTED)
+            spine.set_color(p["grid"])
+        ax.title.set_color(p["fg"])
+        ax.xaxis.label.set_color(p["muted"])
+        ax.yaxis.label.set_color(p["muted"])
         leg = ax.get_legend()
         if leg is not None:
-            leg.get_frame().set_facecolor(_PANEL)
-            leg.get_frame().set_edgecolor(_GRID)
+            leg.get_frame().set_facecolor(p["panel"])
+            leg.get_frame().set_edgecolor(p["grid"])
             for txt in leg.get_texts():
-                txt.set_color(_MUTED)
+                txt.set_color(p["muted"])
     suptitle = getattr(fig, "_suptitle", None)
     if suptitle is not None:
-        suptitle.set_color(_FG)
+        suptitle.set_color(p["fg"])
 
 
 def _bucket_box_stats(b: BucketResult, spot: float) -> dict | None:
@@ -50,7 +56,7 @@ def _bucket_box_stats(b: BucketResult, spot: float) -> dict | None:
     }
 
 
-def build_box_plots(buckets: list[BucketResult], spot: float):
+def build_box_plots(buckets: list[BucketResult], spot: float, theme: str = "dark"):
     """Return a matplotlib Figure with 4 box plots (one per DTE bucket).
 
     Each box spans ±1 sigma (q1..q3) with whiskers at ±3 sigma, median at spot.
@@ -108,11 +114,11 @@ def build_box_plots(buckets: list[BucketResult], spot: float):
 
     fig.suptitle("Projected price distribution by DTE bucket (spot ±σ)", fontsize=13)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    _apply_dark(fig)
+    _apply_theme(fig, theme)
     return fig
 
 
-def build_gex_profiles(buckets: list[BucketResult], spot: float):
+def build_gex_profiles(buckets: list[BucketResult], spot: float, theme: str = "dark"):
     """Return a Figure of net-GEX-by-strike profiles, one panel per DTE bucket.
 
     Horizontal bars per strike (green = positive/call gamma, red = negative/put
@@ -167,5 +173,5 @@ def build_gex_profiles(buckets: list[BucketResult], spot: float):
 
     fig.suptitle("Gamma Exposure (GEX) profile by strike per DTE bucket", fontsize=13)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    _apply_dark(fig)
+    _apply_theme(fig, theme)
     return fig

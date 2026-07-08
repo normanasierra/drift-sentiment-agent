@@ -8,3 +8,5 @@ output/
 scratchpad_*.log
 .claude/
 .streamlit/secrets.toml
+
+.backups/

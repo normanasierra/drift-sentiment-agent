@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es" class="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wakanda Forever — {{ title|default('') }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: {
+        bull: { DEFAULT: '#16a34a', soft: '#22c55e' },   /* CALLS / BULLISH */
+        bear: { DEFAULT: '#dc2626', soft: '#ef4444' },   /* PUTS  / BEARISH */
+        brand: { DEFAULT: '#7c3aed', soft: '#a855f7' },
+      } } }
+    };
+  </script>
+  <script src="/static/app.js" defer></script>
+  <style>
+    html { font-size: 16px; }              /* overridden live by the font-size setting */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #64748b55; border-radius: 6px; }
+    .chart-card:fullscreen { padding: 20px; }
+    .chart-card:fullscreen .chart-body { height: calc(100vh - 90px) !important; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors">
+  <!-- ===== Top nav ===== -->
+  <header class="sticky top-0 z-40 flex items-center gap-3 px-4 h-14
+                 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <button id="menuBtn" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800" title="Menú">☰</button>
+    <a href="/" class="flex items-center gap-2 font-bold text-lg">
+      <span class="text-2xl">🖤</span>
+      <span class="bg-gradient-to-r from-brand-soft to-emerald-400 bg-clip-text text-transparent">Wakanda Forever</span>
+    </a>
+    <div id="welcome" class="hidden sm:block ml-2 text-sm text-slate-500 dark:text-slate-400"></div>
+    <div class="ml-auto flex items-center gap-2">
+      <label class="text-xs text-slate-500 dark:text-slate-400 hidden md:block">Tamaño</label>
+      <select id="fontSize" class="text-sm rounded-lg px-2 py-1.5 bg-slate-100 dark:bg-slate-800
+              border border-slate-300 dark:border-slate-700 outline-none focus:ring-2 focus:ring-brand">
+        <option value="13">Muy pequeño</option>
+        <option value="14">Pequeño</option>
+        <option value="16">Normal</option>
+        <option value="18">Grande</option>
+        <option value="21">Muy grande</option>
+        <option value="24">Enorme</option>
+      </select>
+      <button id="themeBtn" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-lg"
+              title="Cambiar modo claro/oscuro">🌙</button>
+    </div>
+  </header>
+
+  <div class="flex">
+    <!-- ===== Side menu ===== -->
+    <aside id="sideMenu" class="shrink-0 w-56 min-h-[calc(100vh-3.5rem)] p-3
+           bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all">
+      <nav class="space-y-1 text-sm">
+        <a href="/" class="flex items-center gap-2 px-3 py-2 rounded-lg font-medium
+           bg-brand/10 text-brand-soft">📊 Drift Sentiment + GEX</a>
+        <div class="px-3 pt-4 pb-1 text-xs uppercase tracking-wide text-slate-400">Próximamente</div>
+        <span class="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 cursor-not-allowed">➕ Más páginas…</span>
+      </nav>
+      <div class="mt-6 px-3 text-xs text-slate-400 space-y-1.5">
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded bg-bull inline-block"></span> Calls / Bullish</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded bg-bear inline-block"></span> Puts / Bearish</div>
+      </div>
+    </aside>
+
+    <!-- ===== Page content ===== -->
+    <main class="flex-1 p-4 md:p-6 max-w-[1400px]">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

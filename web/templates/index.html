@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-1">📊 Drift Sentiment <span class="text-brand-soft">+ GEX</span></h1>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-5">
+  Put/Call Walls, Magneto (con fuerza de absorción) y Gamma Exposure por bucket DTE.
+  <span class="text-emerald-500 font-medium">Verde = Calls/Bullish</span> ·
+  <span class="text-rose-500 font-medium">Rojo = Puts/Bearish</span>.
+</p>
+
+<!-- ===== Ticker autocomplete ===== -->
+<div class="flex flex-wrap items-start gap-3 mb-6">
+  <div id="acWrap" class="relative w-72">
+    <input id="ticker" autocomplete="off" spellcheck="false"
+           placeholder="Ticker o compañía (ej. AAPL, Apple)…"
+           class="w-full rounded-xl px-4 py-2.5 bg-white dark:bg-slate-900
+                  border border-slate-300 dark:border-slate-700 outline-none
+                  focus:ring-2 focus:ring-brand shadow-sm uppercase placeholder:normal-case" />
+    <!-- dropdown flush under the input (top-full = no gap so hover never drops it) -->
+    <ul id="acList" class="hidden absolute left-0 right-0 top-full z-30 mt-0
+              max-h-80 overflow-auto rounded-xl border border-slate-200 dark:border-slate-700
+              bg-white dark:bg-slate-900 shadow-xl"></ul>
+  </div>
+  <button id="analyzeBtn"
+          class="rounded-xl px-5 py-2.5 font-semibold text-white bg-brand hover:bg-brand-soft
+                 shadow-sm disabled:opacity-50">Analizar</button>
+  <div id="status" class="self-center text-sm text-slate-500 dark:text-slate-400"></div>
+</div>
+
+<!-- ===== Results ===== -->
+<div id="results" class="hidden space-y-6">
+  <!-- header metrics -->
+  <div id="metrics" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+
+  <!-- buckets table -->
+  <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+    <table class="w-full text-sm">
+      <thead id="bucketHead" class="bg-slate-100 dark:bg-slate-800/70 text-left"></thead>
+      <tbody id="bucketBody"></tbody>
+    </table>
+  </div>
+
+  <!-- charts -->
+  <div id="candleCard" class="chart-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-semibold">Precio + niveles</h3>
+      <div class="flex gap-1">
+        <button data-fs="candleCard" class="fsBtn px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">⛶ Pantalla completa</button>
+        <button data-restore="candleCard" class="rsBtn hidden px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">↩ Restaurar</button>
+      </div>
+    </div>
+    <div id="candleChart" class="chart-body w-full" style="height:50vh;"></div>
+    <p class="text-[11px] text-slate-400 mt-1">Sólido = Walls · Guiones = Magneto (grosor = fuerza) · Punteado = ±σ · Guión largo = Gamma.</p>
+  </div>
+
+  <div id="boxCard" class="chart-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-semibold">Distribución proyectada (box plots)</h3>
+      <div class="flex gap-1">
+        <button data-fs="boxCard" class="fsBtn px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">⛶ Pantalla completa</button>
+        <button data-restore="boxCard" class="rsBtn hidden px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">↩ Restaurar</button>
+      </div>
+    </div>
+    <img id="boxImg" class="chart-body w-full object-contain" style="height:50vh;" alt="Box plots" />
+  </div>
+
+  <div id="gexCard" class="chart-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-semibold">Gamma Exposure (GEX) por strike</h3>
+      <div class="flex gap-1">
+        <button data-fs="gexCard" class="fsBtn px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">⛶ Pantalla completa</button>
+        <button data-restore="gexCard" class="rsBtn hidden px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">↩ Restaurar</button>
+      </div>
+    </div>
+    <img id="gexImg" class="chart-body w-full object-contain" style="height:50vh;" alt="GEX profile" />
+  </div>
+</div>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+{% endblock %}

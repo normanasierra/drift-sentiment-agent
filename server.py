@@ -1,0 +1,166 @@
+"""Wakanda Forever — FastAPI backend for the Tailwind web platform.
+
+Wraps the drift_sentiment analysis engine (Massive/Polygon) as a JSON + PNG API
+and serves the multi-page frontend under web/. Run via start-app.cmd (uvicorn).
+"""
+
+from __future__ import annotations
+
+import datetime
+import io
+import time
+from pathlib import Path
+
+import requests
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from drift_sentiment import polygon_client, report as report_mod, scenarios
+from drift_sentiment.plotting import build_box_plots, build_gex_profiles
+
+BASE = "https://api.polygon.io"
+WEB = Path(__file__).resolve().parent / "web"
+
+app = FastAPI(title="Wakanda Forever")
+app.mount("/static", StaticFiles(directory=str(WEB / "static")), name="static")
+# Plain Jinja2 (not Starlette's Jinja2Templates) — sidesteps a template-cache
+# incompatibility in this FastAPI/Starlette build and gives us full control.
+_jinja = Environment(
+    loader=FileSystemLoader(str(WEB / "templates")),
+    autoescape=select_autoescape(["html", "xml"]),
+)
+
+
+def render(name: str, **ctx) -> HTMLResponse:
+    return HTMLResponse(_jinja.get_template(name).render(**ctx))
+
+# Small TTL cache so a single Analyze reuses one chain fetch across report+plots.
+_CACHE: dict[str, tuple[float, float, object]] = {}
+
+
+def _load(ticker: str, ttl: int = 120):
+    now = time.time()
+    hit = _CACHE.get(ticker)
+    if hit and now - hit[0] < ttl:
+        return hit[1], hit[2]
+    spot, contracts = polygon_client.fetch_chain(ticker)
+    rep = report_mod.build_report(ticker, spot, contracts, datetime.date.today())
+    _CACHE[ticker] = (now, spot, rep)
+    return spot, rep
+
+
+# ----------------------------- pages ---------------------------------------
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return render("index.html", page="drift", title="Drift Sentiment + GEX")
+
+
+# ----------------------------- api -----------------------------------------
+@app.get("/api/search")
+def search(q: str = ""):
+    q = (q or "").strip()
+    if len(q) < 1:
+        return {"results": []}
+    try:
+        key = polygon_client._api_key()
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    try:
+        r = requests.get(
+            f"{BASE}/v3/reference/tickers",
+            params={"search": q, "active": "true", "market": "stocks",
+                    "limit": 25, "apiKey": key},
+            timeout=15,
+        )
+        data = r.json().get("results", []) if r.status_code == 200 else []
+    except requests.RequestException:
+        data = []
+
+    ql = q.upper()
+
+    def rank(item: dict) -> int:
+        t = (item.get("ticker") or "").upper()
+        n = (item.get("name") or "").upper()
+        if t == ql:
+            return 0
+        if t.startswith(ql):          # symbol matches first
+            return 1
+        if ql in t:
+            return 2
+        if n.startswith(ql):          # then company name
+            return 3
+        return 4
+
+    ranked = sorted(data, key=rank)
+    return {"results": [
+        {"ticker": d.get("ticker"), "name": d.get("name", "")} for d in ranked[:8]
+    ]}
+
+
+@app.get("/api/report")
+def api_report(ticker: str = ""):
+    ticker = (ticker or "").strip().upper()
+    if not ticker:
+        return JSONResponse({"error": "No ticker"}, status_code=400)
+    try:
+        spot, rep = _load(ticker)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": str(exc)}, status_code=502)
+
+    buckets = []
+    for b in rep.buckets:
+        sc = scenarios.bucket_scenarios(b, spot)
+        base_pin = (f"pin {sc.pin_low:.0f}-{sc.pin_high:.0f}"
+                    if sc.pin_low and sc.pin_high else "n/d")
+        buckets.append({
+            "label": b.label, "sentiment": b.sentiment, "actual_dte": b.actual_dte,
+            "within_tolerance": b.within_tolerance, "dte_offset": b.dte_offset,
+            "expiration": b.expiration.isoformat(),
+            "call_wall": b.call_wall.strike, "put_wall": b.put_wall.strike,
+            "magneto": b.magneto_strike, "magneto_notional": round(b.magneto_notional),
+            "magneto_strength": round(b.magneto_strength, 3),
+            "magneto_quality": b.magneto_quality,
+            "magneto_polarity": "bull" if b.magneto_notional > 0 else "bear",
+            "sigma": round(b.sigma, 2) if b.sigma else None,
+            "gex_m": round(b.total_gex / 1e6, 2), "gex_regime": b.gex_regime,
+            "zero_gamma": b.zero_gamma, "call_gamma_wall": b.call_gamma_wall,
+            "put_gamma_wall": b.put_gamma_wall, "drift": b.drift, "breakout": b.breakout,
+            "bull": scenarios.format_targets(sc.bull, spot),
+            "bear": scenarios.format_targets(sc.bear, spot),
+            "base": f"{base_pin} | {sc.base_note}",
+        })
+
+    try:
+        candles = polygon_client.fetch_daily_bars(ticker) or []
+    except Exception:  # noqa: BLE001
+        candles = []
+
+    return {
+        "ticker": rep.ticker, "spot": spot, "as_of": rep.as_of.isoformat(),
+        "total_notional": rep.total_notional, "total_shares": rep.total_shares,
+        "total_gex_m": round(rep.total_gex / 1e6, 2), "gex_regime": rep.gex_regime,
+        "buckets": buckets, "candles": candles,
+    }
+
+
+def _png(fig) -> Response:
+    import matplotlib.pyplot as plt
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return Response(buf.getvalue(), media_type="image/png",
+                    headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/plot/box")
+def plot_box(ticker: str = "", theme: str = "dark"):
+    spot, rep = _load(ticker.strip().upper())
+    return _png(build_box_plots(rep.buckets, spot, theme))
+
+
+@app.get("/api/plot/gex")
+def plot_gex(ticker: str = "", theme: str = "dark"):
+    spot, rep = _load(ticker.strip().upper())
+    return _png(build_gex_profiles(rep.buckets, spot, theme))
