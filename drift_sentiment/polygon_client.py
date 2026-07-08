@@ -67,12 +67,15 @@ def _parse_contract(result: dict) -> Contract | None:
         return None
     oi = result.get("open_interest", 0) or 0
     iv = result.get("implied_volatility")
+    day = result.get("day") or {}
+    px = day.get("close") or day.get("vwap")  # daily close, for IV inversion
     return Contract(
         strike=float(strike),
         expiration=datetime.strptime(exp_str, "%Y-%m-%d").date(),
         contract_type=ctype,
         open_interest=int(oi),
         implied_volatility=float(iv) if iv else None,
+        price=float(px) if px else None,
     )
 
 

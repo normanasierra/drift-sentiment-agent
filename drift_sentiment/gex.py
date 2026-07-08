@@ -52,6 +52,51 @@ def bs_gamma(spot: float, strike: float, iv: float, t_years: float, r: float = 0
     return _norm_pdf(d1) / (spot * vol_t)
 
 
+def _norm_cdf(x: float) -> float:
+    """Standard-normal cumulative distribution (via erf)."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _bs_price(spot, strike, iv, t_years, is_call, r=0.0):
+    """Black-Scholes European option price."""
+    if iv <= 0 or t_years <= 0:
+        return max(0.0, (spot - strike) if is_call else (strike - spot))
+    vt = iv * math.sqrt(t_years)
+    d1 = (math.log(spot / strike) + (r + 0.5 * iv * iv) * t_years) / vt
+    d2 = d1 - vt
+    disc = math.exp(-r * t_years)
+    if is_call:
+        return spot * _norm_cdf(d1) - strike * disc * _norm_cdf(d2)
+    return strike * disc * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
+
+
+def implied_vol(price, spot, strike, t_years, is_call, r=0.0):
+    """Recover implied volatility from an option price by inverting Black-Scholes.
+
+    Bisection on a monotonically-increasing price(iv); returns None for degenerate
+    inputs (price at/below intrinsic or above the no-arbitrage bound, where IV is
+    undefined). Used ONLY when the feed ships no IV (index underlyings like SPX) —
+    equities keep their feed IV, so their results are unaffected.
+    """
+    if price is None or price <= 0 or spot <= 0 or strike <= 0 or t_years <= 0:
+        return None
+    intrinsic = max(0.0, (spot - strike) if is_call else (strike - spot))
+    upper = spot if is_call else strike  # call <= spot, put <= strike
+    if price <= intrinsic + 1e-6 or price >= upper:
+        return None
+    lo, hi = 1e-4, 5.0
+    if _bs_price(spot, strike, hi, t_years, is_call, r) < price:
+        return None  # too rich even at 500% vol
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if _bs_price(spot, strike, mid, t_years, is_call, r) < price:
+            lo = mid
+        else:
+            hi = mid
+    iv = 0.5 * (lo + hi)
+    return iv if IV_MIN <= iv <= IV_MAX else None
+
+
 def _iv_for(contract: Contract, fallback_iv: float | None) -> float | None:
     """The contract's own IV if sane, else the supplied fallback (if sane)."""
     if _sane_iv(contract.implied_volatility):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 
 from . import chain_filter, drift, gex, magneto, scenarios, stats, walls
@@ -9,6 +10,25 @@ from .models import BucketResult, Contract, DriftReport
 
 
 DEFAULT_TOLERANCE_DAYS = 20
+
+
+def _with_computed_iv(
+    contracts: list[Contract], spot: float, dte: int
+) -> list[Contract]:
+    """Fill in missing IV by inverting Black-Scholes from each option's price.
+
+    Only reached when a bucket has NO feed IV at all (index underlyings like SPX);
+    equities keep their feed IV untouched, so their output is unchanged.
+    """
+    t = dte / 365.0
+    out: list[Contract] = []
+    for c in contracts:
+        if c.implied_volatility is None and c.price is not None:
+            iv = gex.implied_vol(c.price, spot, c.strike, t, c.is_call)
+            out.append(replace(c, implied_volatility=iv) if iv is not None else c)
+        else:
+            out.append(c)
+    return out
 
 
 def build_report(
@@ -42,8 +62,13 @@ def build_report(
         mag_strike, mag_notional = mag
         mag_strength = magneto.magneto_strength(bucket_contracts)
 
-        iv = stats.atm_iv(bucket_contracts, spot)
         actual_dte = (exp - as_of).days
+        iv = stats.atm_iv(bucket_contracts, spot)
+        if iv is None:
+            # No feed IV in this bucket (index underlyings like SPX ship none).
+            # Recover IV from option prices so GEX/σ work; equities skip this.
+            bucket_contracts = _with_computed_iv(bucket_contracts, spot, actual_dte)
+            iv = stats.atm_iv(bucket_contracts, spot)
         dte_offset = actual_dte - target_dte
         within_tol = abs(dte_offset) <= tolerance_days
         sigma = stats.projected_sigma(spot, iv, actual_dte)

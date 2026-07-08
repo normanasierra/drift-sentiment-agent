@@ -19,6 +19,7 @@ class Contract:
     contract_type: str  # "call" or "put"
     open_interest: int
     implied_volatility: float | None = None
+    price: float | None = None  # last daily close of the option (for IV inversion)
 
     @property
     def is_call(self) -> bool:
