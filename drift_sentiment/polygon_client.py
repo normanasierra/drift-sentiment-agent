@@ -20,10 +20,12 @@ class PolygonError(RuntimeError):
 
 
 def _api_key() -> str:
-    key = os.getenv("POLYGON_API_KEY")
+    # Prefer the Massive key (paid, more entitlements) if present; otherwise fall
+    # back to the free Polygon key. Same host/endpoints (Massive = Polygon rebranded).
+    key = os.getenv("MASSIVE_API_KEY") or os.getenv("POLYGON_API_KEY")
     if not key:
         raise PolygonError(
-            "POLYGON_API_KEY not set. Add it to a .env file in the project root."
+            "No API key set. Add MASSIVE_API_KEY (or POLYGON_API_KEY) to .env."
         )
     return key
 
@@ -86,12 +88,15 @@ def fetch_chain(ticker: str, *, timeout: int = 30) -> tuple[float, list[Contract
 
 
 def _fetch_spot(ticker: str, key: str, timeout: int) -> float:
-    """Determine spot price, trying real-time last trade first, then prev close.
+    """Determine spot price: real-time last trade, then Yahoo, then prev close.
 
-    The last-trade endpoint requires a paid plan; on the free tier it returns
-    403, so we fall back to the previous daily close (available on all plans).
+    The last-trade endpoint requires a paid Polygon plan; on the free tier it
+    returns 403, so we fall back to Yahoo Finance's near-current price (~15-min
+    delayed, free), and finally to the previous daily close if both fail.
     """
     price = _fetch_last_trade(ticker, key, timeout)
+    if price is None:
+        price = _fetch_yahoo_spot(ticker, timeout)
     if price is None:
         price = _fetch_prev_close(ticker, key, timeout)
     if price is None:
@@ -109,6 +114,38 @@ def _fetch_last_trade(ticker: str, key: str, timeout: int) -> float | None:
     if resp.status_code != 200:
         return None
     price = resp.json().get("results", {}).get("p")
+    return float(price) if price is not None else None
+
+
+# Index tickers need Yahoo's caret symbols instead of the raw ticker.
+_YF_SYMBOL = {"SPX": "^GSPC", "NDX": "^NDX", "VIX": "^VIX", "RUT": "^RUT", "DJI": "^DJI"}
+
+
+def _fetch_yahoo_spot(ticker: str, timeout: int) -> float | None:
+    """Near-current spot from Yahoo Finance (free, no key, ~15-min delayed).
+
+    Bridges the gap when the paid real-time last-trade endpoint isn't on the plan,
+    so the app shows a near-current price instead of yesterday's close. Returns
+    None on any failure so the caller can fall back to the previous close.
+    """
+    yf = _YF_SYMBOL.get(ticker.upper().replace("I:", ""), ticker.upper())
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf}"
+    try:
+        resp = requests.get(
+            url,
+            params={"interval": "1d", "range": "1d"},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=timeout,
+        )
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        meta = resp.json()["chart"]["result"][0]["meta"]
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    price = meta.get("regularMarketPrice")
     return float(price) if price is not None else None
 
 

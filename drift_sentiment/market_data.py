@@ -28,10 +28,11 @@ class MarketDataError(RuntimeError):
 
 
 def _api_key() -> str:
-    key = os.getenv("POLYGON_API_KEY")
+    # Prefer the Massive key (paid) if present; fall back to the free Polygon key.
+    key = os.getenv("MASSIVE_API_KEY") or os.getenv("POLYGON_API_KEY")
     if not key:
         raise MarketDataError(
-            "POLYGON_API_KEY not set. Add it to a .env file in the project root."
+            "No API key set. Add MASSIVE_API_KEY (or POLYGON_API_KEY) to .env."
         )
     return key
 
