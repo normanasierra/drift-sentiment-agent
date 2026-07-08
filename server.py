@@ -17,11 +17,24 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from drift_sentiment import drift, polygon_client, report as report_mod, scenarios
+from drift_sentiment import (
+    chain_filter, drift, polygon_client, report as report_mod, scenarios,
+)
 from drift_sentiment.plotting import build_box_plots, build_gex_profiles
 
 BASE = "https://api.polygon.io"
 WEB = Path(__file__).resolve().parent / "web"
+
+# Index underlyings the options-chain endpoint accepts directly. The ticker-search
+# API only covers stocks/ETFs, so these are surfaced in autocomplete by hand.
+INDICES = [
+    ("SPX", "S&P 500 Index"),
+    ("NDX", "Nasdaq-100 Index"),
+    ("RUT", "Russell 2000 Index"),
+    ("VIX", "CBOE Volatility Index"),
+    ("XSP", "Mini-SPX Index"),
+    ("DJX", "Dow Jones Index"),
+]
 
 app = FastAPI(title="Wakanda Forever")
 app.mount("/static", StaticFiles(directory=str(WEB / "static")), name="static")
@@ -40,13 +53,23 @@ def render(name: str, **ctx) -> HTMLResponse:
 _CACHE: dict[str, tuple[float, float, object]] = {}
 
 
+_TARGETS = sorted({dte for _, dte in chain_filter.DTE_TARGETS}, reverse=True)
+
+
 def _load(ticker: str, ttl: int = 120):
     now = time.time()
     hit = _CACHE.get(ticker)
     if hit and now - hit[0] < ttl:
         return hit[1], hit[2]
-    spot, contracts = polygon_client.fetch_chain(ticker)
-    rep = report_mod.build_report(ticker, spot, contracts, datetime.date.today())
+    today = datetime.date.today()
+    # Fast path: fetch only the monthly expirations the report actually uses
+    # (~14x fewer contracts on big chains like SPX). Fall back to the full chain
+    # if the targeted path can't resolve every bucket.
+    try:
+        spot, contracts = polygon_client.fetch_chain_targeted(ticker, today, _TARGETS)
+    except polygon_client.PolygonError:
+        spot, contracts = polygon_client.fetch_chain(ticker)
+    rep = report_mod.build_report(ticker, spot, contracts, today)
     _CACHE[ticker] = (now, spot, rep)
     return spot, rep
 
@@ -94,9 +117,15 @@ def search(q: str = ""):
         return 4
 
     ranked = sorted(data, key=rank)
-    return {"results": [
-        {"ticker": d.get("ticker"), "name": d.get("name", "")} for d in ranked[:8]
-    ]}
+    stocks = [{"ticker": d.get("ticker"), "name": d.get("name", "")} for d in ranked]
+
+    # Matching index underlyings (SPX, NDX, …) go first so they aren't buried.
+    ql_low = q.lower()
+    idx = [{"ticker": s, "name": n} for s, n in INDICES
+           if s.startswith(ql) or ql in s or ql_low in n.lower()]
+    seen = {i["ticker"] for i in idx}
+    merged = idx + [s for s in stocks if s["ticker"] not in seen]
+    return {"results": merged[:8]}
 
 
 @app.get("/api/report")

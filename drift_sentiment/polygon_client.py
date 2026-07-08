@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import os
 import time
 from datetime import date, datetime
@@ -113,6 +114,103 @@ def fetch_chain(ticker: str, *, timeout: int = 30) -> tuple[float, list[Contract
     return spot, contracts
 
 
+def _third_friday(year: int, month: int) -> date:
+    """The 3rd-Friday monthly-expiration date for a given month."""
+    first_weekday, _ = calendar.monthrange(year, month)  # Monday=0 .. Sunday=6
+    first_friday = 1 + ((4 - first_weekday) % 7)          # 4 == Friday
+    return date(year, month, first_friday + 14)           # +2 weeks -> 3rd Friday
+
+
+def _monthly_candidates(as_of: date, target_dte: int, span_days: int = 240) -> list[date]:
+    """Future 3rd-Fridays within +/-span of the target DTE, nearest-target first.
+
+    Tie-broken by earlier date so it matches chain_filter.nearest_expiration's
+    ``min`` over the sorted expiration list.
+    """
+    cands: list[date] = []
+    yy, mm = as_of.year, as_of.month
+    for _ in range(30):  # ~2.5 years forward, covers the 320-DTE target + span
+        tf = _third_friday(yy, mm)
+        dte = (tf - as_of).days
+        if dte >= 0 and abs(dte - target_dte) <= span_days:
+            cands.append(tf)
+        mm += 1
+        if mm > 12:
+            mm, yy = 1, yy + 1
+    cands.sort(key=lambda d: (abs((d - as_of).days - target_dte), d))
+    return cands
+
+
+def _fetch_expiration(
+    ticker: str, exp: date, key: str, timeout: int
+) -> tuple[float | None, list[Contract]]:
+    """All snapshot contracts for a single expiration (server-side date filter)."""
+    url = f"{BASE_URL}/v3/snapshot/options/{ticker.upper()}"
+    params = {"expiration_date": exp.isoformat(), "limit": 250, "apiKey": key}
+    out: list[Contract] = []
+    spot: float | None = None
+    while url:
+        resp = _get_with_retry(url, params, timeout)
+        if resp.status_code != 200:
+            raise PolygonError(
+                f"Snapshot request failed ({resp.status_code}): {resp.text[:200]}"
+            )
+        payload = resp.json()
+        for result in payload.get("results", []):
+            if spot is None:
+                ua = result.get("underlying_asset", {})
+                if ua.get("price"):
+                    spot = float(ua["price"])
+            c = _parse_contract(result)
+            if c is not None:
+                out.append(c)
+        url = payload.get("next_url")
+        params = {"apiKey": key}
+    return spot, out
+
+
+def fetch_chain_targeted(
+    ticker: str, as_of: date, targets: list[int], *, timeout: int = 30
+) -> tuple[float, list[Contract]]:
+    """Fetch only the monthly expirations nearest each DTE target (fast path).
+
+    Returns the same (spot, contracts) that build_report needs for its buckets,
+    but downloads *only* those expirations instead of the entire chain — a ~14x
+    win on huge underlyings like SPX. It is same-universe as fetch_chain (the
+    snapshot endpoint, 3rd-Friday monthlies) and picks each expiration exactly the
+    way chain_filter.nearest_expiration would, so build_report's output is
+    unchanged. Raises PolygonError if nothing resolves (caller may fall back).
+    """
+    key = _api_key()
+    chosen: dict[date, list[Contract]] = {}  # dedup across targets
+    spot: float | None = None
+    for target in targets:
+        resolved = False
+        for cand in _monthly_candidates(as_of, target):
+            if cand in chosen:
+                resolved = True  # a nearer target already claimed this expiration
+                break
+            s, cs = _fetch_expiration(ticker, cand, key, timeout)
+            if cs:  # this 3rd-Friday is actually listed
+                chosen[cand] = cs
+                if spot is None and s is not None:
+                    spot = s
+                resolved = True
+                break
+        if not resolved:
+            # No listed monthly near this target — bail so the caller can fall
+            # back to a full-chain fetch rather than risk a wrong bucket.
+            raise PolygonError(
+                f"No monthly expiration near {target} DTE for {ticker.upper()}."
+            )
+    contracts = [c for cs in chosen.values() for c in cs]
+    if not contracts:
+        raise PolygonError(f"No monthly option contracts for {ticker.upper()}.")
+    if spot is None:
+        spot = _fetch_spot(ticker, key, timeout)
+    return spot, contracts
+
+
 def _fetch_spot(ticker: str, key: str, timeout: int) -> float:
     """Determine spot price: real-time last trade, then Yahoo, then prev close.
 
@@ -175,6 +273,43 @@ def _fetch_yahoo_spot(ticker: str, timeout: int) -> float | None:
     return float(price) if price is not None else None
 
 
+def _fetch_yahoo_bars(ticker: str, lookback_days: int, timeout: int) -> list[dict]:
+    """Daily OHLC candles from Yahoo Finance (free) — fallback for tickers the
+    Polygon aggregates endpoint can't serve, e.g. index underlyings like SPX
+    (plain 'SPX' returns no bars; 'I:SPX' is 403 on the options plan).
+    """
+    yf = _YF_SYMBOL.get(ticker.upper().replace("I:", ""), ticker.upper())
+    rng = "2y" if lookback_days > 365 else "1y" if lookback_days > 180 else "6mo"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf}"
+    try:
+        resp = requests.get(
+            url, params={"interval": "1d", "range": rng},
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout,
+        )
+    except requests.RequestException:
+        return []
+    if resp.status_code != 200:
+        return []
+    try:
+        result = resp.json()["chart"]["result"][0]
+        ts = result["timestamp"]
+        q = result["indicators"]["quote"][0]
+        opens, highs, lows, closes = q["open"], q["high"], q["low"], q["close"]
+    except (KeyError, IndexError, TypeError, ValueError):
+        return []
+    cutoff = today().toordinal() - lookback_days
+    bars = []
+    for i, t in enumerate(ts):
+        if None in (opens[i], highs[i], lows[i], closes[i]):
+            continue
+        d = datetime.utcfromtimestamp(t).date()
+        if d.toordinal() < cutoff:
+            continue
+        bars.append({"time": d.isoformat(), "open": opens[i], "high": highs[i],
+                     "low": lows[i], "close": closes[i]})
+    return bars
+
+
 def _fetch_prev_close(ticker: str, key: str, timeout: int) -> float | None:
     """Fallback spot via previous daily close (available on the free tier)."""
     url = f"{BASE_URL}/v2/aggs/ticker/{ticker.upper()}/prev"
@@ -210,20 +345,21 @@ def fetch_daily_bars(
     )
     params = {"adjusted": "true", "sort": "asc", "limit": 5000, "apiKey": key}
     resp = _get_with_retry(url, params, timeout)
-    if resp.status_code != 200:
-        raise PolygonError(
-            f"Daily bars request failed ({resp.status_code}): {resp.text[:200]}"
-        )
     bars = []
-    for r in resp.json().get("results", []):
-        d = datetime.utcfromtimestamp(r["t"] / 1000).date()
-        bars.append(
-            {
-                "time": d.isoformat(),
-                "open": r["o"],
-                "high": r["h"],
-                "low": r["l"],
-                "close": r["c"],
-            }
-        )
+    if resp.status_code == 200:
+        for r in resp.json().get("results", []) or []:
+            d = datetime.utcfromtimestamp(r["t"] / 1000).date()
+            bars.append(
+                {
+                    "time": d.isoformat(),
+                    "open": r["o"],
+                    "high": r["h"],
+                    "low": r["l"],
+                    "close": r["c"],
+                }
+            )
+    # Indices (SPX, NDX, …) and anything the aggregates endpoint can't serve fall
+    # back to Yahoo so the candlestick still renders.
+    if not bars:
+        bars = _fetch_yahoo_bars(ticker, lookback_days, timeout)
     return bars
