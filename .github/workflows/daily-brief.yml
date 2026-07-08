@@ -4,9 +4,9 @@ name: Daily Market Brief
 # personal machine). Secrets are stored as encrypted GitHub Actions secrets.
 on:
   schedule:
-    # 09:03, 12:03, 15:03 America/La_Paz (UTC-4) = 13:03, 16:03, 19:03 UTC, Mon–Fri.
+    # 08:03, 12:03, 15:03 Puerto Rico (UTC-4) = 12:03, 16:03, 19:03 UTC, Mon–Fri.
     # (GitHub cron is always UTC. Off-:00 minute to avoid scheduler congestion.)
-    - cron: '3 13,16,19 * * 1-5'
+    - cron: '3 12,16,19 * * 1-5'
   workflow_dispatch: {}   # manual "Run workflow" button, for testing
 
 jobs:
