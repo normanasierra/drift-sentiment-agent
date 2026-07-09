@@ -100,6 +100,25 @@ def _watchlist_block() -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
+def _newsletters_block() -> str:
+    """Content from the reader's PAID newsletters (CNBC/Barron's/MarketSnacks…),
+    read from his Gmail inbox, for the brief to summarize. '' if none/unconfigured."""
+    try:
+        from data_sources import email_inbox
+        items = email_inbox.recent_newsletters(since_days=1)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not items or (len(items) == 1 and items[0].get("sender") == "error"):
+        return ""
+    lines = ["NEWSLETTERS PAGADAS (del inbox — RESUME lo relevante para el mercado hoy):"]
+    for it in items[:6]:
+        body = " ".join((it.get("body") or "").split())[:1200]
+        lines.append(f"  · [{it.get('sender','')[:40]}] {it.get('subject','')}")
+        if body:
+            lines.append(f"    {body}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
 def _hyperliquid_block() -> str:
     try:
         from data_sources import hyperliquid
@@ -131,7 +150,7 @@ def gather() -> str:
     """Return a compact REAL-DATA block for the prompt, or '' if nothing loaded."""
     blocks = [
         _indices_block(), _watchlist_block(), _portfolio_block(),
-        _hyperliquid_block(), _schwab_block(),
+        _newsletters_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
     if not body:

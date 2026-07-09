@@ -28,11 +28,12 @@ encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    - Financieras y pesos pesados: sesgo general (JPM/GS/BAC · LLY/WMT/COST/XOM/V/MA).
    Cierra con una **lectura de una línea para SPX** (sesgo intradía probable).
 
-3. **Noticias**: revisa **Yahoo Finance** (finance.yahoo.com) y **CNBC**
-   (cnbc.com) como fuentes principales. Saca los **3-5 titulares macro** que
-   muevan la renta variable de EE. UU. hoy, cada uno con una frase de "por qué
-   importa". (Barron's suele estar tras muro de pago: usa solo titulares
-   públicos si aparecen.)
+3. **Noticias**: si el bloque de DATOS REALES incluye **NEWSLETTERS PAGADAS**
+   (CNBC/Barron's/MarketSnacks del inbox), úsalas como **fuente PRINCIPAL** y
+   resume de ahí lo que mueve el mercado (ya son contenido de pago, más valioso
+   que la web abierta). Complementa con **Yahoo Finance** y **CNBC** por web.
+   Saca los **3-5 titulares macro** que muevan la renta variable de EE. UU. hoy,
+   cada uno con una frase de "por qué importa".
 
 4. **Trump**: busca lo más reciente y relevante para el MERCADO que haya dicho
    o hecho Trump (declaraciones, aranceles, Fed, política económica, órdenes

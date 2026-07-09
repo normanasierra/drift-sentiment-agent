@@ -52,8 +52,9 @@ def _plain_body(msg: email.message.Message) -> str:
 
 def recent_newsletters(*, since_days: int = 1, max_msgs: int = 8) -> list[dict]:
     """Return recent newsletter emails as {sender, subject, body}. [] if unconfigured."""
-    user = os.getenv("IMAP_USER") or os.getenv("SMTP_USER")
-    pw = os.getenv("IMAP_PASSWORD") or os.getenv("SMTP_PASSWORD")
+    user = os.getenv("IMAP_USER") or os.getenv("SMTP_USER") or os.getenv("GMAIL_USER")
+    pw = (os.getenv("IMAP_PASSWORD") or os.getenv("SMTP_PASSWORD")
+          or os.getenv("GMAIL_APP_PASSWORD"))
     if not user or not pw:
         return []
 
