@@ -37,9 +37,9 @@ OUTPUT_RULE = f"""
 ---
 ## Regla de salida (IMPORTANTE — anula cualquier paso de "escribir archivos")
 
-NO escribas archivos ni uses herramientas de escritura. En vez de eso, entrega
-EXACTAMENTE los dos contenidos entre estos marcadores literales, sin ningún otro
-texto fuera de ellos:
+NO escribas archivos ni uses herramientas de escritura. Tu respuesta COMPLETA debe
+empezar EXACTAMENTE con la línea `{EMAIL_START}` (nada antes) y no contener NINGÚN
+texto fuera de los dos bloques marcados. Entrega EXACTAMENTE:
 
 {EMAIL_START}
 (aquí el fragmento HTML del correo)
@@ -105,35 +105,42 @@ def generate() -> None:
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
     })
-    # Retry transient failures (rate limits / overload / network) with backoff,
-    # so a hiccup at 9am doesn't cost a whole day's brief.
-    data = None
-    last_err = "API call failed."
-    for attempt in range(5):
-        try:
-            with urllib.request.urlopen(req, timeout=300) as resp:  # noqa: S310
-                data = json.loads(resp.read().decode("utf-8", "replace"))
-            break
-        except urllib.error.HTTPError as exc:
-            last_err = f"API error {exc.code}: {exc.read()[:400].decode('utf-8', 'replace')}"
-            transient = exc.code in (429, 500, 502, 503, 529)
-        except urllib.error.URLError as exc:
-            last_err = f"Network error: {exc}"
-            transient = True
-        if transient and attempt < 4:
-            time.sleep(15 * (attempt + 1))  # 15, 30, 45, 60s
-            continue
-        sys.exit(last_err)
-    if data is None:
+
+    def _post() -> dict:
+        """One API call, retrying transient failures (429/5xx/network) with backoff
+        so a hiccup at 9am doesn't cost the brief. Exits on a hard failure."""
+        last_err = "API call failed."
+        for attempt in range(5):
+            try:
+                with urllib.request.urlopen(req, timeout=300) as resp:  # noqa: S310
+                    return json.loads(resp.read().decode("utf-8", "replace"))
+            except urllib.error.HTTPError as exc:
+                last_err = f"API error {exc.code}: {exc.read()[:400].decode('utf-8', 'replace')}"
+                transient = exc.code in (429, 500, 502, 503, 529)
+            except urllib.error.URLError as exc:
+                last_err = f"Network error: {exc}"
+                transient = True
+            if transient and attempt < 4:
+                time.sleep(15 * (attempt + 1))  # 15, 30, 45, 60s
+                continue
+            sys.exit(last_err)
         sys.exit(last_err)
 
-    text = "".join(
-        b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
-    )
-    email = _between(text, EMAIL_START, EMAIL_END)
-    wa = _between(text, WA_START, WA_END)
+    # Haiku occasionally ignores the output markers; regenerate a few times before
+    # giving up so a one-off bad format doesn't cost the whole day's brief.
+    email = wa = text = ""
+    for _ in range(3):
+        data = _post()
+        text = "".join(
+            b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
+        )
+        email = _between(text, EMAIL_START, EMAIL_END)
+        wa = _between(text, WA_START, WA_END)
+        if email and wa:
+            break
     if not email or not wa:
-        sys.exit("Could not parse brief output between markers.\n--- raw ---\n" + text[:1500])
+        sys.exit("Could not parse brief output between markers after 3 tries.\n"
+                 "--- raw ---\n" + text[:1500])
 
     OUT_DIR.mkdir(exist_ok=True)
     EMAIL_FILE.write_text(email, encoding="utf-8")

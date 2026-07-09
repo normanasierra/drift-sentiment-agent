@@ -28,6 +28,22 @@ PORTFOLIO: list[str] = [
     "MU", "MRVL", "PLTR", "IREN", "MSFT", "NVDA", "NFLX",
 ]
 
+# SPX pre-market watchlist (grouped), for the "operar SPX" section of the brief.
+# (label, yahoo symbol). Futures = "=F"; yields via caret/2YY=F (2-yr yield fut).
+WATCHLIST: list[tuple[str, list[tuple[str, str]]]] = [
+    ("Futuros índices", [("ES", "ES=F"), ("NQ", "NQ=F"), ("YM", "YM=F"), ("RTY", "RTY=F")]),
+    ("Volatilidad", [("VIX", "^VIX"), ("VIX1D", "^VIX1D")]),
+    ("Bonos (rend. %)", [("10Y", "^TNX"), ("2Y", "2YY=F")]),
+    ("Mag 7", [("NVDA", "NVDA"), ("MSFT", "MSFT"), ("AAPL", "AAPL"), ("AMZN", "AMZN"),
+               ("META", "META"), ("GOOGL", "GOOGL"), ("TSLA", "TSLA")]),
+    ("Semis", [("AVGO", "AVGO"), ("AMD", "AMD"), ("INTC", "INTC"), ("MU", "MU"),
+               ("TSM", "TSM"), ("QCOM", "QCOM")]),
+    ("Financieras", [("JPM", "JPM"), ("GS", "GS"), ("BAC", "BAC")]),
+    ("Pesos pesados", [("LLY", "LLY"), ("WMT", "WMT"), ("COST", "COST"),
+                       ("XOM", "XOM"), ("V", "V"), ("MA", "MA")]),
+    ("ETFs confirm.", [("SPY", "SPY"), ("QQQ", "QQQ"), ("IWM", "IWM"), ("SMH", "SMH")]),
+]
+
 
 def _quotes(symbols: list[str]) -> dict[str, dict]:
     try:
@@ -70,6 +86,20 @@ def _portfolio_block() -> str:
     return "PORTAFOLIO — cambio % del día (real):\n" + "\n".join(rows)
 
 
+def _watchlist_block() -> str:
+    syms = [y for _, group in WATCHLIST for _, y in group]
+    q = _quotes(syms)
+    if not q:
+        return ""
+    lines = ["WATCHLIST SPX (real, ~15min delay):"]
+    for gname, group in WATCHLIST:
+        parts = [f"{label} {d['price']:.2f} ({_fmt_pct(d)})"
+                 for label, ysym in group if (d := q.get(ysym))]
+        if parts:
+            lines.append(f"  {gname}: " + " · ".join(parts))
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
 def _hyperliquid_block() -> str:
     try:
         from data_sources import hyperliquid
@@ -100,7 +130,7 @@ def _schwab_block() -> str:
 def gather() -> str:
     """Return a compact REAL-DATA block for the prompt, or '' if nothing loaded."""
     blocks = [
-        _indices_block(), _portfolio_block(),
+        _indices_block(), _watchlist_block(), _portfolio_block(),
         _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
