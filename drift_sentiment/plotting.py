@@ -165,7 +165,7 @@ def build_box_plots(buckets: list[BucketResult], spot: float, theme: str = "dark
             extra = (f"  ({b.magneto_quality} {b.magneto_strength * 100:.0f}%)"
                      if name == "Magneto" else "")
             # Walls & Magneto rounded to whole points (no cents); other levels keep .1
-            vstr = (f"{value:.0f}" if name in ("Call Wall", "Put Wall", "Magneto")
+            vstr = (f"{value:.0f}" if name in ("Call Wall", "Put Wall", "Magneto", "Spot")
                     else f"{value:.1f}")
             ax.annotate(
                 f"{name}  {vstr}{extra}",
@@ -224,7 +224,7 @@ def build_gex_profiles(buckets: list[BucketResult], spot: float, theme: str = "d
         colors = ["#2e7d32" if v >= 0 else "#c62828" for v in vals]
         ax.barh(strikes, vals, height=(spot * 0.012), color=colors)
 
-        ax.axhline(spot, color="white", lw=1.2, label=f"Spot {spot:.1f}")
+        ax.axhline(spot, color="white", lw=1.2, label=f"Spot {spot:.0f}")
         if b.zero_gamma is not None:
             ax.axhline(b.zero_gamma, color="#9aa4b2", ls="-.", lw=1.4,
                        label=f"Zero-Γ {b.zero_gamma:.1f}")
@@ -236,7 +236,7 @@ def build_gex_profiles(buckets: list[BucketResult], spot: float, theme: str = "d
                    label=f"Magneto {b.magneto_strike:.1f} ({b.magneto_quality})")
         ax.axvline(0, color="#6b7684", lw=0.8)
         ax.set_title(
-            f"{b.label}  (net {b.total_gex / 1e6:+,.1f}M, {b.gex_regime} γ)"
+            f"{b.label}  (net {b.total_gex / 1e6:+,.0f}M, {b.gex_regime} γ)"
         )
         ax.set_xlabel("Net GEX  ($M per 1% move)")
         ax.set_ylabel("Strike")

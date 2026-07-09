@@ -117,11 +117,11 @@ def format_text_report(report: DriftReport) -> str:
     """Render the required Section-8 outputs as plain text."""
     lines: list[str] = []
     lines.append(f"=== Drift Sentiment Report: {report.ticker} ===")
-    lines.append(f"Spot: {report.spot:.2f}   As of: {report.as_of.isoformat()}")
+    lines.append(f"Spot: {report.spot:.0f}   As of: {report.as_of.isoformat()}")
     lines.append(f"Total shares (all zones): {report.total_shares:,}")
     lines.append(f"Total net notional (all zones): {report.total_notional:,.0f}")
     lines.append(
-        f"Net GEX (all zones): ${report.total_gex / 1e6:,.1f}M per 1% move "
+        f"Net GEX (all zones): ${report.total_gex / 1e6:,.0f}M per 1% move "
         f"({report.gex_regime} gamma)"
     )
     lines.append("")
@@ -155,7 +155,7 @@ def format_text_report(report: DriftReport) -> str:
         pgw = f"{b.put_gamma_wall:.2f}" if b.put_gamma_wall is not None else "n/a"
         zg = f"{b.zero_gamma:.2f}" if b.zero_gamma is not None else "n/a"
         lines.append(
-            f"  GEX: net ${b.total_gex / 1e6:,.1f}M ({b.gex_regime} gamma) | "
+            f"  GEX: net ${b.total_gex / 1e6:,.0f}M ({b.gex_regime} gamma) | "
             f"Zero-Γ flip {zg} | Call Γ Wall {cgw} | Put Γ Wall {pgw}"
         )
         sc = scenarios.bucket_scenarios(b, report.spot)

@@ -187,9 +187,9 @@
     const hasIV = r.buckets.some((b) => b.sigma != null);
     const regimeCls = /pos|long/i.test(r.gex_regime) ? 'text-emerald-500' : /neg|short/i.test(r.gex_regime) ? 'text-rose-500' : 'text-slate-400';
     $('metrics').innerHTML =
-      card('Spot', `$${fmt(r.spot)}`) +
+      card('Spot', `$${fmt(r.spot, 0)}`) +
       card('Sesgo neto (notional)', fmtBig(r.total_notional), biasCls(r.total_notional)) +
-      card('GEX neto', hasIV ? `${fmt(r.total_gex_m, 1)}M` : 'N/D',
+      card('GEX neto', hasIV ? `${fmt(r.total_gex_m, 0)}M` : 'N/D',
            hasIV ? regimeCls : 'text-slate-400') +
       card('Actualizado', r.as_of);
   }
@@ -212,7 +212,7 @@
         <td class="px-3 py-2 text-rose-500 font-medium">${fmt(b.put_wall, 0)}</td>
         <td class="px-3 py-2 whitespace-nowrap ${magCls}">${fmt(b.magneto, 0)} <span class="text-xs opacity-70">${Math.round(b.magneto_strength * 100)}%${magIcon}</span></td>
         <td class="px-3 py-2">${b.sigma == null ? 'N/D' : fmt(b.sigma, 1)}</td>
-        <td class="px-3 py-2 ${b.sigma == null ? 'text-slate-400' : biasCls(b.gex_m)}">${b.sigma == null ? 'N/D' : fmt(b.gex_m, 1)}</td>
+        <td class="px-3 py-2 ${b.sigma == null ? 'text-slate-400' : biasCls(b.gex_m)}">${b.sigma == null ? 'N/D' : fmt(b.gex_m, 0)}</td>
         <td class="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 min-w-[220px]">
           <span class="text-emerald-500">▲</span> ${esc(b.bull)}<br>
           <span class="text-rose-500">▼</span> ${esc(b.bear)}</td>
