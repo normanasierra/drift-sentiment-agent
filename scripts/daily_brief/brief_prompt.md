@@ -11,7 +11,7 @@ encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
 
 ## Pasos de investigación
 
-1. **Mercado general**: SPY y QQQ (nivel, cambio %, niveles clave), VIX (nivel
+1. **Mercado general**: SPX y QQQ (nivel, cambio %, niveles clave), VIX (nivel
    y dirección), Tesoro a 10 años (nivel y dirección). Forma una lectura:
    **Risk-On / Risk-Off / Mixto** con una frase de justificación.
 
@@ -31,7 +31,7 @@ encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    solo si hay una **noticia/catalizador** relevante hoy. Prioriza profundizar
    en los que más se mueven o tienen titulares; a los demás, solo el % del día.
 
-   `SPY, SPX, CRM, AMZN, AMD, TSLA, INTC, IBM, UFO, STM, COIN, NOW, MU, MRVL,
+   `SPX, CRM, AMZN, AMD, TSLA, INTC, IBM, UFO, STM, COIN, NOW, MU, MRVL,
    PLTR, QS, IREN, MSFT, NVDA, CRWV, SPCX, NFLX, CBRS`
 
 5. **A vigilar hoy**: datos económicos programados, discursos de la Fed,
@@ -48,7 +48,7 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
 
 - Título: `Brief de Mercado — <fecha de hoy en español>`
 - Insignia de **sesgo** (Risk-On / Risk-Off / Mixto) + una frase.
-- **Índices**: SPY, QQQ, VIX, 10Y (niveles + lectura).
+- **Índices**: SPX, QQQ, VIX, 10Y (niveles + lectura).
 - **Noticias macro** (Yahoo Finance / CNBC): 3-5 viñetas (titular en negrita +
   por qué importa).
 - **Trump hoy**: 2-4 viñetas de impacto de mercado (o "sin novedad relevante").
@@ -66,7 +66,7 @@ Usa números reales; "n/d" si falta un dato. Que sea escaneable.
 Texto plano, ESPAÑOL, **menos de 850 caracteres** (límite duro), sin HTML.
 Incluye, en este orden y muy conciso:
 - Línea inicial: `📊 Brief <fecha>` + sesgo.
-- SPY/QQQ (nivel clave), VIX, 10Y en una o dos líneas.
+- SPX/QQQ (nivel clave), VIX, 10Y en una o dos líneas.
 - La **noticia** más importante (1 línea).
 - **Trump**: 1 línea si hay algo relevante (si no, omite).
 - **Portafolio**: SOLO los 3-5 tickers TUYOS que más se movieron hoy (ticker,

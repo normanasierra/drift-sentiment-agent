@@ -3,15 +3,15 @@ name: Daily Market Brief
 # Runs the daily pre-market brief on GitHub's servers (no dependency on any
 # personal machine). Secrets are stored as encrypted GitHub Actions secrets.
 on:
-  schedule:
-    # ~30 min before US market open & close, Puerto Rico time (UTC-4; summer/EDT):
-    #   08:45 PR (pre-open, mkt opens 9:30) = 12:45 UTC
-    #   15:15 PR (pre-close, mkt closes 4:00) = 19:15 UTC
-    # Set slightly early to absorb GitHub's cron delay. GitHub cron is always UTC;
-    # in EST winter these shift +1h in PR — revisit around November.
-    - cron: '45 12 * * 1-5'
-    - cron: '15 19 * * 1-5'
-  workflow_dispatch: {}   # manual "Run workflow" button, for testing
+  # Scheduled cron DISABLED (2026-07-08): GitHub's cron was delivering the brief
+  # late / off-schedule. Delivery now runs LOCALLY & punctually via the Windows
+  # scheduled tasks DriftBriefOpen (8:45am) / DriftBriefClose (3:15pm) invoking
+  # scripts/daily_brief/run_brief_local.py. Re-enable the two crons below if you
+  # ever want the cloud fallback again (accepting its timing slop).
+  # schedule:
+  #   - cron: '45 12 * * 1-5'
+  #   - cron: '15 19 * * 1-5'
+  workflow_dispatch: {}   # manual "Run workflow" button (cloud fallback / testing)
 
 jobs:
   brief:

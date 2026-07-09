@@ -17,14 +17,14 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-# Index / macro reads (Yahoo caret symbols for indices).
+# Index / macro reads (Yahoo caret symbols for indices; SPX = ^GSPC).
 INDICES: list[tuple[str, str]] = [
-    ("SPY", "SPY"), ("QQQ", "QQQ"), ("VIX", "^VIX"), ("10Y yield", "^TNX"),
+    ("SPX", "^GSPC"), ("QQQ", "QQQ"), ("VIX", "^VIX"), ("10Y yield", "^TNX"),
 ]
 
 # The reader's portfolio universe (kept in sync with brief_prompt.md).
 PORTFOLIO: list[str] = [
-    "SPY", "CRM", "AMZN", "AMD", "TSLA", "INTC", "IBM", "STM", "COIN", "NOW",
+    "CRM", "AMZN", "AMD", "TSLA", "INTC", "IBM", "STM", "COIN", "NOW",
     "MU", "MRVL", "PLTR", "IREN", "MSFT", "NVDA", "NFLX",
 ]
 
