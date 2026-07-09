@@ -56,6 +56,17 @@ def fresh(f: Path) -> bool:
 def main() -> None:
     dry = "--dry" in sys.argv
     load_env()
+
+    # Skip days the US market is closed (weekends + NYSE holidays), unless --force.
+    if "--force" not in sys.argv:
+        try:
+            from market_calendar import is_market_closed
+            if is_market_closed():
+                log("mercado CERRADO hoy (fin de semana o feriado) — no se envía brief.")
+                return
+        except Exception as exc:  # noqa: BLE001 - never let the check block a normal day
+            log(f"aviso: no pude checar el calendario ({exc}); sigo igual.")
+
     log(f"===== local brief run start ({'DRY' if dry else 'SEND'}) =====")
 
     for f in (EMAIL, WA):
