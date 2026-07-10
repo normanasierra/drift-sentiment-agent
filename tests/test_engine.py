@@ -453,3 +453,22 @@ def test_alignment_score_in_range():
     r = _report_with(magneto=275.0, spot=275.0)
     a = align_mod.build_alignment(ctx, r)
     assert 0 <= a.score <= 100
+
+
+# --- web JSON payload (for the ported Flask front-end) -----------------------
+
+def test_report_payload_shape():
+    from drift_sentiment.report import report_payload
+    rep = build_report("T", spot=100.0, contracts=[
+        _c(110, "call", 500), _c(120, "call", 100),
+        _c(90, "put", 400), _c(80, "put", 50),
+    ], as_of=date(2026, 1, 1))
+    pl = report_payload(rep)
+    assert pl["ticker"] == "T" and "buckets" in pl
+    import json
+    json.dumps(pl)  # must be JSON-serializable
+    b = pl["buckets"][0]
+    # contract the ported web front-end reads:
+    assert {"center", "low", "high", "strength", "clear"} <= set(b["magneto"])
+    assert {"net", "regime", "gamma_flip", "profile"} <= set(b["gex"])
+    assert {"strike", "open_interest"} <= set(b["call_wall"])

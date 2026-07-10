@@ -145,3 +145,76 @@ def format_text_report(report: DriftReport) -> str:
         lines.append("")
 
     return "\n".join(lines)
+
+
+# --- JSON payloads for the Flask web front-end (ported from the "Leo Agent") ---
+
+def _wall_payload(w) -> dict:
+    return {"strike": w.strike, "open_interest": w.open_interest}
+
+
+def _gex_regime_note(regime: str) -> str:
+    if regime == "positive":
+        return "gamma positiva: los dealers amortiguan; tiende a fijar/rango."
+    return "gamma negativa: los dealers amplifican; los movimientos se aceleran."
+
+
+def bucket_payload(b: BucketResult) -> dict:
+    """JSON-serializable view of one bucket for the web frontend.
+
+    Adapts this engine's field names to the structure the ported web UI expects
+    (magneto band, gex.net/gamma_flip/profile), and adds the newer fields
+    (gamma walls, magneto quality, scenarios) for the front-end to grow into.
+    """
+    profile = sorted(b.gex_by_strike.items()) if b.gex_by_strike else []
+    peak = max(b.gex_by_strike, key=lambda k: abs(b.gex_by_strike[k])) if b.gex_by_strike else None
+    return {
+        "label": b.label,
+        "sentiment": b.sentiment,
+        "target_dte": b.target_dte,
+        "expiration": b.expiration.isoformat(),
+        "actual_dte": b.actual_dte,
+        "within_tolerance": b.within_tolerance,
+        "dte_offset": b.dte_offset,
+        "call_wall": _wall_payload(b.call_wall),
+        "put_wall": _wall_payload(b.put_wall),
+        "magneto": {
+            "center": b.magneto_strike,
+            "low": b.magneto_strike,
+            "high": b.magneto_strike,
+            "strength": b.magneto_strength,
+            "quality": b.magneto_quality,
+            "clear": b.magneto_quality != "weak",
+            "polarity": b.magneto_notional,
+        },
+        "sigma": b.sigma,
+        "iv_atm": b.iv_atm,
+        "total_shares": b.total_shares,
+        "total_notional": b.total_notional,
+        "drift": b.drift,
+        "breakout": b.breakout,
+        "gex": {
+            "net": b.total_gex,
+            "regime": b.gex_regime,
+            "regime_note": _gex_regime_note(b.gex_regime),
+            "gamma_flip": b.zero_gamma,
+            "call_gamma_wall": b.call_gamma_wall,
+            "put_gamma_wall": b.put_gamma_wall,
+            "peak_strike": peak,
+            "profile": [{"strike": k, "gex": v} for k, v in profile],
+        },
+    }
+
+
+def report_payload(report: DriftReport) -> dict:
+    """Full JSON-serializable report for the web frontend."""
+    return {
+        "ticker": report.ticker,
+        "spot": report.spot,
+        "as_of": report.as_of.isoformat(),
+        "total_shares": report.total_shares,
+        "total_notional": report.total_notional,
+        "total_gex": report.total_gex,
+        "gex_regime": report.gex_regime,
+        "buckets": [bucket_payload(b) for b in report.buckets],
+    }

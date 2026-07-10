@@ -24,6 +24,10 @@ class PolygonError(RuntimeError):
     pass
 
 
+# Alias so the web layer (ported from the Flask "Leo Agent") can import either name.
+MarketDataError = PolygonError
+
+
 def _get(url: str, params: dict, timeout: int, *, max_retries: int = 4):
     """GET with backoff on transient statuses, returning the final response."""
     resp = None
@@ -177,6 +181,46 @@ def _fetch_prev_close(ticker: str, key: str, timeout: int) -> float | None:
         return None
     price = results[0].get("c")
     return float(price) if price is not None else None
+
+
+def search_tickers(query: str, *, limit: int = 8, timeout: int = 15) -> list[dict]:
+    """Autocomplete search: exact/prefix symbol matches first, then name matches.
+
+    Returns up to `limit` dicts: {"ticker", "name", "exchange", "market"}.
+    """
+    q = (query or "").strip()
+    if not q:
+        return []
+    key = _api_key()
+    url = f"{BASE_URL}/v3/reference/tickers"
+    params = {"search": q, "active": "true", "limit": 40, "apiKey": key}
+    try:
+        resp = _get(url, params, timeout)
+    except requests.RequestException as e:  # network hiccup -> non-fatal
+        raise PolygonError(f"Ticker search failed: {e}") from e
+    if resp.status_code != 200:
+        raise PolygonError(
+            f"Ticker search failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    qu = q.upper()
+    rows: list[dict] = []
+    for r in resp.json().get("results", []):
+        tk = (r.get("ticker") or "").upper()
+        if not tk:
+            continue
+        rows.append({
+            "ticker": tk,
+            "name": r.get("name") or "",
+            "exchange": r.get("primary_exchange") or "",
+            "market": r.get("market") or "",
+        })
+
+    def _rank(row: dict) -> int:
+        t = row["ticker"]
+        return 0 if t == qu else (1 if t.startswith(qu) else 2)
+
+    rows.sort(key=_rank)
+    return rows[:limit]
 
 
 def today() -> date:
