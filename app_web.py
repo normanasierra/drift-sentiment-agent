@@ -20,6 +20,9 @@ app = Flask(__name__)
 
 # Default port is 8501 (what the launcher opens); overridable via PORT env.
 PORT = int(os.environ.get("PORT", "8501"))
+# Bind host: 127.0.0.1 (local only) by default; set HOST=0.0.0.0 to reach it
+# from other devices on the same Wi-Fi (e.g. your phone via the Mac's LAN IP).
+HOST = os.environ.get("HOST", "127.0.0.1")
 _CACHE: dict[str, tuple[float, dict]] = {}
 _TTL = 300  # seconds — avoid hammering the API on repeat lookups
 
@@ -79,4 +82,4 @@ def api_analyze():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=PORT, debug=False)
+    app.run(host=HOST, port=PORT, debug=False)

@@ -1,0 +1,15 @@
+# Render blueprint for the Flask web UI (app_web.py).
+# Deploy: render.com -> New -> Blueprint -> connect this repo. Then set the
+# POLYGON_API_KEY value in the dashboard (it is not stored in the repo).
+services:
+  - type: web
+    name: drift-sentiment-web
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements-web.txt"
+    startCommand: "gunicorn app_web:app --bind 0.0.0.0:$PORT --timeout 120"
+    envVars:
+      - key: POLYGON_API_KEY
+        sync: false          # set this secret in the Render dashboard
+      - key: PYTHON_VERSION
+        value: "3.12.6"

@@ -1,0 +1,6 @@
+# Lean dependencies for the Flask web deploy (Render). The Streamlit app uses
+# the full requirements.txt; the web UI only needs these.
+flask>=3.0
+requests>=2.32
+python-dotenv>=1.0
+gunicorn>=21.0
