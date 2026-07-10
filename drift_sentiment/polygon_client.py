@@ -246,6 +246,10 @@ def fetch_daily_bars(
     params = {"adjusted": "true", "sort": "asc", "limit": 5000, "apiKey": key}
     resp = requests.get(url, params=params, timeout=timeout)
     if resp.status_code != 200:
+        # Indices (SPX, VIX…) aren't served here; fall back to free Yahoo history.
+        yb = _fetch_yahoo_bars(ticker, lookback_days, timeout)
+        if yb:
+            return yb
         raise PolygonError(
             f"Daily bars request failed ({resp.status_code}): {resp.text[:200]}"
         )
@@ -261,4 +265,37 @@ def fetch_daily_bars(
                 "close": r["c"],
             }
         )
+    # Polygon returns 200 with an empty set for cash indices — use Yahoo instead.
+    if not bars:
+        return _fetch_yahoo_bars(ticker, lookback_days, timeout)
+    return bars
+
+
+def _fetch_yahoo_bars(ticker: str, lookback_days: int, timeout: int) -> list[dict]:
+    """Daily OHLC from Yahoo (free, no key) — covers indices Polygon won't serve."""
+    yf = _YF_SYMBOL.get(ticker.upper().replace("I:", ""), ticker.upper())
+    rng = "1y" if lookback_days > 180 else "6mo"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf}"
+    try:
+        resp = requests.get(
+            url, params={"interval": "1d", "range": rng},
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout,
+        )
+    except requests.RequestException:
+        return []
+    if resp.status_code != 200:
+        return []
+    try:
+        result = resp.json()["chart"]["result"][0]
+        ts = result["timestamp"]
+        q = result["indicators"]["quote"][0]
+    except (KeyError, IndexError, TypeError):
+        return []
+    bars = []
+    for i, t in enumerate(ts):
+        o, h, l, c = q["open"][i], q["high"][i], q["low"][i], q["close"][i]
+        if None in (o, h, l, c):
+            continue
+        d = datetime.utcfromtimestamp(t).date()
+        bars.append({"time": d.isoformat(), "open": o, "high": h, "low": l, "close": c})
     return bars
