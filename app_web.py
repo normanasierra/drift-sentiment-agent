@@ -12,9 +12,35 @@ import time
 
 from flask import Flask, jsonify, render_template, request
 
+from drift_sentiment import alignment as align_mod
+from drift_sentiment import market_context as mc
+from drift_sentiment import market_data
 from drift_sentiment import polygon_client as market
 from drift_sentiment.polygon_client import MarketDataError
 from drift_sentiment.report import build_report, report_payload
+
+
+def _mctx_payload(ctx) -> dict:
+    return {
+        "score": ctx.score, "confidence": ctx.confidence, "bias": ctx.bias,
+        "headline": ctx.headline,
+        "components": [
+            {"label": c.label, "score": c.score, "bias": c.bias, "detail": c.detail}
+            for c in ctx.components
+        ],
+        "top_factors": ctx.top_factors, "top_risks": ctx.top_risks,
+    }
+
+
+def _align_payload(a) -> dict:
+    return {
+        "score": a.score, "label": a.label, "verdict": a.verdict,
+        "guidance": a.guidance,
+        "reads": [
+            {"name": r.name, "score": r.score, "bias": r.bias, "detail": r.detail}
+            for r in a.reads
+        ],
+    }
 
 app = Flask(__name__)
 
@@ -67,6 +93,16 @@ def api_analyze():
             payload["bars"] = market.fetch_daily_bars(ticker)
         except MarketDataError:
             payload["bars"] = []
+        # Macro layers (optional; never break the core options analysis).
+        try:
+            ctx = mc.build_market_context(
+                market_data.fetch_moves(mc.all_symbols()), market_data.today()
+            )
+            payload["market_context"] = _mctx_payload(ctx)
+            payload["alignment"] = _align_payload(align_mod.build_alignment(ctx, report))
+        except Exception:  # noqa: BLE001 — macro is a bonus, not required
+            payload["market_context"] = None
+            payload["alignment"] = None
     except MarketDataError as e:
         return jsonify({"error": str(e)}), 502
     except Exception as e:  # noqa: BLE001 — surface anything unexpected to the UI

@@ -159,7 +159,11 @@ def _gex_regime_note(regime: str) -> str:
     return "gamma negativa: los dealers amplifican; los movimientos se aceleran."
 
 
-def bucket_payload(b: BucketResult) -> dict:
+def _target_payload(t, spot: float) -> dict:
+    return {"price": t.price, "pct": t.pct_from(spot), "labels": t.labels}
+
+
+def bucket_payload(b: BucketResult, spot: float) -> dict:
     """JSON-serializable view of one bucket for the web frontend.
 
     Adapts this engine's field names to the structure the ported web UI expects
@@ -203,6 +207,18 @@ def bucket_payload(b: BucketResult) -> dict:
             "peak_strike": peak,
             "profile": [{"strike": k, "gex": v} for k, v in profile],
         },
+        "scenarios": _scenarios_payload(b, spot),
+    }
+
+
+def _scenarios_payload(b: BucketResult, spot: float) -> dict:
+    sc = scenarios.bucket_scenarios(b, spot)
+    return {
+        "bull": [_target_payload(t, spot) for t in sc.bull],
+        "bear": [_target_payload(t, spot) for t in sc.bear],
+        "base_note": sc.base_note,
+        "pin_low": sc.pin_low,
+        "pin_high": sc.pin_high,
     }
 
 
@@ -216,5 +232,5 @@ def report_payload(report: DriftReport) -> dict:
         "total_notional": report.total_notional,
         "total_gex": report.total_gex,
         "gex_regime": report.gex_regime,
-        "buckets": [bucket_payload(b) for b in report.buckets],
+        "buckets": [bucket_payload(b, report.spot) for b in report.buckets],
     }

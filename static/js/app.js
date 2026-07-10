@@ -143,10 +143,10 @@
     var g = b.gex;
     var bull = b.total_notional >= 0;
     var biasBadge = badge(bull ? '▲ Sesgo alcista' : '▼ Sesgo bajista', bull ? 'bg-bull/15 text-bull' : 'bg-bear/15 text-bear');
-    var regimeBadge = g.regime === 'absorption'
-      ? badge('🧲 Absorción (GEX+)', 'bg-vibranium/15 text-vibranium')
-      : (g.regime === 'amplification'
-        ? badge('⚡ Amplificación (GEX−)', 'bg-bear/15 text-bear')
+    var regimeBadge = g.regime === 'positive'
+      ? badge('🧲 Gamma positiva (fija)', 'bg-vibranium/15 text-vibranium')
+      : (g.regime === 'negative'
+        ? badge('⚡ Gamma negativa (amplifica)', 'bg-bear/15 text-bear')
         : badge('GEX n/d', 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'));
     var magnetHtml;
     if (b.magneto.clear) {
@@ -179,11 +179,85 @@
         '</div>' +
       '</div>' +
       '<div id="gex-' + i + '" class="w-full rounded-xl bg-slate-50 dark:bg-slate-800/50" style="height:32vh"></div>' +
+      scenariosHtml(b) +
       '<details class="mt-3"><summary class="text-xs text-slate-500 cursor-pointer">Ver clasificación de drift y nota GEX</summary>' +
         '<p class="text-xs text-slate-500 dark:text-slate-400 mt-1">' + b.drift + '</p>' +
         '<p class="text-xs text-slate-400 mt-1">' + g.regime_note + '</p>' +
       '</details>';
     return card;
+  }
+
+  // ---- Phase 2: scenarios per bucket + macro (Market Context, Alignment) ----
+  function scoreColor(s) { return s >= 60 ? 'text-bull' : (s <= 40 ? 'text-bear' : 'text-amber-500'); }
+  function biasColor(b) { return b === 'bullish' ? 'text-bull' : (b === 'bearish' ? 'text-bear' : 'text-amber-500'); }
+  function riskColor(b) { return b === 'Risk-On' ? 'text-bull' : (b === 'Risk-Off' ? 'text-bear' : 'text-amber-500'); }
+
+  function tgts(arr) {
+    if (!arr || !arr.length) return '—';
+    return arr.slice(0, 3).map(function (t) {
+      return fmt0(t.price) + ' (' + (t.pct >= 0 ? '+' : '') + fmt(t.pct, 1) + '%)';
+    }).join(' → ');
+  }
+
+  function scenariosHtml(b) {
+    var s = b.scenarios; if (!s) return '';
+    var pin = (s.pin_low != null && s.pin_high != null)
+      ? '⚖️ Rango ' + fmt0(s.pin_low) + '–' + fmt0(s.pin_high) : '';
+    return '<div class="mt-3 text-xs space-y-1 border-t border-slate-100 dark:border-slate-800 pt-2">' +
+      '<div class="font-semibold text-slate-500 dark:text-slate-400">🎯 Escenarios de precio</div>' +
+      '<div><span class="text-bull font-semibold">🐂 Alcista:</span> ' + tgts(s.bull) + '</div>' +
+      (pin ? '<div class="text-slate-400">' + pin + '</div>' : '') +
+      '<div><span class="text-bear font-semibold">🐻 Bajista:</span> ' + tgts(s.bear) + '</div>' +
+      '</div>';
+  }
+
+  function marketContextCard(d) {
+    var m = d.market_context; if (!m) return null;
+    var comps = m.components.map(function (c) {
+      return '<div class="rounded-xl border border-slate-200 dark:border-slate-800 p-2">' +
+        '<div class="text-[11px] text-slate-400">' + c.label + '</div>' +
+        '<div class="text-lg font-black ' + scoreColor(c.score) + '">' + Math.round(c.score) + '</div>' +
+        '<div class="text-[10px] text-slate-400 leading-tight">' + c.detail + '</div></div>';
+    }).join('');
+    var factors = (m.top_factors || []).map(function (f) { return '<li>▲ ' + f + '</li>'; }).join('');
+    var risks = (m.top_risks || []).map(function (x) { return '<li>▼ ' + x + '</li>'; }).join('');
+    var c = el('div', 'rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4');
+    c.innerHTML =
+      '<div class="flex items-center justify-between flex-wrap gap-3 mb-3">' +
+        '<div><div class="text-xs uppercase tracking-widest text-slate-400">Market Context</div>' +
+          '<div class="text-3xl font-black ' + scoreColor(m.score) + '">' + m.score + '<span class="text-base text-slate-400">/100</span></div>' +
+          '<div class="text-sm font-semibold">' + m.headline + '</div></div>' +
+        '<div class="text-right"><div class="text-lg font-black ' + riskColor(m.bias) + '">' + m.bias + '</div>' +
+          '<div class="text-xs text-slate-400">Confianza ' + m.confidence + '%</div></div>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">' + comps + '</div>' +
+      '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">' +
+        '<div><div class="font-semibold text-bull mb-1">A favor</div><ul class="text-slate-500 dark:text-slate-400 space-y-0.5">' + factors + '</ul></div>' +
+        '<div><div class="font-semibold text-amber-500 mb-1">Riesgos</div><ul class="text-slate-500 dark:text-slate-400 space-y-0.5">' + risks + '</ul></div>' +
+      '</div>';
+    return c;
+  }
+
+  function alignmentCard(d) {
+    var a = d.alignment; if (!a) return null;
+    var col = a.label === 'Strong Alignment' ? 'text-bull' : (a.label === 'Conflict' ? 'text-bear' : 'text-amber-500');
+    var reads = a.reads.map(function (r) {
+      return '<div class="rounded-xl border border-slate-200 dark:border-slate-800 p-2 text-center">' +
+        '<div class="text-[11px] text-slate-400">' + r.name + '</div>' +
+        '<div class="text-xl font-black ' + scoreColor(r.score) + '">' + Math.round(r.score) + '</div>' +
+        '<div class="text-[10px] font-semibold ' + biasColor(r.bias) + '">' + r.bias + '</div></div>';
+    }).join('');
+    var c = el('div', 'rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4');
+    c.innerHTML =
+      '<div class="flex items-center justify-between flex-wrap gap-3 mb-2">' +
+        '<div><div class="text-xs uppercase tracking-widest text-slate-400">Institutional Alignment</div>' +
+          '<div class="text-3xl font-black ' + col + '">' + a.score + '<span class="text-base text-slate-400">/100</span></div>' +
+          '<div class="text-sm font-semibold ' + col + '">' + a.label + '</div></div>' +
+      '</div>' +
+      '<p class="text-sm mb-2">' + a.verdict + '</p>' +
+      '<div class="rounded-lg bg-slate-50 dark:bg-slate-800/50 p-2 text-xs mb-3">' + a.guidance + '</div>' +
+      '<div class="grid grid-cols-3 gap-2">' + reads + '</div>';
+    return c;
   }
 
   function renderResults(d) {
@@ -195,6 +269,8 @@
     }
     if (!d.buckets || !d.buckets.length) return;
     r.appendChild(summaryCard(d));
+    var mcc = marketContextCard(d); if (mcc) r.appendChild(mcc);
+    var alc = alignmentCard(d); if (alc) r.appendChild(alc);
     r.appendChild(priceCard());
     var grid = el('div', 'grid grid-cols-1 lg:grid-cols-2 gap-4');
     d.buckets.forEach(function (b, i) { grid.appendChild(bucketCard(b, i)); });
