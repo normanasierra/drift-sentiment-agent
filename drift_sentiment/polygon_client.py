@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import date, datetime
 
 import requests
@@ -14,9 +15,25 @@ load_dotenv()
 
 BASE_URL = "https://api.polygon.io"
 
+# Statuses worth retrying: rate limits, transient auth blips, and 5xx. Big chains
+# (e.g. SPX ~118 pages) occasionally drop a single request; a retry saves the run.
+_RETRY_STATUS = {403, 429, 500, 502, 503, 504}
+
 
 class PolygonError(RuntimeError):
     pass
+
+
+def _get(url: str, params: dict, timeout: int, *, max_retries: int = 4):
+    """GET with backoff on transient statuses, returning the final response."""
+    resp = None
+    for attempt in range(max_retries + 1):
+        resp = requests.get(url, params=params, timeout=timeout)
+        if resp.status_code == 200 or resp.status_code not in _RETRY_STATUS:
+            return resp
+        if attempt < max_retries:
+            time.sleep(min(8.0, 1.5 * (attempt + 1)))  # 1.5, 3, 4.5, 6s
+    return resp
 
 
 def _api_key() -> str:
@@ -62,7 +79,7 @@ def fetch_chain(ticker: str, *, timeout: int = 30) -> tuple[float, list[Contract
     spot: float | None = None
 
     while url:
-        resp = requests.get(url, params=params, timeout=timeout)
+        resp = _get(url, params, timeout)
         if resp.status_code != 200:
             raise PolygonError(
                 f"Polygon request failed ({resp.status_code}): {resp.text[:200]}"
