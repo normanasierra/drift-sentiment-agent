@@ -6,7 +6,8 @@ venv/
 output/
 .DS_Store
 scratchpad_*.log
-.claude/
+.claude/*
+!.claude/agents/
 .streamlit/secrets.toml
 
 .backups/
