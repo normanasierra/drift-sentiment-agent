@@ -20,9 +20,12 @@ load_dotenv()
 IMAP_HOST = os.getenv("IMAP_HOST", "imap.gmail.com")
 
 # Senders whose newsletters we care about. Extend freely.
+# Note: Norman's Barron's arrives from mail.dowjones.com (not barrons.com), and WSJ
+# from interactive.wsj.com — so match on dowjones.com / wsj.com. CNBC Pro/Spotlight
+# both live under response.cnbc.com, caught by "cnbc.com".
 NEWSLETTER_SENDERS = [
-    "marketsnacks", "snacks", "barrons.com", "cnbc.com",
-    "yahoofinance", "finance.yahoo",
+    "marketsnacks", "snacks", "barrons.com", "dowjones.com",
+    "cnbc.com", "wsj.com", "yahoofinance", "finance.yahoo",
 ]
 
 
