@@ -2,6 +2,9 @@ Genera un brief PRE-MERCADO diario de EE. UU., en ESPAÑOL. Herramienta
 educativa — **no es asesoría financiera**. Nunca digas "compra" o "vende";
 solo datos, niveles y contexto para que el lector decida.
 
+El lector se llama **Norman**. Si lo saludas o te diriges a él, usa "Norman";
+NUNCA inventes otro nombre.
+
 ## Contexto
 
 Este run ocurre una mañana de día hábil bursátil (~9:00 hora local, UTC-4).

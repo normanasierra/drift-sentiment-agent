@@ -16,9 +16,17 @@ load_dotenv()
 
 BASE_URL = "https://api.polygon.io"
 
+# Statuses worth retrying: rate limits, transient auth blips, and 5xx. Big chains
+# (e.g. SPX ~118 pages) occasionally drop a single request; a retry saves the run.
+_RETRY_STATUS = {403, 429, 500, 502, 503, 504}
+
 
 class PolygonError(RuntimeError):
     pass
+
+
+# Alias so the web layer (ported from the Flask "Leo Agent") can import either name.
+MarketDataError = PolygonError
 
 
 def _get_with_retry(url, params, timeout, retries: int = 4, backoff: float = 1.5):
@@ -44,6 +52,18 @@ def _get_with_retry(url, params, timeout, retries: int = 4, backoff: float = 1.5
             continue
         return resp
     raise PolygonError(f"Request failed after {retries} attempts ({last}): {url}")
+
+
+def _get(url: str, params: dict, timeout: int, *, max_retries: int = 4):
+    """GET with backoff on transient statuses, returning the final response."""
+    resp = None
+    for attempt in range(max_retries + 1):
+        resp = requests.get(url, params=params, timeout=timeout)
+        if resp.status_code == 200 or resp.status_code not in _RETRY_STATUS:
+            return resp
+        if attempt < max_retries:
+            time.sleep(min(8.0, 1.5 * (attempt + 1)))  # 1.5, 3, 4.5, 6s
+    return resp
 
 
 def _api_key() -> str:
@@ -324,6 +344,46 @@ def _fetch_prev_close(ticker: str, key: str, timeout: int) -> float | None:
         return None
     price = results[0].get("c")
     return float(price) if price is not None else None
+
+
+def search_tickers(query: str, *, limit: int = 8, timeout: int = 15) -> list[dict]:
+    """Autocomplete search: exact/prefix symbol matches first, then name matches.
+
+    Returns up to `limit` dicts: {"ticker", "name", "exchange", "market"}.
+    """
+    q = (query or "").strip()
+    if not q:
+        return []
+    key = _api_key()
+    url = f"{BASE_URL}/v3/reference/tickers"
+    params = {"search": q, "active": "true", "limit": 40, "apiKey": key}
+    try:
+        resp = _get(url, params, timeout)
+    except requests.RequestException as e:  # network hiccup -> non-fatal
+        raise PolygonError(f"Ticker search failed: {e}") from e
+    if resp.status_code != 200:
+        raise PolygonError(
+            f"Ticker search failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    qu = q.upper()
+    rows: list[dict] = []
+    for r in resp.json().get("results", []):
+        tk = (r.get("ticker") or "").upper()
+        if not tk:
+            continue
+        rows.append({
+            "ticker": tk,
+            "name": r.get("name") or "",
+            "exchange": r.get("primary_exchange") or "",
+            "market": r.get("market") or "",
+        })
+
+    def _rank(row: dict) -> int:
+        t = row["ticker"]
+        return 0 if t == qu else (1 if t.startswith(qu) else 2)
+
+    rows.sort(key=_rank)
+    return rows[:limit]
 
 
 def today() -> date:
