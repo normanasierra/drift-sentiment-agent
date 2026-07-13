@@ -27,13 +27,10 @@ REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 from data_sources.email_inbox import _plain_body  # noqa: E402
+from data_sources.sweeps import format_contract, parse_contracts  # noqa: E402
 
 SEEN = REPO / "output" / "marketsnack_seen.json"
 MAX_INDIVIDUAL = 3  # more new alerts than this in one poll -> single summary
-
-# TICKER  Mon D, YY | STRIKE[C/P]   (appears in every MarketSnack alert body)
-CONTRACT = re.compile(
-    r"\b([A-Z]{1,6})\s+([A-Z][a-z]{2}\s+\d{1,2}),?\s*'?\d{2}\s*\|\s*(\d+(?:\.\d+)?)([CP])")
 
 
 def load_env() -> None:
@@ -53,46 +50,21 @@ def _dec(v: str | None) -> str:
                     for t, e in decode_header(v))
 
 
-def _num(s: str) -> str:
-    s = s.replace(",", "").strip()
-    try:
-        n = float(s)
-    except ValueError:
-        return s  # already like "1.7M"
-    if n >= 1e6:
-        return f"{n / 1e6:.1f}M"
-    if n >= 1e3:
-        return f"{n / 1e3:.0f}K"
-    return f"{int(n)}"
-
-
 def format_alert(subject: str, body: str) -> str:
-    """WhatsApp text for one alert: title + up to 3 contracts with their detail."""
-    b = " ".join((body or "").split())
+    """WhatsApp text for one alert: title + up to 3 contracts with their detail,
+    each tagged with its smart-money (F.R.A.M.E.) conviction, plus a one-line
+    read of why the top contract scored the way it did."""
     title = re.split(r"\s*[—–-]\s*\d+\s+signal", subject or "")[0].strip() or "Alerta"
-    out = []
-    for m in list(CONTRACT.finditer(b))[:3]:
-        tk, exp, strike, cp = m.group(1), m.group(2), m.group(3), m.group(4)
-        tail = b[m.end():m.end() + 150]
-        parts = [f"{tk} {strike}{cp} {exp}"]
-        prem = re.search(r"([\d.,]+\s*[MKB]?)\s*Premium", tail)
-        if prem:
-            parts.append(f"${_num(prem.group(1))} prem")
-        size = re.search(r"([\d,]+)\s*Size", tail)
-        if size:
-            parts.append(f"{_num(size.group(1))} sz")
-        side = re.search(r"\b(Ask|Bid|Mid)\s*Side", tail)
-        if side:
-            parts.append(side.group(1))
-        vol = re.search(r"([\d,]+)\s*Volume", tail)
-        if vol:
-            parts.append(f"vol {_num(vol.group(1))}")
-        oi = re.search(r"([\d,]+)\s*Open\s*Interest", tail)
-        if oi:
-            parts.append(f"OI {_num(oi.group(1))}")
-        out.append(" · ".join(parts))
     header = f"⚡ MarketSnack · {title}"
-    return header + ("\n" + "\n".join(out) if out else "")
+    contracts = parse_contracts(body)[:3]
+    if not contracts:
+        return header
+    lines = [format_contract(c) for c in contracts]
+    top = contracts[0]["score"]
+    if top.reasons:
+        lines.append(f"{top.emoji} {top.tier} ({top.direction}): "
+                     + ", ".join(top.reasons[:3]))
+    return header + "\n" + "\n".join(lines)
 
 
 def whatsapp(text: str) -> None:

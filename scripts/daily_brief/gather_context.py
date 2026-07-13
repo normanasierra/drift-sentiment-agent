@@ -120,19 +120,33 @@ def _newsletters_block() -> str:
 
 
 def _sweeps_block() -> str:
-    """Compact digest of today's MarketSnack sweep/flow alerts for the brief."""
+    """Today's MarketSnack sweeps, PARSED and RANKED by smart-money conviction
+    (Najarian F.R.A.M.E.: vol/OI, lado, prima, DTE) so the brief can lead with
+    the highest-conviction flow and explain WHY."""
     try:
         from data_sources import email_inbox
+        from data_sources.sweeps import format_contract, parse_contracts
         items = email_inbox.marketsnack_alerts(since_days=1)
     except Exception:  # noqa: BLE001
         return ""
     if not items:
         return ""
-    lines = [f"SWEEPS / FLUJO DE HOY (MarketSnack — {len(items)} alertas; resume las MÁS "
-             "notables con TICKER/STRIKE/C-P y premium o volumen/OI):"]
-    for it in items[:8]:
-        detail = " ".join((it.get("body") or "").split())[:400]
-        lines.append(f"  · [{it['subject']}] {detail}")
+    scored = [c for it in items for c in parse_contracts(it.get("body") or "")]
+    scored.sort(key=lambda c: c["score"].score, reverse=True)
+    if not scored:  # bodies didn't parse — fall back to raw subjects
+        lines = [f"SWEEPS / FLUJO DE HOY (MarketSnack — {len(items)} alertas):"]
+        lines += [f"  · [{it['subject']}] "
+                  + " ".join((it.get('body') or '').split())[:300] for it in items[:8]]
+        return "\n".join(lines)
+    lines = [f"SWEEPS / FLUJO DE HOY (MarketSnack — {len(scored)} contratos en "
+             f"{len(items)} alertas; YA ORDENADOS por convicción smart-money "
+             "F.R.A.M.E. Lidera con los de mayor convicción; di TICKER/STRIKE/C-P, "
+             "premium y el porqué):"]
+    for c in scored[:10]:
+        s = c["score"]
+        why = "; ".join(s.reasons[:3])
+        lines.append(f"  · [{s.tier} {s.score} · {s.direction}] "
+                     f"{format_contract(c, with_score=False)} — {why}")
     return "\n".join(lines)
 
 

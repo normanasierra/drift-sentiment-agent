@@ -75,9 +75,16 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
 - **Noticias macro** (Yahoo Finance / CNBC): 3-5 viñetas (titular en negrita +
   por qué importa).
 - **Sweeps / flujo institucional** (MarketSnack — SOLO si el bloque DATOS REALES
-  trae "SWEEPS / FLUJO DE HOY"): 2-4 viñetas con los sweeps más notables del día y
-  qué tickers se repiten (call/put, tamaño si aparece). Si no hay datos, OMITE esta
-  sección por completo.
+  trae "SWEEPS / FLUJO DE HOY"): 2-4 viñetas. La lista YA viene ordenada por
+  convicción **smart-money (método F.R.A.M.E. de los Najarian)**; cada línea trae
+  su tier (Alta/Media/Baja), un score 0-100 y el porqué. Lidera con los de **mayor
+  convicción** y explica la señal en criollo: **volumen ≫ open interest = posición
+  nueva** (lo más importante), **comprado en ASK = urgencia**, **prima ≥ $1M =
+  tamaño institucional**, **corto DTE + OTM = catalizador inminente**. Recuerda la
+  asimetría *"escalera arriba, elevador abajo"*: los sweeps de **puts** cerca del
+  dinero en ventas pesan más. Di qué tickers se repiten y el sesgo (alcista/bajista).
+  NO sugieras perseguir el strike exacto (la IV ya está inflada) — es educativo, solo
+  contexto. Si no hay datos, OMITE esta sección por completo.
 - **Trump hoy**: 2-4 viñetas de impacto de mercado (o "sin novedad relevante").
 - **Tu portafolio** (educativo): una **tabla** con columnas
   `Ticker | Último | % Día | Nivel/nota`. Incluye todos los tickers; en la
