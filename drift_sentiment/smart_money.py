@@ -67,14 +67,23 @@ def score_sweep(
     volume: float | None = None,
     open_interest: float | None = None,
     premium: float | None = None,
+    notional: float | None = None,
     size: float | None = None,
     dte: int | None = None,
     otm_pct: float | None = None,
+    iv: float | None = None,
+    rel_volume: float | None = None,
     is_spread: bool = False,
 ) -> SmartMoneyScore:
     """Score one option-flow observation. Every field is optional — the score is
     normalized over only the signals actually present, so a partial alert still
     grades fairly. ``otm_pct`` is signed: positive = out-of-the-money.
+
+    Extra book signals: ``notional`` (strike×size×100 — the size of the bet, used
+    for the size dimension when premium is unknown), ``rel_volume`` (today's
+    contract volume ÷ its trailing average — the "Heat Seeker" unusualness), and
+    ``iv`` (fraction, e.g. 0.85) which never scores but is echoed in the reasons
+    so consumers can warn against chasing an already-pumped strike.
     """
     earned = 0.0
     possible = 0.0
@@ -105,6 +114,20 @@ def score_sweep(
             else:
                 reasons.append(f"vol<OI ({r:.1f}×) — posible cierre")
 
+    # 1b) Relative volume — "unusually large based on volume averages" (the
+    # Heat Seeker core). Only scored when the caller can supply a baseline.
+    if rel_volume is not None:
+        possible += 10
+        if rel_volume >= 10:
+            earned += 10
+            reasons.append(f"{rel_volume:.0f}× vol promedio (Heat Seeker)")
+        elif rel_volume >= 5:
+            earned += 7
+            reasons.append(f"{rel_volume:.0f}× vol promedio")
+        elif rel_volume >= 2:
+            earned += 4
+            reasons.append(f"{rel_volume:.1f}× vol promedio")
+
     # Opening bonus: size printed above the standing open interest.
     if size is not None and open_interest is not None:
         possible += 8
@@ -126,7 +149,9 @@ def score_sweep(
         else:
             possible -= 20  # unrecognized side value → don't count it
 
-    # 3) Premium size — institutional footprint.
+    # 3) Bet size — institutional footprint. Premium (what they PAID) is the best
+    # conviction signal; fall back to notional (strike×size×100) when premium is
+    # unknown, using its own — much larger — tiers.
     if premium is not None:
         possible += 20
         if premium >= 5e6:
@@ -141,6 +166,20 @@ def score_sweep(
         else:
             earned += 3
             reasons.append(f"${premium / 1e3:.0f}K prima (chica)")
+    elif notional is not None:
+        possible += 20
+        if notional >= 50e6:
+            earned += 20
+            reasons.append(f"${notional / 1e6:.0f}M notional (institucional)")
+        elif notional >= 10e6:
+            earned += 16
+            reasons.append(f"${notional / 1e6:.0f}M notional")
+        elif notional >= 2e6:
+            earned += 9
+            reasons.append(f"${notional / 1e6:.1f}M notional")
+        else:
+            earned += 3
+            reasons.append(f"${notional / 1e3:.0f}K notional (chico)")
 
     # 4) DTE — short-dated flow telegraphs an imminent catalyst.
     if dte is not None:
@@ -181,6 +220,11 @@ def score_sweep(
             earned += 2
             reasons.append(f"OTM {a:.0f}% (lotería)")
 
+    # IV never scores (a signal, not a virtue), but a high reading is a heads-up
+    # that this strike is already pumped — echo it so consumers can warn.
+    if iv is not None and iv >= 0.60:
+        reasons.append(f"IV ~{iv * 100:.0f}% (inflada — no persigas el strike)")
+
     score = int(round(100 * earned / max(possible, _MIN_DENOM))) if possible else 0
 
     # Spread / multi-leg — likely a hedge, not a clean directional bet: dampen.
@@ -204,3 +248,38 @@ def score_sweep(
         bullish = cp == "C"          # side unknown → infer from type
 
     return SmartMoneyScore(score=score, tier=name, emoji=emoji, bullish=bullish, reasons=reasons)
+
+
+def follow_guidance(
+    *,
+    bullish: bool | None,
+    otm_pct: float | None = None,
+    dte: int | None = None,
+    iv: float | None = None,
+) -> str:
+    """The book's 'how to follow it' note (educational, not advice).
+
+    Two rules it hammers: (1) never chase the exact strike the UOA hit — your own
+    buying is what pumped its IV — follow the DIRECTION and pick your own strike;
+    (2) construct by delta target: ~80-85Δ deep-ITM / stock-replacement for a
+    conviction hold, ~65Δ calls or ~50Δ puts for a short-term aggressive bet, or
+    a debit vertical to cut the vega when IV is rich.
+    """
+    if bullish is None:
+        return ("Spread/cobertura — no es una apuesta direccional limpia; "
+                "trátalo como contexto, no como señal a seguir.")
+    tip = "No persigas el strike exacto (su IV ya está inflada por esta compra)"
+    if iv is not None and iv >= 0.60:
+        tip += f" — IV ~{iv * 100:.0f}%"
+    if bullish:
+        build = ("sigue la dirección con un call ~65Δ (corto/agresivo) o ~80-85Δ "
+                 "ITM tipo stock-replacement; o un debit call-spread para cortar la vega")
+    else:
+        build = ("sigue la dirección con un put ~50Δ cerca del dinero; o un debit "
+                 "put-spread para cortar la vega")
+    parts = [tip, build]
+    if dte is not None and dte <= 7:
+        parts.append(f"DTE corto ({dte}) = el catalizador se espera pronto")
+    elif dte is not None and dte > 45:
+        parts.append(f"DTE largo ({dte}) = convicción, no urgencia")
+    return ". ".join(parts) + "."

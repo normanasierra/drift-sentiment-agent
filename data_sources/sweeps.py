@@ -94,7 +94,13 @@ def parse_contracts(
         side = _search(r"\b(Ask|Bid|Mid)\s*Side", tail)
         vol = _to_float(_search(r"([\d,]+)\s*Volume", tail))
         oi = _to_float(_search(r"([\d,]+)\s*Open\s*Interest", tail))
+        iv = _to_float(_search(r"(\d+(?:\.\d+)?)\s*%?\s*(?:IV|Impl)", tail))
+        if iv is not None and iv > 3:      # given as a percent (e.g. 85) -> fraction
+            iv /= 100.0
         dte = _dte(mon, day, yy, today)
+
+        # Notional = strike × size × 100 (the size of the bet, per the book).
+        notional = strike_f * size * 100 if (strike_f and size) else None
 
         otm = None
         if spot and strike_f and spot.get(tk):
@@ -103,12 +109,13 @@ def parse_contracts(
             otm = raw if cp == "C" else -raw  # OTM positive: calls above, puts below
 
         sc = score_sweep(cp=cp, side=side, volume=vol, open_interest=oi,
-                         premium=prem, size=size, dte=dte, otm_pct=otm)
+                         premium=prem, notional=notional, size=size, dte=dte,
+                         otm_pct=otm, iv=iv)
         out.append({
             "ticker": tk, "strike": strike_f, "cp": cp,
             "exp": f"{mon.title()} {int(day)}", "dte": dte,
-            "premium": prem, "size": size, "side": side, "volume": vol,
-            "open_interest": oi, "otm_pct": otm, "score": sc,
+            "premium": prem, "notional": notional, "size": size, "side": side,
+            "volume": vol, "open_interest": oi, "iv": iv, "otm_pct": otm, "score": sc,
         })
     out.sort(key=lambda d: d["score"].score, reverse=True)
     return out

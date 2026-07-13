@@ -263,6 +263,78 @@ def api_report(ticker: str = ""):
     }
 
 
+# Today's MarketSnack sweeps, cached briefly so opening the tab doesn't re-hit
+# IMAP on every Analyze. Reads Gmail read-only via GMAIL_APP_PASSWORD in .env.
+_SWEEPS: tuple[float, list[dict]] | None = None
+
+
+def _todays_sweeps(ttl: int = 180) -> list[dict]:
+    global _SWEEPS
+    now = time.time()
+    if _SWEEPS and now - _SWEEPS[0] < ttl:
+        return _SWEEPS[1]
+    try:
+        from data_sources import email_inbox
+        raw = email_inbox.marketsnack_alerts(since_days=1)
+    except Exception:  # noqa: BLE001 — degrade to "no sweeps" if Gmail unreachable
+        raw = []
+    _SWEEPS = (now, raw)
+    return raw
+
+
+def _sweep_json(c: dict, *, with_confluence: bool = False) -> dict:
+    s = c["score"]
+    out = {
+        "ticker": c["ticker"], "strike": c["strike"], "cp": c["cp"],
+        "exp": c["exp"], "dte": c["dte"], "premium": c["premium"],
+        "notional": c["notional"], "size": c["size"], "side": c["side"],
+        "volume": c["volume"], "open_interest": c["open_interest"],
+        "otm_pct": c["otm_pct"], "iv": c.get("iv"),
+        "score": s.score, "tier": s.tier, "emoji": s.emoji,
+        "bullish": s.bullish, "reasons": s.reasons,
+    }
+    if with_confluence and "confluence" in c:
+        out["confluence"] = c["confluence"]
+    return out
+
+
+@app.get("/api/unusual")
+def api_unusual(ticker: str = ""):
+    """Smart-money (F.R.A.M.E.) view of today's MarketSnack sweeps, ranked by
+    conviction, plus confluence of the analyzed ticker's sweeps against its own
+    Put/Call walls, gamma walls and Zero-Γ. READ-ONLY; degrades to empty."""
+    ticker = (ticker or "").strip().upper()
+    from data_sources import sweeps as sweeps_mod
+    from drift_sentiment import unusual_activity as ua
+
+    raw = _todays_sweeps()
+    spot_map: dict[str, float] = {}
+    rep = None
+    if ticker:
+        try:
+            spot, rep = _load(ticker)
+            spot_map[ticker] = spot
+        except Exception:  # noqa: BLE001 — sweeps still useful without the report
+            rep = None
+
+    contracts: list[dict] = []
+    for it in raw:
+        contracts.extend(sweeps_mod.parse_contracts(it.get("body") or "", spot=spot_map))
+    contracts.sort(key=lambda c: c["score"].score, reverse=True)
+
+    on_ticker = ua.scan(rep, contracts) if rep is not None else []
+    ladders = ua.detect_ladders(contracts)
+
+    return {
+        "ticker": ticker,
+        "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "alerts": len(raw), "count": len(contracts),
+        "on_ticker": [_sweep_json(c, with_confluence=True) for c in on_ticker],
+        "top": [_sweep_json(c) for c in contracts[:15]],
+        "ladders": ladders,
+    }
+
+
 def _png(fig) -> Response:
     import matplotlib.pyplot as plt
     buf = io.BytesIO()

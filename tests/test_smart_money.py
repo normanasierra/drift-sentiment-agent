@@ -6,7 +6,9 @@ from __future__ import annotations
 from datetime import date
 
 from data_sources.sweeps import parse_contracts
-from drift_sentiment.smart_money import score_sweep
+from drift_sentiment import unusual_activity as ua
+from drift_sentiment.models import BucketResult, DriftReport, Wall
+from drift_sentiment.smart_money import follow_guidance, score_sweep
 
 TODAY = date(2026, 7, 13)
 
@@ -101,3 +103,91 @@ def test_parse_contracts_computes_otm_from_spot():
 
 def test_parse_contracts_empty_on_garbage():
     assert parse_contracts("no contracts here", today=TODAY) == []
+
+
+def test_parse_contracts_computes_notional():
+    cs = parse_contracts("AAPL Jul 17, '26 | 250C  3,000 Size Ask Side", today=TODAY)
+    assert cs and cs[0]["notional"] == 250 * 3000 * 100
+
+
+# --- enriched scorer signals -------------------------------------------------
+
+def test_notional_fallback_when_no_premium():
+    # No premium, but a $75M notional bet still earns the size credit.
+    s = score_sweep(cp="C", side="Ask", volume=6000, open_interest=100, notional=75e6)
+    assert any("notional" in r for r in s.reasons)
+    assert s.score >= 50
+
+
+def test_rel_volume_heat_seeker_boosts():
+    lo = score_sweep(cp="C", side="Ask", volume=6000, open_interest=100, premium=1e6)
+    hi = score_sweep(cp="C", side="Ask", volume=6000, open_interest=100, premium=1e6,
+                     rel_volume=15)
+    assert hi.score >= lo.score
+    assert any("Heat Seeker" in r for r in hi.reasons)
+
+
+def test_high_iv_flags_pumped_strike():
+    s = score_sweep(cp="C", side="Ask", volume=6000, open_interest=100, premium=1e6, iv=0.9)
+    assert any("inflada" in r for r in s.reasons)
+
+
+def test_follow_guidance_varies_by_direction():
+    assert "call" in follow_guidance(bullish=True).lower()
+    assert "put" in follow_guidance(bullish=False).lower()
+    assert "cobertura" in follow_guidance(bullish=None).lower()
+
+
+# --- confluence layer (READ-ONLY over a DriftReport) -------------------------
+
+def _report():
+    b = BucketResult(
+        label="Short ~30 DTE", sentiment="Short", target_dte=30,
+        expiration=date(2026, 8, 21), actual_dte=39,
+        call_wall=Wall(strike=250, open_interest=10000),
+        put_wall=Wall(strike=220, open_interest=8000),
+        magneto_strike=235, magneto_notional=1e8,
+        iv_atm=0.30, sigma=5.0, total_shares=100000, total_notional=1e8,
+        zero_gamma=232.0, call_gamma_wall=250.0, put_gamma_wall=220.0, total_gex=-5e8,
+    )
+    return DriftReport(ticker="AAPL", spot=230.0, as_of=TODAY, buckets=[b])
+
+
+def _sweep(ticker, strike, cp, side="Ask"):
+    sc = score_sweep(cp=cp, side=side, volume=5000, open_interest=100, premium=2e6)
+    return {"ticker": ticker, "strike": strike, "cp": cp, "dte": 30,
+            "otm_pct": None, "iv": None, "score": sc}
+
+
+def test_confluence_bullish_breakout_at_call_wall():
+    a = ua.annotate_sweep(_sweep("AAPL", 250, "C"), _report())
+    c = a["confluence"]
+    assert c["aligns"] is True
+    assert "alcista" in c["verdict"]
+    assert c["nearest_level"]["name"] == "Call Wall"
+
+
+def test_confluence_bearish_breakdown_at_put_wall():
+    a = ua.annotate_sweep(_sweep("AAPL", 220, "P"), _report())
+    c = a["confluence"]
+    assert c["aligns"] is True
+    assert "bajista" in c["verdict"]
+
+
+def test_confluence_contra_structure_call_at_support():
+    a = ua.annotate_sweep(_sweep("AAPL", 220, "C"), _report())
+    c = a["confluence"]
+    assert c["aligns"] is False
+    assert "contra" in c["verdict"]
+
+
+def test_scan_filters_to_report_ticker():
+    sweeps = [_sweep("AAPL", 250, "C"), _sweep("TSLA", 400, "P")]
+    hits = ua.scan(_report(), sweeps)
+    assert len(hits) == 1 and hits[0]["ticker"] == "AAPL"
+
+
+def test_detect_ladders_flags_multi_strike_same_side():
+    sweeps = [_sweep("AAPL", 250, "C"), _sweep("AAPL", 260, "C"), _sweep("AAPL", 270, "C")]
+    lad = ua.detect_ladders(sweeps)
+    assert "AAPL" in lad and "escalera" in lad["AAPL"]

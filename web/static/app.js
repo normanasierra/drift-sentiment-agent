@@ -246,12 +246,109 @@
 
   function renderReporte(r) { $('reportText').textContent = r.text || ''; }
 
+  // ---------------------------------------------------------------- unusual activity
+  let unusualLoadedFor = null;
+  const fmtK = (n) => (n == null || isNaN(n)) ? '—'
+    : Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(1)}M`
+      : Math.abs(n) >= 1e3 ? `${(n / 1e3).toFixed(0)}K` : `${Math.round(n)}`;
+
+  const dirBadge = (bull) => bull === true
+    ? '<span class="text-xs font-bold text-emerald-500">▲ ALCISTA</span>'
+    : bull === false ? '<span class="text-xs font-bold text-rose-500">▼ BAJISTA</span>'
+      : '<span class="text-xs font-bold text-slate-400">◆ COBERTURA</span>';
+
+  const verdictCls = (v) => /alcista/i.test(v) ? 'text-emerald-500'
+    : /bajista/i.test(v) ? 'text-rose-500'
+      : /contra/i.test(v) ? 'text-amber-500' : 'text-slate-400';
+
+  const sweepLine = (c) => {
+    const p = [`<span class="font-bold">${esc(c.ticker)} ${fmt(c.strike, 0)}${esc(c.cp)}</span> ${esc(c.exp)}`];
+    if (c.premium) p.push(`${fmtBig(c.premium)} prem`);
+    else if (c.notional) p.push(`${fmtBig(c.notional)} notl`);
+    if (c.size) p.push(`${fmtK(c.size)} sz`);
+    if (c.side) p.push(esc(c.side));
+    if (c.volume) p.push(`vol ${fmtK(c.volume)}`);
+    if (c.open_interest != null) p.push(`OI ${fmtK(c.open_interest)}`);
+    return p.join(' · ');
+  };
+
+  function sweepCard(c, withConf) {
+    const conf = withConf && c.confluence ? c.confluence : null;
+    const notes = conf && conf.notes && conf.notes.length
+      ? `<ul class="mt-1 text-xs text-slate-500 dark:text-slate-400 list-disc list-inside">
+           ${conf.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : '';
+    const verdict = conf && conf.verdict && conf.verdict !== 'n/d'
+      ? `<div class="text-xs font-semibold ${verdictCls(conf.verdict)} mt-1">▶ ${esc(conf.verdict)}</div>` : '';
+    const guidance = conf && conf.guidance
+      ? `<div class="text-[11px] text-slate-400 mt-1 italic">${esc(conf.guidance)}</div>` : '';
+    const reasons = (c.reasons || []).slice(0, 4).join(' · ');
+    return `<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+      <div class="flex items-start justify-between gap-2">
+        <div class="text-sm">${sweepLine(c)}</div>
+        <div class="flex items-center gap-2 whitespace-nowrap">
+          ${dirBadge(c.bullish)}
+          <span class="text-sm" title="Convicción ${esc(c.tier)} (${c.score}/100)">${esc(c.emoji)}</span>
+        </div>
+      </div>
+      <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${esc(c.tier)} ${c.score}/100 · ${esc(reasons)}</div>
+      ${verdict}${notes}${guidance}
+    </div>`;
+  }
+
+  function renderUnusual(d) {
+    const box = $('unusualBody'); if (!box) return;
+    const head = `<div class="flex items-start justify-between gap-3 mb-3">
+      <p class="text-sm text-slate-500 dark:text-slate-400">
+        Flujo institucional de hoy (MarketSnack), puntuado por convicción
+        <span class="font-semibold text-brand-soft">smart-money · F.R.A.M.E.</span>
+        (vol/OI, lado, prima, DTE). Educativo — no es asesoría.</p>
+      <span class="text-xs text-slate-400 whitespace-nowrap">${esc(d.generated)} · ${d.alerts} alertas</span>
+    </div>`;
+    if (!d.count) {
+      box.innerHTML = head + `<div class="rounded-xl border border-slate-200 dark:border-slate-800 p-6 text-center text-slate-400">
+        No hay sweeps de MarketSnack hoy todavía. Llegan a tu Gmail y aparecen aquí automáticamente.</div>`;
+      return;
+    }
+    let html = head;
+    if (d.ticker && d.ladders && d.ladders[d.ticker]) {
+      html += `<div class="mb-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">🪜 ${esc(d.ladders[d.ticker])}</div>`;
+    }
+    if (d.on_ticker && d.on_ticker.length) {
+      html += `<h3 class="font-semibold mb-2">En ${esc(d.ticker)} — confluencia con tu estructura</h3>
+        <div class="grid gap-2 mb-5">${d.on_ticker.map((c) => sweepCard(c, true)).join('')}</div>`;
+    } else if (d.ticker) {
+      html += `<p class="text-xs text-slate-400 mb-5">Sin sweeps para ${esc(d.ticker)} en el flujo de hoy.</p>`;
+    }
+    html += `<h3 class="font-semibold mb-2">Flujo del día — mayor convicción (todos los tickers)</h3>
+      <div class="grid gap-2 md:grid-cols-2">${d.top.map((c) => sweepCard(c, false)).join('')}</div>`;
+    box.innerHTML = html;
+  }
+
+  async function loadUnusual(ticker) {
+    const box = $('unusualBody'); if (!box) return;
+    const key = ticker || '';
+    if (unusualLoadedFor === key) return;
+    box.innerHTML = '<div class="p-6 text-center text-slate-400">Cargando flujo…</div>';
+    try {
+      const r = await fetch(`/api/unusual?ticker=${encodeURIComponent(key)}`);
+      const d = await r.json();
+      if (!r.ok || d.error) {
+        box.innerHTML = `<div class="p-6 text-center text-rose-400">No pude cargar el flujo: ${esc(d.error || r.status)}</div>`;
+        return;
+      }
+      renderUnusual(d); unusualLoadedFor = key;
+    } catch {
+      box.innerHTML = '<div class="p-6 text-center text-rose-400">Error de red al cargar el flujo.</div>';
+    }
+  }
+
   // ---------------------------------------------------------------- tabs
   function activateTab(name) {
     document.querySelectorAll('.tabBtn').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
     document.querySelectorAll('.tabPanel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== name));
     S.set('tab', name);
     if (name === 'grafico' && candleChart) { candleChart.timeScale().fitContent(); }
+    if (name === 'unusual') { loadUnusual((lastReport && lastReport.ticker) || S.get('lastTicker', '')); }
   }
 
   // ---------------------------------------------------------------- analyze
@@ -277,7 +374,7 @@
         $('errBanner').classList.remove('hidden');
         return;
       }
-      lastReport = j; currentBucket = 0;
+      lastReport = j; currentBucket = 0; unusualLoadedFor = null;
       renderMetrics(j); renderBuckets(j); renderClasificacion(j); renderReporte(j);
       buildCandle(j); loadPlots(ticker);
       $('results').classList.remove('hidden');
