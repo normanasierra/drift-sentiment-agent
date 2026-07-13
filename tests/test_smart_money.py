@@ -5,10 +5,11 @@ from __future__ import annotations
 
 from datetime import date
 
+from data_sources import sweep_history
 from data_sources.sweeps import parse_contracts
-from drift_sentiment import unusual_activity as ua
+from drift_sentiment import constructor, gex, stats, unusual_activity as ua
 from drift_sentiment.models import BucketResult, DriftReport, Wall
-from drift_sentiment.smart_money import follow_guidance, score_sweep
+from drift_sentiment.smart_money import follow_guidance, iv_crush_risk, score_sweep
 
 TODAY = date(2026, 7, 13)
 
@@ -191,3 +192,80 @@ def test_detect_ladders_flags_multi_strike_same_side():
     sweeps = [_sweep("AAPL", 250, "C"), _sweep("AAPL", 260, "C"), _sweep("AAPL", 270, "C")]
     lad = ua.detect_ladders(sweeps)
     assert "AAPL" in lad and "escalera" in lad["AAPL"]
+
+
+# --- IV-crush rigor ----------------------------------------------------------
+
+def test_realized_vol_positive_then_none():
+    closes = [100, 102, 99, 103, 101, 104, 100, 105, 102, 106, 103, 107, 104, 108]
+    v = stats.realized_vol(closes)
+    assert v and v > 0
+    assert stats.realized_vol([100, 101]) is None  # too few points
+
+
+def test_iv_crush_levels():
+    assert iv_crush_risk(0.70, 0.20)[0] == "alto"       # 3.5x
+    assert iv_crush_risk(0.30, 0.20)[0] == "moderado"   # 1.5x
+    assert iv_crush_risk(0.22, 0.20)[0] == "bajo"       # 1.1x
+    assert iv_crush_risk(None, 0.20) is None
+    assert iv_crush_risk(0.5, None) is None
+
+
+def test_bs_delta_ranges():
+    assert 0.45 < gex.bs_delta(100, 100, 0.30, 30 / 365, True) < 0.62   # ATM call ~0.5
+    assert gex.bs_delta(100, 60, 0.30, 30 / 365, True) > 0.9            # deep ITM ~1
+    assert -0.62 < gex.bs_delta(100, 100, 0.30, 30 / 365, False) < -0.38  # ATM put ~-0.5
+
+
+# --- trade constructor -------------------------------------------------------
+
+def test_constructor_bullish_gives_call_structures():
+    s = constructor.suggest(100, True, 30, 0.30, hist_vol=0.20)
+    assert s and s["direction"] == "alcista"
+    assert s["aggressive"]["strike"] is not None and s["conviction"]["strike"] is not None
+    assert s["vertical"] and s["vertical"]["est_cost"] < s["vertical"]["width"]
+    assert "iv_note" in s  # 0.30 vs 0.20 hist -> inflada
+
+
+def test_constructor_none_for_hedge_or_missing_dte():
+    assert constructor.suggest(100, None, 30, 0.30) is None    # spread/hedge
+    assert constructor.suggest(100, True, 0, 0.30) is None      # no DTE
+
+
+def test_constructor_delta_targets_ordered():
+    agg = constructor.strike_for_delta(100, 0.65, 30, 0.30, True)   # ITM
+    atm = constructor.strike_for_delta(100, 0.50, 30, 0.30, True)   # ~ATM
+    assert agg <= atm
+
+
+# --- cross-day rolling -------------------------------------------------------
+
+def test_cross_day_rolls_detects_bear_migration():
+    hist = [
+        {"day": "2026-07-10", "ticker": "TUR", "cp": "P", "dir": "bear", "strike": 30},
+        {"day": "2026-07-13", "ticker": "TUR", "cp": "P", "dir": "bear", "strike": 26},
+    ]
+    r = ua.detect_cross_day_rolls(hist)
+    assert "TUR" in r and "bajista" in r["TUR"]
+
+
+def test_cross_day_rolls_ignores_single_day():
+    hist = [{"day": "2026-07-13", "ticker": "X", "cp": "C", "dir": "bull", "strike": 50},
+            {"day": "2026-07-13", "ticker": "X", "cp": "C", "dir": "bull", "strike": 55}]
+    assert ua.detect_cross_day_rolls(hist) == {}
+
+
+def test_sweep_history_record_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr(sweep_history, "PATH", tmp_path / "hist.json")
+    c = {"ticker": "AAPL", "cp": "C", "strike": 250.0, "score": score_sweep(cp="C", side="Ask")}
+    assert sweep_history.record([c], "2026-07-13") == 1
+    assert sweep_history.record([c], "2026-07-13") == 0   # dedup within the day
+    data = sweep_history.load()
+    assert data and data[0]["ticker"] == "AAPL" and data[0]["dir"] == "bull"
+
+
+def test_annotate_sweep_adds_construction_and_crush():
+    a = ua.annotate_sweep(_sweep("AAPL", 250, "C"), _report(), hist_vol=0.15)
+    c = a["confluence"]
+    assert c["construction"] and c["construction"]["direction"] == "alcista"
+    assert c["iv_crush"] and c["iv_crush"]["level"] in ("alto", "moderado")

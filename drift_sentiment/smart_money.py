@@ -250,6 +250,24 @@ def score_sweep(
     return SmartMoneyScore(score=score, tier=name, emoji=emoji, bullish=bullish, reasons=reasons)
 
 
+def iv_crush_risk(iv: float | None, hist_vol: float | None) -> tuple[str, str] | None:
+    """Compare an option's IV to the stock's historical (realized) vol — the book's
+    #1 execution warning. A pumped IV mean-reverts (the "crush") even when you're
+    right on direction, so an IV far above the stock's own history means *don't
+    chase the strike; cut the vega with a spread*. Returns (level, note) or None.
+    """
+    if iv is None or not hist_vol or hist_vol <= 0:
+        return None
+    ratio = iv / hist_vol
+    ivp, hp = iv * 100, hist_vol * 100
+    if ratio >= 2.0:
+        return ("alto", f"IV {ivp:.0f}% ≈ {ratio:.1f}× la vol histórica ({hp:.0f}%) — "
+                        "riesgo de crush ALTO; no persigas el strike, corta la vega con un spread")
+    if ratio >= 1.4:
+        return ("moderado", f"IV {ivp:.0f}% vs histórica {hp:.0f}% ({ratio:.1f}×) — algo inflada")
+    return ("bajo", f"IV {ivp:.0f}% ~ histórica {hp:.0f}% — sin crush notable")
+
+
 def follow_guidance(
     *,
     bullish: bool | None,

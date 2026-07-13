@@ -24,3 +24,25 @@ def projected_sigma(spot: float, iv: float | None, dte: int) -> float | None:
     if iv is None or dte <= 0 or spot <= 0:
         return None
     return spot * iv * math.sqrt(dte / 365.0)
+
+
+def realized_vol(
+    closes: list[float], *, window: int = 20, periods: int = 252
+) -> float | None:
+    """Annualized realized (historical) volatility from a series of daily closes.
+
+    Uses the most recent ``window`` daily log-returns (so ``window+1`` closes),
+    sample std-dev × sqrt(``periods``). Used by the smart-money layer to judge
+    whether an option's IV is elevated vs the stock's own history (IV-crush risk).
+    Returns None if there isn't enough clean data.
+    """
+    xs = [c for c in closes if c and c > 0]
+    if len(xs) < 5:
+        return None
+    xs = xs[-(window + 1):]
+    rets = [math.log(xs[i] / xs[i - 1]) for i in range(1, len(xs))]
+    if len(rets) < 2:
+        return None
+    mean = sum(rets) / len(rets)
+    var = sum((x - mean) ** 2 for x in rets) / (len(rets) - 1)
+    return math.sqrt(var) * math.sqrt(periods)

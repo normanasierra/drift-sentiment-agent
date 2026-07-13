@@ -133,6 +133,12 @@ def _sweeps_block() -> str:
         return ""
     scored = [c for it in items for c in parse_contracts(it.get("body") or "")]
     scored.sort(key=lambda c: c["score"].score, reverse=True)
+    try:  # feed the multi-day rolling history (deduped per day; best-effort)
+        from datetime import date
+        from data_sources import sweep_history
+        sweep_history.record(scored, date.today().isoformat())
+    except Exception:  # noqa: BLE001
+        pass
     if not scored:  # bodies didn't parse — fall back to raw subjects
         lines = [f"SWEEPS / FLUJO DE HOY (MarketSnack — {len(items)} alertas):"]
         lines += [f"  · [{it['subject']}] "

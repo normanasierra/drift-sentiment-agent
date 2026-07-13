@@ -279,8 +279,23 @@
            ${conf.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : '';
     const verdict = conf && conf.verdict && conf.verdict !== 'n/d'
       ? `<div class="text-xs font-semibold ${verdictCls(conf.verdict)} mt-1">▶ ${esc(conf.verdict)}</div>` : '';
-    const guidance = conf && conf.guidance
-      ? `<div class="text-[11px] text-slate-400 mt-1 italic">${esc(conf.guidance)}</div>` : '';
+    const constr = conf && conf.construction ? conf.construction : null;
+    let build = '';
+    if (constr) {
+      const v = constr.vertical;
+      const row = (lbl, s, note) => s == null ? ''
+        : `<div>• <span class="font-medium">${esc(lbl)}:</span> ~$${fmt(s, 0)} <span class="opacity-70">(${esc(note)})</span></div>`;
+      build = `<div class="mt-1 pt-1 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
+        <span class="font-semibold text-brand-soft">Cómo seguirlo (educativo):</span>
+        ${row('Agresivo', constr.aggressive.strike, constr.aggressive.desc)}
+        ${row('Convicción', constr.conviction.strike, constr.conviction.desc)}
+        ${v ? `<div>• <span class="font-medium">Vertical:</span> ${esc(v.note)}</div>` : ''}
+        <div class="italic mt-0.5">${esc(constr.roll)}</div>
+        ${constr.iv_note ? `<div class="text-amber-500 mt-0.5">⚠ ${esc(constr.iv_note)}</div>` : ''}
+      </div>`;
+    } else if (conf && conf.guidance) {
+      build = `<div class="text-[11px] text-slate-400 mt-1 italic">${esc(conf.guidance)}</div>`;
+    }
     const reasons = (c.reasons || []).slice(0, 4).join(' · ');
     return `<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
       <div class="flex items-start justify-between gap-2">
@@ -291,7 +306,7 @@
         </div>
       </div>
       <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${esc(c.tier)} ${c.score}/100 · ${esc(reasons)}</div>
-      ${verdict}${notes}${guidance}
+      ${verdict}${notes}${build}
     </div>`;
   }
 
@@ -310,14 +325,27 @@
       return;
     }
     let html = head;
+    if (d.ticker && d.iv_context && (d.iv_context.hist_vol || d.iv_context.iv_atm)) {
+      const hv = d.iv_context.hist_vol, iva = d.iv_context.iv_atm;
+      const ratio = (hv && iva) ? iva / hv : null;
+      const cls = ratio && ratio >= 2 ? 'text-rose-500' : ratio && ratio >= 1.4 ? 'text-amber-500' : 'text-slate-400';
+      html += `<div class="mb-3 text-xs ${cls}">📉 Contexto IV ${esc(d.ticker)}: histórica ${hv ? (hv * 100).toFixed(0) : 'n/d'}% · IV ATM ${iva ? (iva * 100).toFixed(0) : 'n/d'}%${ratio ? ` (${ratio.toFixed(1)}× — ${ratio >= 2 ? 'riesgo de crush alto' : ratio >= 1.4 ? 'algo inflada' : 'normal'})` : ''}</div>`;
+    }
     if (d.ticker && d.ladders && d.ladders[d.ticker]) {
       html += `<div class="mb-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">🪜 ${esc(d.ladders[d.ticker])}</div>`;
+    }
+    if (d.ticker && d.cross_day_rolls && d.cross_day_rolls[d.ticker]) {
+      html += `<div class="mb-3 rounded-xl border border-purple-300 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30 px-3 py-2 text-xs text-purple-700 dark:text-purple-300">🔁 ${esc(d.cross_day_rolls[d.ticker])}</div>`;
     }
     if (d.on_ticker && d.on_ticker.length) {
       html += `<h3 class="font-semibold mb-2">En ${esc(d.ticker)} — confluencia con tu estructura</h3>
         <div class="grid gap-2 mb-5">${d.on_ticker.map((c) => sweepCard(c, true)).join('')}</div>`;
     } else if (d.ticker) {
       html += `<p class="text-xs text-slate-400 mb-5">Sin sweeps para ${esc(d.ticker)} en el flujo de hoy.</p>`;
+    }
+    const rollTickers = Object.keys(d.cross_day_rolls || {});
+    if (rollTickers.length) {
+      html += `<div class="mb-2 text-xs text-purple-600 dark:text-purple-300"><span class="font-semibold">🔁 Rolling multi-día:</span> ${rollTickers.map((k) => esc(k)).join(' · ')}</div>`;
     }
     html += `<h3 class="font-semibold mb-2">Flujo del día — mayor convicción (todos los tickers)</h3>
       <div class="grid gap-2 md:grid-cols-2">${d.top.map((c) => sweepCard(c, false)).join('')}</div>`;

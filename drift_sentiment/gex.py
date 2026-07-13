@@ -57,6 +57,19 @@ def _norm_cdf(x: float) -> float:
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
 
 
+def bs_delta(spot, strike, iv, t_years, is_call, r=0.0):
+    """Black-Scholes delta. Call: N(d1); Put: N(d1) - 1. Degenerate inputs fall
+    back to the intrinsic delta (±1 in-the-money, 0 otherwise)."""
+    if spot <= 0 or strike <= 0 or iv <= 0 or t_years <= 0:
+        if is_call:
+            return 1.0 if spot >= strike else 0.0
+        return -1.0 if spot <= strike else 0.0
+    vt = iv * math.sqrt(t_years)
+    d1 = (math.log(spot / strike) + (r + 0.5 * iv * iv) * t_years) / vt
+    nd1 = _norm_cdf(d1)
+    return nd1 if is_call else nd1 - 1.0
+
+
 def _bs_price(spot, strike, iv, t_years, is_call, r=0.0):
     """Black-Scholes European option price."""
     if iv <= 0 or t_years <= 0:

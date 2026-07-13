@@ -14,9 +14,11 @@ Educational — not financial advice.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from .smart_money import follow_guidance
+from . import constructor
+from .smart_money import follow_guidance, iv_crush_risk
 
 if TYPE_CHECKING:  # avoid any import cost / cycle at runtime
     from .models import BucketResult, DriftReport
@@ -44,10 +46,12 @@ def _levels(b: "BucketResult") -> list[tuple[str, float]]:
     return [(n, float(s)) for n, s in raw if s is not None]
 
 
-def annotate_sweep(sweep: dict, report: "DriftReport", *, tol_pct: float = 2.5) -> dict:
+def annotate_sweep(sweep: dict, report: "DriftReport", *, tol_pct: float = 2.5,
+                   hist_vol: float | None = None) -> dict:
     """Return ``sweep["confluence"]`` filled in against ``report``'s structure:
     the nearest structural level, whether the smart-money direction aligns with
-    where that structure biases price, a verdict, notes, and follow guidance.
+    where that structure biases price, a verdict, notes, follow guidance, an
+    educational trade construction, and IV-crush risk (when ``hist_vol`` is given).
     """
     b = _nearest_bucket(report, sweep.get("dte"))
     strike = sweep.get("strike")
@@ -120,15 +124,30 @@ def annotate_sweep(sweep: dict, report: "DriftReport", *, tol_pct: float = 2.5) 
     if bullish is False and sweep.get("cp") == "P" and abs(strike - spot) / spot <= 0.05:
         notes.append("put cerca del dinero — asimetría bajista ('elevador abajo')")
 
+    # IV-crush check — compare the sweep's own (pumped) IV, or the bucket ATM IV as
+    # a fallback, against the stock's realized vol.
+    crush = iv_crush_risk(sweep.get("iv") or b.iv_atm, hist_vol)
+    if crush:
+        conf["iv_crush"] = {"level": crush[0], "note": crush[1]}
+        if crush[0] in ("alto", "moderado"):
+            notes.append(crush[1])
+
+    # Educational trade construction — build with the representative (ATM) IV so we
+    # don't inherit the pumped strike's vol; None if the flow isn't cleanly directional.
+    conf["construction"] = constructor.suggest(
+        spot, bullish, sweep.get("dte") or b.actual_dte,
+        b.iv_atm or sweep.get("iv"), hist_vol=hist_vol)
+
     conf["notes"] = notes
     return {**sweep, "confluence": conf}
 
 
-def scan(report: "DriftReport", sweeps: list[dict], *, tol_pct: float = 2.5) -> list[dict]:
+def scan(report: "DriftReport", sweeps: list[dict], *, tol_pct: float = 2.5,
+         hist_vol: float | None = None) -> list[dict]:
     """Annotate every sweep whose ticker matches ``report.ticker`` with confluence
     against this report, sorted by conviction (highest first)."""
     tk = report.ticker.upper()
-    hits = [annotate_sweep(s, report, tol_pct=tol_pct)
+    hits = [annotate_sweep(s, report, tol_pct=tol_pct, hist_vol=hist_vol)
             for s in sweeps if (s.get("ticker") or "").upper() == tk]
     hits.sort(key=lambda s: getattr(s.get("score"), "score", 0), reverse=True)
     return hits
@@ -151,4 +170,30 @@ def detect_ladders(sweeps: list[dict]) -> dict[str, str]:
             lo, hi = min(strikes), max(strikes)
             out[tk] = (f"escalera {side}: {len(strikes)} strikes "
                        f"(${lo:.0f}→${hi:.0f}) — posible rolling/convicción")
+    return out
+
+
+def detect_cross_day_rolls(history: list[dict], *, min_days: int = 2) -> dict[str, str]:
+    """From sweep-history records ``{day, ticker, cp, dir, strike}``, flag tickers
+    whose SAME-direction positioning migrated across ≥``min_days`` distinct days —
+    calls ratcheting UP or puts rolling DOWN (the Najarian TUR pattern: a repeated,
+    rolled footprint = growing conviction). Returns ``{ticker: note}``."""
+    by: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    for r in history:
+        d = r.get("dir")
+        if d not in ("bull", "bear") or r.get("strike") is None:
+            continue
+        by[(r.get("ticker"), d)][r.get("day")].append(r["strike"])
+    out: dict[str, str] = {}
+    for (tk, d), byday in by.items():
+        days = sorted(k for k in byday if k)
+        if len(days) < min_days:
+            continue
+        med = [sorted(byday[day])[len(byday[day]) // 2] for day in days]  # per-day median
+        if d == "bull" and med[-1] > med[0]:
+            out[tk] = (f"rolling alcista multi-día: ${med[0]:.0f}→${med[-1]:.0f} en "
+                       f"{len(days)} días — convicción creciente (sigue al que acierta)")
+        elif d == "bear" and med[-1] < med[0]:
+            out[tk] = (f"rolling bajista multi-día: ${med[0]:.0f}→${med[-1]:.0f} en "
+                       f"{len(days)} días — convicción creciente (sigue al que acierta)")
     return out

@@ -304,34 +304,57 @@ def api_unusual(ticker: str = ""):
     conviction, plus confluence of the analyzed ticker's sweeps against its own
     Put/Call walls, gamma walls and Zero-Γ. READ-ONLY; degrades to empty."""
     ticker = (ticker or "").strip().upper()
-    from data_sources import sweeps as sweeps_mod
-    from drift_sentiment import unusual_activity as ua
+    from data_sources import sweep_history, sweeps as sweeps_mod
+    from drift_sentiment import stats, unusual_activity as ua
 
     raw = _todays_sweeps()
     spot_map: dict[str, float] = {}
     rep = None
+    hist_vol = None
+    iv_atm = None
     if ticker:
         try:
             spot, rep = _load(ticker)
             spot_map[ticker] = spot
         except Exception:  # noqa: BLE001 — sweeps still useful without the report
             rep = None
+        try:  # realized vol from daily bars -> IV-crush context for this ticker
+            bars = polygon_client.fetch_daily_bars(ticker) or []
+            closes = [b["close"] for b in bars if isinstance(b, dict) and b.get("close")]
+            hist_vol = stats.realized_vol(closes)
+        except Exception:  # noqa: BLE001
+            hist_vol = None
+        if rep is not None:
+            near = min((b for b in rep.buckets if b.iv_atm),
+                       key=lambda b: b.actual_dte, default=None)
+            iv_atm = near.iv_atm if near else None
 
     contracts: list[dict] = []
     for it in raw:
         contracts.extend(sweeps_mod.parse_contracts(it.get("body") or "", spot=spot_map))
     contracts.sort(key=lambda c: c["score"].score, reverse=True)
 
-    on_ticker = ua.scan(rep, contracts) if rep is not None else []
+    # Persist today's flow, then read the whole history back for multi-day rolls.
+    rolls: dict[str, str] = {}
+    try:
+        sweep_history.record(contracts, datetime.date.today().isoformat())
+        rolls = ua.detect_cross_day_rolls(sweep_history.load())
+    except Exception:  # noqa: BLE001
+        rolls = {}
+
+    on_ticker = ua.scan(rep, contracts, hist_vol=hist_vol) if rep is not None else []
     ladders = ua.detect_ladders(contracts)
 
     return {
         "ticker": ticker,
         "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "alerts": len(raw), "count": len(contracts),
+        "iv_context": ({"hist_vol": hist_vol, "iv_atm": iv_atm}
+                       if (hist_vol or iv_atm) else None),
         "on_ticker": [_sweep_json(c, with_confluence=True) for c in on_ticker],
         "top": [_sweep_json(c) for c in contracts[:15]],
         "ladders": ladders,
+        "cross_day_rolls": rolls,
     }
 
 
