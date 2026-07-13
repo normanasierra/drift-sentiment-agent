@@ -129,9 +129,10 @@ def _sweeps_block() -> str:
     if not items:
         return ""
     lines = [f"SWEEPS / FLUJO DE HOY (MarketSnack — {len(items)} alertas; resume las MÁS "
-             "notables y qué tickers se repiten):"]
+             "notables con TICKER/STRIKE/C-P y premium o volumen/OI):"]
     for it in items[:8]:
-        lines.append(f"  · {it['subject']}")
+        detail = " ".join((it.get("body") or "").split())[:400]
+        lines.append(f"  · [{it['subject']}] {detail}")
     return "\n".join(lines)
 
 
