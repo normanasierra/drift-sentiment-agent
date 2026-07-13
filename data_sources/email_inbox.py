@@ -89,6 +89,39 @@ def recent_newsletters(*, since_days: int = 1, max_msgs: int = 8) -> list[dict]:
     return out
 
 
+def marketsnack_alerts(*, since_days: int = 1, max_msgs: int = 25) -> list[dict]:
+    """Recent MarketSnack sweep/flow ALERT emails as {subject, body}. Excludes
+    payment/receipt mail (Stripe). [] if unconfigured or none."""
+    user = os.getenv("IMAP_USER") or os.getenv("SMTP_USER") or os.getenv("GMAIL_USER")
+    pw = (os.getenv("IMAP_PASSWORD") or os.getenv("SMTP_PASSWORD")
+          or os.getenv("GMAIL_APP_PASSWORD"))
+    if not user or not pw:
+        return []
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=since_days)).strftime("%d-%b-%Y")
+    skip = ("payment", "receipt", "invoice", "subscription", "renew", "failed", "welcome")
+    out: list[dict] = []
+    try:
+        M = imaplib.IMAP4_SSL(IMAP_HOST)
+        M.login(user, pw)
+        M.select("INBOX", readonly=True)
+        typ, data = M.search(None, "SINCE", since, "FROM", "marketsnack")
+        for num in ((data[0].split() or [])[-max_msgs:] if typ == "OK" else []):
+            typ, msg_data = M.fetch(num, "(RFC822)")
+            if typ != "OK":
+                continue
+            msg = email.message_from_bytes(msg_data[0][1])
+            frm = _decode(msg.get("From")).lower()
+            subj = _decode(msg.get("Subject"))
+            if "stripe" in frm or "paypal" in frm or any(w in subj.lower() for w in skip):
+                continue
+            out.append({"subject": subj.strip(), "body": _plain_body(msg)[:600]})
+        M.logout()
+    except Exception:  # noqa: BLE001
+        return []
+    return out
+
+
 def digest(*, since_days: int = 1) -> str:
     """Compact text digest of newsletter subjects for the report / news step."""
     items = recent_newsletters(since_days=since_days)

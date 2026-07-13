@@ -74,6 +74,10 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   7 Magníficas están ALINEADAS.
 - **Noticias macro** (Yahoo Finance / CNBC): 3-5 viñetas (titular en negrita +
   por qué importa).
+- **Sweeps / flujo institucional** (MarketSnack — SOLO si el bloque DATOS REALES
+  trae "SWEEPS / FLUJO DE HOY"): 2-4 viñetas con los sweeps más notables del día y
+  qué tickers se repiten (call/put, tamaño si aparece). Si no hay datos, OMITE esta
+  sección por completo.
 - **Trump hoy**: 2-4 viñetas de impacto de mercado (o "sin novedad relevante").
 - **Tu portafolio** (educativo): una **tabla** con columnas
   `Ticker | Último | % Día | Nivel/nota`. Incluye todos los tickers; en la

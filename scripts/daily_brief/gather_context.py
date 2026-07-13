@@ -119,6 +119,22 @@ def _newsletters_block() -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
+def _sweeps_block() -> str:
+    """Compact digest of today's MarketSnack sweep/flow alerts for the brief."""
+    try:
+        from data_sources import email_inbox
+        items = email_inbox.marketsnack_alerts(since_days=1)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not items:
+        return ""
+    lines = [f"SWEEPS / FLUJO DE HOY (MarketSnack — {len(items)} alertas; resume las MÁS "
+             "notables y qué tickers se repiten):"]
+    for it in items[:8]:
+        lines.append(f"  · {it['subject']}")
+    return "\n".join(lines)
+
+
 def _hyperliquid_block() -> str:
     try:
         from data_sources import hyperliquid
@@ -150,7 +166,7 @@ def gather() -> str:
     """Return a compact REAL-DATA block for the prompt, or '' if nothing loaded."""
     blocks = [
         _indices_block(), _watchlist_block(), _portfolio_block(),
-        _newsletters_block(), _hyperliquid_block(), _schwab_block(),
+        _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
     if not body:
