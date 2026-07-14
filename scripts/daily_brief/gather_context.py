@@ -100,6 +100,38 @@ def _watchlist_block() -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
+def _is_premarket() -> bool:
+    """True for the morning run (before the 9:30 ET/AST open) → premarket movers;
+    False for the midday/afternoon runs → intraday movers."""
+    from datetime import datetime
+    now = datetime.now()
+    return now.hour < 9 or (now.hour == 9 and now.minute < 30)
+
+
+def _movers_block() -> str:
+    """Companies up ≥5% — premarket in the morning, intraday in the afternoon."""
+    try:
+        from data_sources import movers
+    except Exception:  # noqa: BLE001
+        return ""
+    pre = _is_premarket()
+    try:
+        rows = movers.top_gainers(min_pct=5.0, premarket=pre)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not rows:
+        return ""
+    label = ("MOVERS PRE-MERCADO (≥5% ANTES de abrir)" if pre
+             else "MOVERS DEL DÍA (≥5% en la sesión)")
+    lines = [f"{label} — reales (Yahoo). Lista los más notables con su % (y por qué "
+             "se mueven si lo encuentras en noticias):"]
+    for r in rows:
+        px = f" ${r['price']:.2f}" if r.get("price") else ""
+        nm = f" · {r['name']}" if r.get("name") else ""
+        lines.append(f"  {r['symbol']}: +{r['pct']:.1f}%{px}{nm}")
+    return "\n".join(lines)
+
+
 def _newsletters_block() -> str:
     """Content from the reader's PAID newsletters (CNBC/Barron's/MarketSnacks…),
     read from his Gmail inbox, for the brief to summarize. '' if none/unconfigured."""
@@ -190,7 +222,7 @@ def _schwab_block() -> str:
 def gather() -> str:
     """Return a compact REAL-DATA block for the prompt, or '' if nothing loaded."""
     blocks = [
-        _indices_block(), _watchlist_block(), _portfolio_block(),
+        _indices_block(), _watchlist_block(), _movers_block(), _portfolio_block(),
         _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)

@@ -74,6 +74,12 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   7 Magníficas están ALINEADAS.
 - **Noticias macro** (Yahoo Finance / CNBC): 3-5 viñetas (titular en negrita +
   por qué importa).
+- **Movers ≥5%** (usa el bloque DATOS REALES: "MOVERS PRE-MERCADO" en la corrida de
+  la MAÑANA, o "MOVERS DEL DÍA" en la de la TARDE). Lista las compañías que suben
+  **≥5%** con su símbolo, el **%** y el precio; añade una frase de **por qué se
+  mueven** si lo encuentras en noticias (earnings, FDA, M&A, guidance…). En la mañana
+  son movimientos de **PRE-MERCADO antes de abrir**; en la tarde, **del día**. Si el
+  bloque no trae movers, OMITE esta sección.
 - **Sweeps / flujo institucional** (MarketSnack — SOLO si el bloque DATOS REALES
   trae "SWEEPS / FLUJO DE HOY"): 2-4 viñetas. La lista YA viene ordenada por
   convicción **smart-money (método F.R.A.M.E. de los Najarian)**; cada línea trae
