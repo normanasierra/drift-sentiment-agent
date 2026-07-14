@@ -315,16 +315,22 @@
 
   function renderUnusual(d) {
     const box = $('unusualBody'); if (!box) return;
-    const head = `<div class="flex items-start justify-between gap-3 mb-3">
-      <p class="text-sm text-slate-500 dark:text-slate-400">
-        Flujo institucional de hoy (MarketSnack), puntuado por convicción
-        <span class="font-semibold text-brand-soft">smart-money · F.R.A.M.E.</span>
-        (vol/OI, lado, prima, DTE). Educativo — no es asesoría.</p>
-      <span class="text-xs text-slate-400 whitespace-nowrap">${esc(d.generated)} · ${d.alerts} alertas</span>
+    const f = d.filter;
+    const flt = f ? `<div class="text-xs text-amber-600 dark:text-amber-400 mt-1">🔎 Filtro: prima ≥ $${(f.min_premium / 1e6).toFixed(1)}M · vol ≥ ${(f.min_volume / 1e3).toFixed(0)}K · OI ≥ ${(f.min_oi / 1e3).toFixed(0)}K — <span class="font-semibold">${d.count} de ${d.unfiltered}</span> pasan</div>` : '';
+    const head = `<div class="mb-3">
+      <div class="flex items-start justify-between gap-3">
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          Flujo institucional de hoy (MarketSnack), puntuado por convicción
+          <span class="font-semibold text-brand-soft">smart-money · F.R.A.M.E.</span>
+          (vol/OI, lado, prima, DTE). Educativo — no es asesoría.</p>
+        <span class="text-xs text-slate-400 whitespace-nowrap">${esc(d.generated)} · ${d.alerts} alertas</span>
+      </div>${flt}
     </div>`;
     if (!d.count) {
-      box.innerHTML = head + `<div class="rounded-xl border border-slate-200 dark:border-slate-800 p-6 text-center text-slate-400">
-        No hay sweeps de MarketSnack hoy todavía. Llegan a tu Gmail y aparecen aquí automáticamente.</div>`;
+      const msg = d.unfiltered
+        ? `Los ${d.unfiltered} sweeps de hoy quedaron bajo el filtro (prima ≥ $1M · vol ≥ 20K · OI ≥ 5K). Ajústalo en el .env si quieres ver más.`
+        : 'No hay sweeps de MarketSnack hoy todavía. Llegan a tu Gmail y aparecen aquí automáticamente.';
+      box.innerHTML = head + `<div class="rounded-xl border border-slate-200 dark:border-slate-800 p-6 text-center text-slate-400">${msg}</div>`;
       return;
     }
     let html = head;

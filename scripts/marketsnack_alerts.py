@@ -27,7 +27,9 @@ REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 from data_sources.email_inbox import _email_when, _plain_body  # noqa: E402
-from data_sources.sweeps import format_contract, parse_contracts  # noqa: E402
+from data_sources.sweeps import (  # noqa: E402
+    filter_contracts, format_contract, parse_contracts,
+)
 
 SEEN = REPO / "output" / "marketsnack_seen.json"
 MAX_INDIVIDUAL = 3  # more new alerts than this in one poll -> single summary
@@ -57,9 +59,9 @@ def format_alert(subject: str, body: str, when: str | None = None) -> str:
     ``when`` is the email's received time, used as the execution-time fallback."""
     title = re.split(r"\s*[—–-]\s*\d+\s+signal", subject or "")[0].strip() or "Alerta"
     header = f"⚡ MarketSnack · {title}"
-    contracts = parse_contracts(body, fallback_time=when)[:3]
+    contracts = filter_contracts(parse_contracts(body, fallback_time=when))[:3]
     if not contracts:
-        return header
+        return ""  # nothing cleared the quality floor -> don't send this alert
     lines = [format_contract(c) for c in contracts]
     top = contracts[0]["score"]
     if top.reasons:
@@ -131,8 +133,9 @@ def main() -> None:
             frm, subj = _dec(msg.get("From")), _dec(msg.get("Subject"))
             seen.add(mid)
             if _is_alert(frm, subj):
-                fresh.append((format_alert(subj, _plain_body(msg), when=_email_when(msg)),
-                              subj.strip()))
+                text = format_alert(subj, _plain_body(msg), when=_email_when(msg))
+                if text:  # skip alerts where nothing cleared the quality floor
+                    fresh.append((text, subj.strip()))
         M.logout()
     except Exception:  # noqa: BLE001
         return

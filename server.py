@@ -330,27 +330,31 @@ def api_unusual(ticker: str = ""):
                        key=lambda b: b.actual_dte, default=None)
             iv_atm = near.iv_atm if near else None
 
-    contracts: list[dict] = []
+    all_contracts: list[dict] = []
     for it in raw:
-        contracts.extend(sweeps_mod.parse_contracts(
+        all_contracts.extend(sweeps_mod.parse_contracts(
             it.get("body") or "", spot=spot_map, fallback_time=it.get("date")))
-    contracts.sort(key=lambda c: c["score"].score, reverse=True)
+    all_contracts.sort(key=lambda c: c["score"].score, reverse=True)
 
-    # Persist today's flow, then read the whole history back for multi-day rolls.
+    # History + multi-day rolls use the FULL set (more detection power); the
+    # DISPLAYED flow honors Norman's quality filter (premium/volume/OI floor).
     rolls: dict[str, str] = {}
     try:
-        sweep_history.record(contracts, datetime.date.today().isoformat())
+        sweep_history.record(all_contracts, datetime.date.today().isoformat())
         rolls = ua.detect_cross_day_rolls(sweep_history.load())
     except Exception:  # noqa: BLE001
         rolls = {}
 
+    contracts = sweeps_mod.filter_contracts(all_contracts)
     on_ticker = ua.scan(rep, contracts, hist_vol=hist_vol) if rep is not None else []
     ladders = ua.detect_ladders(contracts)
 
     return {
         "ticker": ticker,
         "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "alerts": len(raw), "count": len(contracts),
+        "alerts": len(raw), "count": len(contracts), "unfiltered": len(all_contracts),
+        "filter": {"min_premium": sweeps_mod.MIN_PREMIUM,
+                   "min_volume": sweeps_mod.MIN_VOLUME, "min_oi": sweeps_mod.MIN_OI},
         "iv_context": ({"hist_vol": hist_vol, "iv_atm": iv_atm}
                        if (hist_vol or iv_atm) else None),
         "on_ticker": [_sweep_json(c, with_confluence=True) for c in on_ticker],

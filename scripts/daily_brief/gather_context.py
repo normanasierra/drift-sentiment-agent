@@ -125,7 +125,7 @@ def _sweeps_block() -> str:
     the highest-conviction flow and explain WHY."""
     try:
         from data_sources import email_inbox
-        from data_sources.sweeps import format_contract, parse_contracts
+        from data_sources.sweeps import filter_contracts, format_contract, parse_contracts
         items = email_inbox.marketsnack_alerts(since_days=1)
     except Exception:  # noqa: BLE001
         return ""
@@ -134,7 +134,7 @@ def _sweeps_block() -> str:
     scored = [c for it in items
               for c in parse_contracts(it.get("body") or "", fallback_time=it.get("date"))]
     scored.sort(key=lambda c: c["score"].score, reverse=True)
-    try:  # feed the multi-day rolling history (deduped per day; best-effort)
+    try:  # feed the multi-day rolling history from the FULL set (deduped per day)
         from datetime import date
         from data_sources import sweep_history
         sweep_history.record(scored, date.today().isoformat())
@@ -145,11 +145,14 @@ def _sweeps_block() -> str:
         lines += [f"  · [{it['subject']}] "
                   + " ".join((it.get('body') or '').split())[:300] for it in items[:8]]
         return "\n".join(lines)
-    lines = [f"SWEEPS / FLUJO DE HOY (MarketSnack — {len(scored)} contratos en "
-             f"{len(items)} alertas; YA ORDENADOS por convicción smart-money "
-             "F.R.A.M.E. Lidera con los de mayor convicción; di TICKER/STRIKE/C-P, "
-             "premium y el porqué):"]
-    for c in scored[:10]:
+    shown = filter_contracts(scored)  # quality floor: prima ≥$1M · vol ≥20K · OI ≥5K
+    if not shown:
+        return ""  # nothing notable cleared the filter today — omit the section
+    lines = [f"SWEEPS / FLUJO DE HOY (MarketSnack — {len(shown)} contratos notables "
+             f"de {len(scored)}, filtrados por prima ≥$1M / vol ≥20K / OI ≥5K y "
+             "ORDENADOS por convicción F.R.A.M.E. Lidera con los de mayor convicción; "
+             "di TICKER/STRIKE/C-P, premium y el porqué):"]
+    for c in shown[:10]:
         s = c["score"]
         why = "; ".join(s.reasons[:3])
         lines.append(f"  · [{s.tier} {s.score} · {s.direction}] "

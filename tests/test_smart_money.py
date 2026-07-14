@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 
 from data_sources import sweep_history
-from data_sources.sweeps import parse_contracts
+from data_sources.sweeps import filter_contracts, parse_contracts, passes_filter
 from drift_sentiment import constructor, gex, stats, unusual_activity as ua
 from drift_sentiment.models import BucketResult, DriftReport, Wall
 from drift_sentiment.smart_money import follow_guidance, iv_crush_risk, score_sweep
@@ -130,6 +130,33 @@ def test_parse_uses_fallback_time_when_body_has_none():
     c = parse_contracts(body, today=TODAY, fallback_time="Jul 13 · 5:00 PM AST")[0]
     assert c["exec_time"] == "Jul 13 · 5:00 PM AST"
     assert c["volume"] == 14456 and c["open_interest"] == 1415
+
+
+# --- quality filter (premium ≥ $1M · volume ≥ 20K · OI ≥ 5K) ------------------
+
+def test_filter_keeps_big_institutional_trade():
+    # premium clears the floor; vol/OI absent (institutional trades omit them)
+    assert passes_filter({"premium": 1.6e6, "volume": None, "open_interest": None})
+
+
+def test_filter_drops_small_premium():
+    assert not passes_filter({"premium": 500e3, "volume": None, "open_interest": None})
+
+
+def test_filter_spike_needs_both_volume_and_oi():
+    assert passes_filter({"premium": None, "volume": 52_000, "open_interest": 5_000})
+    assert not passes_filter({"premium": None, "volume": 31_000, "open_interest": 3_000})   # OI low
+    assert not passes_filter({"premium": None, "volume": 10_000, "open_interest": 8_000})   # vol low
+
+
+def test_filter_drops_contract_with_no_fields():
+    assert not passes_filter({"premium": None, "volume": None, "open_interest": None})
+
+
+def test_filter_contracts_helper_keeps_only_qualifying():
+    cs = [{"premium": 2e6}, {"premium": 100e3},
+          {"volume": 25_000, "open_interest": 6_000}]
+    assert len(filter_contracts(cs)) == 2
 
 
 # --- enriched scorer signals -------------------------------------------------

@@ -12,10 +12,27 @@ the caller passes a spot map. Educational — not financial advice.
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import date
 
 from drift_sentiment.smart_money import SmartMoneyScore, score_sweep
+
+
+def _envf(key: str, default: float) -> float:
+    try:
+        return float(os.getenv(key, default))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+# Alert-quality floor (Norman's thresholds; override in .env). Because the two
+# MarketSnack alert types report DIFFERENT fields — "Institutional Trade" has
+# premium, "Volume/OI Spike" has volume+OI — a contract must clear the floor only
+# on the fields it actually reports (see ``passes_filter``).
+MIN_PREMIUM = _envf("SWEEP_MIN_PREMIUM", 1_000_000)   # $
+MIN_VOLUME = _envf("SWEEP_MIN_VOLUME", 20_000)        # contracts
+MIN_OI = _envf("SWEEP_MIN_OI", 5_000)                 # contracts
 
 # TICKER  Mon D, 'YY | STRIKE[C/P]   (present in every MarketSnack alert body).
 _CONTRACT = re.compile(
@@ -161,3 +178,25 @@ def format_contract(c: dict, *, with_score: bool = True) -> str:
     if with_score:
         line += f"  {c['score'].emoji}"
     return line
+
+
+def passes_filter(c: dict, *, min_premium: float = MIN_PREMIUM,
+                  min_volume: float = MIN_VOLUME, min_oi: float = MIN_OI) -> bool:
+    """True if a contract clears the quality floor on every field it reports.
+    Fields the alert doesn't include are ignored; a contract with none of the
+    three fields is dropped."""
+    prem, vol, oi = c.get("premium"), c.get("volume"), c.get("open_interest")
+    if prem is None and vol is None and oi is None:
+        return False
+    if prem is not None and prem < min_premium:
+        return False
+    if vol is not None and vol < min_volume:
+        return False
+    if oi is not None and oi < min_oi:
+        return False
+    return True
+
+
+def filter_contracts(contracts: list[dict], **kw) -> list[dict]:
+    """Keep only contracts that clear the quality floor (see ``passes_filter``)."""
+    return [c for c in contracts if passes_filter(c, **kw)]
