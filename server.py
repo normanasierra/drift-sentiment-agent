@@ -286,7 +286,8 @@ def _sweep_json(c: dict, *, with_confluence: bool = False) -> dict:
     s = c["score"]
     out = {
         "ticker": c["ticker"], "strike": c["strike"], "cp": c["cp"],
-        "exp": c["exp"], "dte": c["dte"], "premium": c["premium"],
+        "exp": c["exp"], "dte": c["dte"], "exec_time": c.get("exec_time"),
+        "premium": c["premium"], "contract_price": c.get("contract_price"),
         "notional": c["notional"], "size": c["size"], "side": c["side"],
         "volume": c["volume"], "open_interest": c["open_interest"],
         "otm_pct": c["otm_pct"], "iv": c.get("iv"),
@@ -331,7 +332,8 @@ def api_unusual(ticker: str = ""):
 
     contracts: list[dict] = []
     for it in raw:
-        contracts.extend(sweeps_mod.parse_contracts(it.get("body") or "", spot=spot_map))
+        contracts.extend(sweeps_mod.parse_contracts(
+            it.get("body") or "", spot=spot_map, fallback_time=it.get("date")))
     contracts.sort(key=lambda c: c["score"].score, reverse=True)
 
     # Persist today's flow, then read the whole history back for multi-day rolls.

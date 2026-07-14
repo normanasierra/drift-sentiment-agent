@@ -53,6 +53,25 @@ def _plain_body(msg: email.message.Message) -> str:
     return ""
 
 
+def _email_when(msg: email.message.Message) -> str:
+    """Email Date header as a compact local 'Mon D · H:MM AM/PM AST' (UTC-4) string.
+    Used as the execution-time fallback for alerts whose body has no timestamp."""
+    from datetime import timedelta, timezone
+    from email.utils import parsedate_to_datetime
+    try:
+        dt = parsedate_to_datetime(msg.get("Date"))
+        if dt is None:
+            return ""
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(timezone(timedelta(hours=-4)))
+        h = dt.hour % 12 or 12
+        ampm = "AM" if dt.hour < 12 else "PM"
+        return f"{dt.strftime('%b')} {dt.day} · {h}:{dt.minute:02d} {ampm} AST"
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def recent_newsletters(*, since_days: int = 1, max_msgs: int = 8) -> list[dict]:
     """Return recent newsletter emails as {sender, subject, body}. [] if unconfigured."""
     user = os.getenv("IMAP_USER") or os.getenv("SMTP_USER") or os.getenv("GMAIL_USER")
@@ -115,7 +134,8 @@ def marketsnack_alerts(*, since_days: int = 1, max_msgs: int = 25) -> list[dict]
             subj = _decode(msg.get("Subject"))
             if "stripe" in frm or "paypal" in frm or any(w in subj.lower() for w in skip):
                 continue
-            out.append({"subject": subj.strip(), "body": _plain_body(msg)[:600]})
+            out.append({"subject": subj.strip(), "body": _plain_body(msg)[:1500],
+                        "date": _email_when(msg)})
         M.logout()
     except Exception:  # noqa: BLE001
         return []

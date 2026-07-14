@@ -131,7 +131,8 @@ def _sweeps_block() -> str:
         return ""
     if not items:
         return ""
-    scored = [c for it in items for c in parse_contracts(it.get("body") or "")]
+    scored = [c for it in items
+              for c in parse_contracts(it.get("body") or "", fallback_time=it.get("date"))]
     scored.sort(key=lambda c: c["score"].score, reverse=True)
     try:  # feed the multi-day rolling history (deduped per day; best-effort)
         from datetime import date

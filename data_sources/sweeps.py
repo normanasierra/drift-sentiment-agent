@@ -23,6 +23,12 @@ _CONTRACT = re.compile(
     r"(\d+(?:\.\d+)?)\s*([CP])"
 )
 
+# Execution timestamp printed right after the contract in "Institutional Trade"
+# bodies, e.g. "... | 87P Jul 13 · 4:01:17 PM $3.00 Contract Price ...".
+_EXECTIME = re.compile(
+    r"([A-Za-z]{3}\s+\d{1,2})\s*[·•|,]?\s*(\d{1,2}:\d{2}(?::\d{2})?\s*[AaPp][Mm])"
+)
+
 _MONTHS = {m: i for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
@@ -74,12 +80,14 @@ def parse_contracts(
     *,
     spot: dict[str, float] | None = None,
     today: date | None = None,
+    fallback_time: str | None = None,
 ) -> list[dict]:
     """Return contracts parsed from a MarketSnack alert body, each with a
     ``SmartMoneyScore`` under ``"score"``, sorted by conviction (highest first).
 
     ``spot`` optionally maps TICKER -> price so OTM% can be scored; ``today`` is
-    injectable for deterministic tests.
+    injectable for deterministic tests. ``fallback_time`` (usually the email's
+    received time) is used as the execution time when the body doesn't print one.
     """
     b = " ".join((body or "").split())
     out: list[dict] = []
@@ -94,10 +102,20 @@ def parse_contracts(
         side = _search(r"\b(Ask|Bid|Mid)\s*Side", tail)
         vol = _to_float(_search(r"([\d,]+)\s*Volume", tail))
         oi = _to_float(_search(r"([\d,]+)\s*Open\s*Interest", tail))
+        price = _to_float(_search(r"([\d.,]+\s*[MKB]?)\s*Contract\s*Price", tail))
         iv = _to_float(_search(r"(\d+(?:\.\d+)?)\s*%?\s*(?:IV|Impl)", tail))
         if iv is not None and iv > 3:      # given as a percent (e.g. 85) -> fraction
             iv /= 100.0
         dte = _dte(mon, day, yy, today)
+
+        # Execution day/time — the transaction's own timestamp from the body,
+        # else the alert's received time.
+        exec_time = None
+        mt = _EXECTIME.search(tail[:70])
+        if mt:
+            exec_time = f"{mt.group(1)} · {re.sub(r'\s+', ' ', mt.group(2)).strip().upper()} ET"
+        elif fallback_time:
+            exec_time = fallback_time
 
         # Notional = strike × size × 100 (the size of the bet, per the book).
         notional = strike_f * size * 100 if (strike_f and size) else None
@@ -113,9 +131,10 @@ def parse_contracts(
                          otm_pct=otm, iv=iv)
         out.append({
             "ticker": tk, "strike": strike_f, "cp": cp,
-            "exp": f"{mon.title()} {int(day)}", "dte": dte,
-            "premium": prem, "notional": notional, "size": size, "side": side,
-            "volume": vol, "open_interest": oi, "iv": iv, "otm_pct": otm, "score": sc,
+            "exp": f"{mon.title()} {int(day)}", "dte": dte, "exec_time": exec_time,
+            "premium": prem, "contract_price": price, "notional": notional,
+            "size": size, "side": side, "volume": vol, "open_interest": oi,
+            "iv": iv, "otm_pct": otm, "score": sc,
         })
     out.sort(key=lambda d: d["score"].score, reverse=True)
     return out
@@ -137,6 +156,8 @@ def format_contract(c: dict, *, with_score: bool = True) -> str:
     if c.get("open_interest") is not None:
         parts.append(f"OI {_money(c['open_interest'])}")
     line = " · ".join(parts)
+    if c.get("exec_time"):
+        line += f" · 🕐 {c['exec_time']}"
     if with_score:
         line += f"  {c['score'].emoji}"
     return line

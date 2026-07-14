@@ -26,7 +26,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
-from data_sources.email_inbox import _plain_body  # noqa: E402
+from data_sources.email_inbox import _email_when, _plain_body  # noqa: E402
 from data_sources.sweeps import format_contract, parse_contracts  # noqa: E402
 
 SEEN = REPO / "output" / "marketsnack_seen.json"
@@ -50,13 +50,14 @@ def _dec(v: str | None) -> str:
                     for t, e in decode_header(v))
 
 
-def format_alert(subject: str, body: str) -> str:
-    """WhatsApp text for one alert: title + up to 3 contracts with their detail,
-    each tagged with its smart-money (F.R.A.M.E.) conviction, plus a one-line
-    read of why the top contract scored the way it did."""
+def format_alert(subject: str, body: str, when: str | None = None) -> str:
+    """WhatsApp text for one alert: title + up to 3 contracts with their detail
+    (incl. execution day/time), each tagged with its smart-money (F.R.A.M.E.)
+    conviction, plus a one-line read of why the top contract scored the way it did.
+    ``when`` is the email's received time, used as the execution-time fallback."""
     title = re.split(r"\s*[—–-]\s*\d+\s+signal", subject or "")[0].strip() or "Alerta"
     header = f"⚡ MarketSnack · {title}"
-    contracts = parse_contracts(body)[:3]
+    contracts = parse_contracts(body, fallback_time=when)[:3]
     if not contracts:
         return header
     lines = [format_contract(c) for c in contracts]
@@ -130,7 +131,8 @@ def main() -> None:
             frm, subj = _dec(msg.get("From")), _dec(msg.get("Subject"))
             seen.add(mid)
             if _is_alert(frm, subj):
-                fresh.append((format_alert(subj, _plain_body(msg)), subj.strip()))
+                fresh.append((format_alert(subj, _plain_body(msg), when=_email_when(msg)),
+                              subj.strip()))
         M.logout()
     except Exception:  # noqa: BLE001
         return

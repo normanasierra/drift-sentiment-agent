@@ -265,11 +265,14 @@
     const p = [`<span class="font-bold">${esc(c.ticker)} ${fmt(c.strike, 0)}${esc(c.cp)}</span> ${esc(c.exp)}`];
     if (c.premium) p.push(`${fmtBig(c.premium)} prem`);
     else if (c.notional) p.push(`${fmtBig(c.notional)} notl`);
+    if (c.contract_price) p.push(`@$${fmt(c.contract_price, 2)}`);
     if (c.size) p.push(`${fmtK(c.size)} sz`);
     if (c.side) p.push(esc(c.side));
     if (c.volume) p.push(`vol ${fmtK(c.volume)}`);
     if (c.open_interest != null) p.push(`OI ${fmtK(c.open_interest)}`);
-    return p.join(' · ');
+    let line = p.join(' · ');
+    if (c.exec_time) line += ` · <span class="text-slate-400 whitespace-nowrap">🕐 ${esc(c.exec_time)}</span>`;
+    return line;
   };
 
   function sweepCard(c, withConf) {
