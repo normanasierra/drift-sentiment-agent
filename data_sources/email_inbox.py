@@ -54,8 +54,9 @@ def _plain_body(msg: email.message.Message) -> str:
 
 
 def _email_when(msg: email.message.Message) -> str:
-    """Email Date header as a compact local 'Mon D · H:MM AM/PM AST' (UTC-4) string.
-    Used as the execution-time fallback for alerts whose body has no timestamp."""
+    """Email Date header as a compact local 'H:MM AM/PM AST' (UTC-4) TIME string
+    (date intentionally omitted). Used as the execution-time fallback for alerts
+    whose body has no timestamp."""
     from datetime import timedelta, timezone
     from email.utils import parsedate_to_datetime
     try:
@@ -67,7 +68,7 @@ def _email_when(msg: email.message.Message) -> str:
         dt = dt.astimezone(timezone(timedelta(hours=-4)))
         h = dt.hour % 12 or 12
         ampm = "AM" if dt.hour < 12 else "PM"
-        return f"{dt.strftime('%b')} {dt.day} · {h}:{dt.minute:02d} {ampm} AST"
+        return f"{h}:{dt.minute:02d} {ampm} AST"
     except Exception:  # noqa: BLE001
         return ""
 

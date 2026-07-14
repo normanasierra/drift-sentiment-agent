@@ -125,12 +125,13 @@ def parse_contracts(
             iv /= 100.0
         dte = _dte(mon, day, yy, today)
 
-        # Execution day/time — the transaction's own timestamp from the body,
+        # Execution TIME only — the transaction's own timestamp from the body
+        # (the date is dropped; the contract already shows its expiration date),
         # else the alert's received time.
         exec_time = None
         mt = _EXECTIME.search(tail[:70])
         if mt:
-            exec_time = f"{mt.group(1)} · {re.sub(r'\s+', ' ', mt.group(2)).strip().upper()} ET"
+            exec_time = f"{re.sub(r'\s+', ' ', mt.group(2)).strip().upper()} ET"
         elif fallback_time:
             exec_time = fallback_time
 

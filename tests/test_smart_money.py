@@ -120,15 +120,15 @@ INSTIT_BODY = ("Hi Norman, we detected 1 Institutional Trade. "
 def test_parse_extracts_execution_time_and_price():
     c = parse_contracts(INSTIT_BODY, today=TODAY)[0]
     assert c["ticker"] == "TLT" and c["cp"] == "P"
-    assert c["exec_time"] == "Jul 13 · 4:01:17 PM ET"
+    assert c["exec_time"] == "4:01:17 PM ET"   # time only — the date is dropped
     assert c["contract_price"] == 3.0
     assert c["premium"] == 1.6e6 and c["size"] == 5320 and c["side"] == "Bid"
 
 
 def test_parse_uses_fallback_time_when_body_has_none():
     body = "SPY Jul 14, 26 | 739P 14456 Volume 1415 Open Interest"
-    c = parse_contracts(body, today=TODAY, fallback_time="Jul 13 · 5:00 PM AST")[0]
-    assert c["exec_time"] == "Jul 13 · 5:00 PM AST"
+    c = parse_contracts(body, today=TODAY, fallback_time="5:00 PM AST")[0]
+    assert c["exec_time"] == "5:00 PM AST"
     assert c["volume"] == 14456 and c["open_interest"] == 1415
 
 
