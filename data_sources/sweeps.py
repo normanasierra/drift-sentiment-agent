@@ -56,6 +56,30 @@ def _search(pat: str, text: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _is_edt(d: date) -> bool:
+    """US Eastern is in daylight time (EDT, UTC-4) on date d — else EST (UTC-5)."""
+    import calendar
+    if not 3 <= d.month <= 11:
+        return False
+    if 3 < d.month < 11:
+        return True
+    sundays = [w[6] for w in calendar.monthcalendar(d.year, d.month) if w[6]]
+    return d.day >= sundays[1] if d.month == 3 else d.day < sundays[0]
+
+
+def _et_to_pr(timestr: str, on_date: date) -> str:
+    """Convert a MarketSnack body time (US Eastern) to Puerto Rico time (AST, UTC-4).
+    Summer (EDT) = same; winter (EST) = +1h. Returns the H:MM[:SS] AM/PM string."""
+    m = re.match(r"(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)", timestr.strip(), re.I)
+    if not m:
+        return timestr
+    h = int(m.group(1)) % 12 + (12 if m.group(4).upper() == "PM" else 0)
+    if not _is_edt(on_date):
+        h = (h + 1) % 24
+    ap, h12 = ("AM" if h < 12 else "PM"), (h % 12 or 12)
+    return f"{h12}:{int(m.group(2)):02d}" + (f":{m.group(3)}" if m.group(3) else "") + f" {ap}"
+
+
 def _to_float(s: str | None) -> float | None:
     """Parse '1.7M', '4,500', '250' → float. None if not numeric."""
     if not s:
@@ -131,7 +155,8 @@ def parse_contracts(
         exec_time = None
         mt = _EXECTIME.search(tail[:70])
         if mt:
-            exec_time = f"{re.sub(r'\s+', ' ', mt.group(2)).strip().upper()} ET"
+            raw = re.sub(r"\s+", " ", mt.group(2)).strip().upper()
+            exec_time = f"{_et_to_pr(raw, today or date.today())} PR"
         elif fallback_time:
             exec_time = fallback_time
 

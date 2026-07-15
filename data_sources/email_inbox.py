@@ -68,7 +68,7 @@ def _email_when(msg: email.message.Message) -> str:
         dt = dt.astimezone(timezone(timedelta(hours=-4)))
         h = dt.hour % 12 or 12
         ampm = "AM" if dt.hour < 12 else "PM"
-        return f"{h}:{dt.minute:02d} {ampm} AST"
+        return f"{h}:{dt.minute:02d} {ampm} PR"
     except Exception:  # noqa: BLE001
         return ""
 

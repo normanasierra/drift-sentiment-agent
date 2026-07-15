@@ -300,15 +300,17 @@
       build = `<div class="text-[11px] text-slate-400 mt-1 italic">${esc(conf.guidance)}</div>`;
     }
     const reasons = (c.reasons || []).slice(0, 4).join(' · ');
+    const scoreCls = c.score >= 70 ? 'text-emerald-500' : 'text-rose-500';
     return `<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
       <div class="flex items-start justify-between gap-2">
         <div class="text-sm">${sweepLine(c)}</div>
         <div class="flex items-center gap-2 whitespace-nowrap">
           ${dirBadge(c.bullish)}
-          <span class="text-sm" title="Convicción ${esc(c.tier)} (${c.score}/100)">${esc(c.emoji)}</span>
+          <span class="text-4xl font-black leading-none ${scoreCls}" title="Convicción ${esc(c.tier)} (${c.score}/100)">${c.score}</span>
+          <span class="text-lg" title="Convicción ${esc(c.tier)}">${esc(c.emoji)}</span>
         </div>
       </div>
-      <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${esc(c.tier)} ${c.score}/100 · ${esc(reasons)}</div>
+      <div class="text-xs text-slate-500 dark:text-slate-400 mt-1"><span class="font-bold ${scoreCls}">${c.score}/100</span> · ${esc(c.tier)} · ${esc(reasons)}</div>
       ${verdict}${notes}${build}
     </div>`;
   }
@@ -449,7 +451,14 @@
   // ---------------------------------------------------------------- init
   function init() {
     applyTheme(S.get('theme', 'dark'));
-    applyFont(S.get('fontSize', 16));
+    // One-time bump: default reading size is now 18px. Migrate users still on the
+    // old default (16 / unset) up once; anyone who chose a size keeps their choice.
+    if (!S.get('fontBumped')) {
+      const cur = S.get('fontSize', null);
+      if (cur === null || cur === 16) S.set('fontSize', 18);
+      S.set('fontBumped', true);
+    }
+    applyFont(S.get('fontSize', 18));
     greeting();
     initAutocomplete();
     initFullscreen();
