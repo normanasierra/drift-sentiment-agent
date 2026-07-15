@@ -71,7 +71,8 @@ def _indices_block() -> str:
         d = q.get(ysym)
         if d:
             rows.append(f"  {label}: {d['price']:.2f} ({_fmt_pct(d)})")
-    return "ÍNDICES / MACRO (reales, ~15min delay):\n" + "\n".join(rows) if rows else ""
+    tag = "pre-mercado de HOY" if _is_premarket() else "~15min delay"
+    return f"ÍNDICES / MACRO (reales, {tag}):\n" + "\n".join(rows) if rows else ""
 
 
 def _portfolio_block() -> str:
@@ -83,7 +84,8 @@ def _portfolio_block() -> str:
         key=lambda d: abs(d.get("change_pct") or 0), reverse=True,
     )
     rows = [f"  {d['symbol']}: {d['price']:.2f} ({_fmt_pct(d)})" for d in ordered]
-    return "PORTAFOLIO — cambio % del día (real):\n" + "\n".join(rows)
+    tag = "pre-mercado de HOY" if _is_premarket() else "del día"
+    return f"PORTAFOLIO — cambio % {tag} (real):\n" + "\n".join(rows)
 
 
 def _watchlist_block() -> str:
@@ -91,7 +93,8 @@ def _watchlist_block() -> str:
     q = _quotes(syms)
     if not q:
         return ""
-    lines = ["WATCHLIST SPX (real, ~15min delay):"]
+    tag = "pre-mercado de HOY" if _is_premarket() else "real, ~15min delay"
+    lines = [f"WATCHLIST SPX ({tag}):"]
     for gname, group in WATCHLIST:
         parts = [f"{label} {d['price']:.2f} ({_fmt_pct(d)})"
                  for label, ysym in group if (d := q.get(ysym))]

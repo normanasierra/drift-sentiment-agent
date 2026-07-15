@@ -7,10 +7,15 @@ NUNCA inventes otro nombre.
 
 ## Contexto
 
-Este run ocurre una mañana de día hábil bursátil (~9:00 hora local, UTC-4).
-Enfócate en la SESIÓN COMPLETADA más reciente y en el pre-mercado / overnight
-de hoy. Usa **WebSearch / WebFetch**; nunca inventes cifras (marca lo que no
-encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
+Este run ocurre una mañana de día hábil bursátil (~9:00 hora local, UTC-4),
+ANTES de la apertura (9:30am ET). Enfócate en **HOY**: el **pre-mercado de esta
+mañana**, los **futuros de hoy**, las **noticias de hoy** (overnight + pre-mercado)
+y **lo que sucederá durante el día** (agenda / catalizadores). La sesión de AYER
+se menciona SOLO como una línea de contexto si hace falta para entender la apertura
+— **NO hagas un recap de la sesión pasada**. Los precios del bloque DATOS REALES ya
+vienen del **pre-mercado de hoy** (no del cierre de ayer): trátalos como tal. Usa
+**WebSearch / WebFetch** para noticias y agenda; nunca inventes cifras (marca lo que
+no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
 
 ## Pasos de investigación
 
@@ -31,12 +36,15 @@ encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    - Financieras y pesos pesados: sesgo general (JPM/GS/BAC · LLY/WMT/COST/XOM/V/MA).
    Cierra con una **lectura de una línea para SPX** (sesgo intradía probable).
 
-3. **Noticias**: si el bloque de DATOS REALES incluye **NEWSLETTERS PAGADAS**
-   (CNBC/Barron's/MarketSnacks del inbox), úsalas como **fuente PRINCIPAL** y
-   resume de ahí lo que mueve el mercado (ya son contenido de pago, más valioso
-   que la web abierta). Complementa con **Yahoo Finance** y **CNBC** por web.
-   Saca los **3-5 titulares macro** que muevan la renta variable de EE. UU. hoy,
-   cada uno con una frase de "por qué importa".
+3. **Noticias de HOY** (bien resumidas): saca los **3-5 titulares macro más
+   importantes que muevan la renta variable de EE. UU. HOY** — de esta madrugada,
+   el overnight y el pre-mercado; **NO el recap de la sesión de ayer**. Si el bloque
+   de DATOS REALES incluye **NEWSLETTERS PAGADAS** (CNBC/Barron's/MarketSnacks del
+   inbox), úsalas como **fuente PRINCIPAL** (contenido de pago, más valioso que la
+   web abierta) y complementa con **Yahoo Finance** y **CNBC** por web, verificando
+   que sea de HOY. Cada titular: una frase clara de **qué pasó** y **por qué importa
+   para el mercado hoy**. Prioriza lo que mueve índices / tasas / sectores esta
+   mañana. Resume bien: claro, concreto y sin relleno.
 
 4. **Trump**: busca lo más reciente y relevante para el MERCADO que haya dicho
    o hecho Trump (declaraciones, aranceles, Fed, política económica, órdenes
@@ -51,8 +59,19 @@ encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    `SPX, CRM, AMZN, AMD, TSLA, INTC, IBM, UFO, STM, COIN, NOW, MU, MRVL,
    PLTR, QS, IREN, MSFT, NVDA, CRWV, SPCX, NFLX, CBRS`
 
-6. **A vigilar hoy**: datos económicos programados, discursos de la Fed,
-   earnings destacados (marca si alguno es de un ticker del portafolio).
+6. **Lo que sucederá HOY (agenda del día)** — sección CLAVE que Norman quiere.
+   Busca y lista, con **HORA (ET / hora local)** cuando la haya, lo programado para
+   hoy:
+   - **Datos económicos** (CPI/PPI, empleo/nóminas, PMI/ISM, ventas minoristas,
+     confianza, inventarios, peticiones de desempleo…): nombre, hora, y qué espera
+     el **consenso** vs. el dato previo.
+   - **Fed**: discursos de miembros, subastas del Tesoro, actas/decisiones.
+   - **Earnings de hoy** (antes de abrir / después del cierre); **marca** si alguno
+     es de un ticker del portafolio de Norman.
+   - Otros catalizadores (testimonios, vencimientos, decisiones regulatorias).
+   Si un dato ya salió esta mañana, di el **resultado vs. lo esperado** y la reacción
+   del mercado. Ordena por hora / importancia. Solo si de verdad no hay nada, dilo en
+   una línea.
 
 ## Salida — produce EXACTAMENTE dos bloques de contenido
 
@@ -72,8 +91,8 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   Financieras · Pesos pesados · ETFs SPY/QQQ/IWM/SMH) con Último y % día; debajo,
   las 4-6 viñetas de lectura + la **línea de sesgo SPX**. Marca en negrita si las
   7 Magníficas están ALINEADAS.
-- **Noticias macro** (Yahoo Finance / CNBC): 3-5 viñetas (titular en negrita +
-  por qué importa).
+- **Noticias macro de HOY**: 3-5 viñetas (titular en negrita + por qué importa
+  para el mercado hoy). De overnight / pre-mercado — **no** recap de ayer.
 - **Movers ≥5%** (usa el bloque DATOS REALES: "MOVERS PRE-MERCADO" en la corrida de
   la MAÑANA, o "MOVERS DEL DÍA" en la de la TARDE). Lista las compañías que suben
   **≥5%** con su símbolo, el **%** y el precio; añade una frase de **por qué se
@@ -96,7 +115,9 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   `Ticker | Último | % Día | Nivel/nota`. Incluye todos los tickers; en la
   columna nota, pon la noticia/catalizador si lo hay, o un nivel clave, o "—".
   Ordena por mayor movimiento del día. Encabezado recordando que es educativo.
-- **A vigilar hoy**: catalizadores / datos / earnings.
+- **Agenda de HOY — lo que sucederá durante el día** (sección DESTACADA): datos
+  económicos con **hora** y consenso, Fed, earnings (marca los del portafolio) y
+  demás catalizadores, ordenados por hora / importancia.
 - Pie: `Herramienta educativa — no es asesoría financiera.` + marca de tiempo.
 
 Usa números reales; "n/d" si falta un dato. Que sea escaneable.
@@ -107,8 +128,9 @@ Texto plano, ESPAÑOL, **menos de 850 caracteres** (límite duro), sin HTML.
 Incluye, en este orden y muy conciso:
 - Línea inicial: `📊 Brief <fecha>` + sesgo.
 - SPX/QQQ (nivel clave), VIX, 10Y en una o dos líneas.
-- Futuros ES/NQ (↑/↓) y si las 7 Magníficas están alineadas (1 línea).
-- La **noticia** más importante (1 línea).
+- Futuros ES/NQ (↑/↓) del pre-mercado de hoy y si las 7 Magníficas están alineadas (1 línea).
+- La **noticia** de HOY más importante (1 línea).
+- **Hoy**: el dato / evento clave del día con su **hora** (1 línea, p.ej. "Hoy 8:30am CPI").
 - **Trump**: 1 línea si hay algo relevante (si no, omite).
 - **Portafolio**: SOLO los 3-5 tickers TUYOS que más se movieron hoy (ticker,
   % día, y motivo si lo hay). No los listes todos.
