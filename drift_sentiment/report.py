@@ -37,6 +37,7 @@ def build_report(
     contracts: list[Contract],
     as_of: date,
     tolerance_days: int = DEFAULT_TOLERANCE_DAYS,
+    targets: list[tuple[str, int]] | None = None,
 ) -> DriftReport:
     """Run the full pipeline and return a DriftReport.
 
@@ -49,7 +50,7 @@ def build_report(
     """
     report = DriftReport(ticker=ticker.upper(), spot=spot, as_of=as_of)
 
-    for sentiment, target_dte, exp in chain_filter.select_buckets(contracts, as_of):
+    for sentiment, target_dte, exp in chain_filter.select_buckets(contracts, as_of, targets):
         bucket_contracts = chain_filter.contracts_for_expiration(contracts, exp)
         cw = walls.call_wall(bucket_contracts)
         pw = walls.put_wall(bucket_contracts)

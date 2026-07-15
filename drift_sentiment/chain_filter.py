@@ -45,17 +45,20 @@ def nearest_expiration(expirations: list[date], target_dte: int, as_of: date) ->
 
 
 def select_buckets(
-    contracts: list[Contract], as_of: date
+    contracts: list[Contract], as_of: date,
+    targets: list[tuple[str, int]] | None = None,
 ) -> list[tuple[str, int, date]]:
     """Resolve each (sentiment, target_dte) to a concrete monthly expiration.
 
     Returns a list of (sentiment, target_dte, expiration). Targets with no
     available monthly expiration are skipped. The same expiration may serve
-    more than one target if the chain is sparse.
+    more than one target if the chain is sparse. ``targets`` overrides the
+    default DTE ladder (the Sentiment+GEX tab passes a 5-bucket ladder that
+    adds ~60 DTE) without changing the default used by the other views.
     """
     monthlies = monthly_expirations(contracts)
     resolved: list[tuple[str, int, date]] = []
-    for sentiment, target in DTE_TARGETS:
+    for sentiment, target in (targets or DTE_TARGETS):
         exp = nearest_expiration(monthlies, target, as_of)
         if exp is not None:
             resolved.append((sentiment, target, exp))

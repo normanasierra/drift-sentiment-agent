@@ -15,7 +15,7 @@
       } } }
     };
   </script>
-  <script src="/static/app.js?v=11" defer></script>
+  <script src="/static/app.js?v=12" defer></script>
   <style>
     html { font-size: 21px; }              /* overridden live by the font-size setting */
     ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -28,6 +28,9 @@
       color: #64748b; cursor: pointer; transition: color .15s, background .15s; }
     .tabBtn:hover { background: rgba(148,163,184,.14); }
     .tabBtn.active { color: #a855f7; border-bottom-color: #a855f7; }
+    /* Collapsible cards (Sentiment + GEX tab): chevron rotates when open */
+    .sent-chev { transition: transform .15s; display: inline-block; }
+    .sent-collapse.open .sent-chev { transform: rotate(90deg); }
   </style>
 </head>
 <body class="min-h-screen bg-slate-100 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors">

@@ -24,6 +24,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from drift_sentiment import (
     chain_filter, drift, polygon_client, report as report_mod, scenarios,
+    sentiment_view,
 )
 from drift_sentiment.plotting import build_box_plots, build_gex_profiles
 
@@ -361,6 +362,96 @@ def api_unusual(ticker: str = ""):
         "top": [_sweep_json(c) for c in contracts[:15]],
         "ladders": ladders,
         "cross_day_rolls": rolls,
+    }
+
+
+# --- Options — Sentiment + GEX tab -----------------------------------------
+# Its own cache: unlike /api/report (targeted monthly fetch), this needs the FULL
+# chain so the GEX Matrix can show weekly expirations, and a 5-bucket report (+60 DTE).
+_SENT_CACHE: dict[str, tuple[float, float, object, list]] = {}
+
+
+def _load_sentiment(ticker: str, ttl: int = 180):
+    now = time.time()
+    hit = _SENT_CACHE.get(ticker)
+    if hit and now - hit[0] < ttl:
+        return hit[1], hit[2], hit[3]
+    today = datetime.date.today()
+    spot, contracts = polygon_client.fetch_chain(ticker)   # full chain (weeklies incl.)
+    rep = report_mod.build_report(ticker, spot, contracts, today,
+                                  targets=sentiment_view.SENTIMENT_TARGETS)
+    _SENT_CACHE[ticker] = (now, spot, rep, contracts)
+    return spot, rep, contracts
+
+
+@app.get("/api/sentiment")
+def api_sentiment(ticker: str = ""):
+    """Options — Sentiment + GEX: macro (GEX + matrix) → structure (walls/notional/σ)
+    → micro (aggressor flow) → conclusion (structure levels, educational). READ-ONLY
+    over the engine; never emits a recommended trade."""
+    ticker = (ticker or "").strip().upper()
+    if not ticker:
+        return JSONResponse({"error": "No ticker"}, status_code=400)
+    try:
+        spot, rep, contracts = _load_sentiment(ticker)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    if not rep.buckets:
+        return JSONResponse({"error": f"No monthly option structure for {ticker}."},
+                            status_code=502)
+
+    today = datetime.date.today()
+    from data_sources import sweeps as sweeps_mod
+    sweeps: list[dict] = []
+    for it in _todays_sweeps():
+        sweeps.extend(sweeps_mod.parse_contracts(
+            it.get("body") or "", spot={ticker: spot}, fallback_time=it.get("date")))
+
+    matrix = sentiment_view.gex_matrix(contracts, spot, today)
+
+    buckets, flow, notional = [], {}, {}
+    for b in rep.buckets:
+        ec = chain_filter.contracts_for_expiration(contracts, b.expiration)
+        buckets.append({
+            "label": b.label, "sentiment": b.sentiment,
+            "bias": "Bullish" if b.magneto_notional > 0 else "Bearish",
+            "expiration": b.expiration.isoformat(), "actual_dte": b.actual_dte,
+            "call_wall": b.call_wall.strike, "put_wall": b.put_wall.strike,
+            "magneto": b.magneto_strike, "gamma_flip": b.zero_gamma,
+            "net_gex_m": round(b.total_gex / 1e6, 2),
+            "sigma": round(b.sigma, 2) if b.sigma else None, "drift": b.drift,
+        })
+        flow[b.label] = sentiment_view.flow_conviction(b, ticker, sweeps, spot, ec)
+        notional[b.label] = sentiment_view.notional_profile(ec)
+
+    near = min(rep.buckets, key=lambda b: b.actual_dte)
+    default_b = near.label
+    macro = {
+        "net_gex": matrix["net"], "net_gex_m": round(matrix["net"] / 1e6, 2),
+        "pos_m": round(matrix["total_pos"] / 1e6, 2),
+        "neg_m": round(matrix["total_neg"] / 1e6, 2),
+        "gamma_flip": near.zero_gamma, "regime": "positive" if matrix["net"] >= 0 else "negative",
+        "call_gamma_wall": near.call_gamma_wall, "put_gamma_wall": near.put_gamma_wall,
+    }
+    header = {
+        "ticker": ticker, "spot": spot, "as_of": rep.as_of.isoformat(),
+        "bias": "Bullish" if rep.total_notional > 0 else "Bearish",
+        "regime": "Long γ" if matrix["net"] >= 0 else "Short γ",
+        "flip": near.zero_gamma, "net_notional": rep.total_notional,
+        "total_shares": rep.total_shares, "default_bucket": default_b,
+        "flow_prediction": flow[default_b]["prediction"], "flow_target": flow[default_b]["target"],
+    }
+    try:
+        candles = polygon_client.fetch_daily_bars(ticker) or []
+    except Exception:  # noqa: BLE001
+        candles = []
+
+    return {
+        "header": header, "macro": macro, "matrix": matrix, "buckets": buckets,
+        "flow": flow, "notional": notional, "levels": sentiment_view.chart_levels(rep.buckets, spot),
+        "whales": sentiment_view.whales(ticker, sweeps, contracts, spot), "candles": candles,
+        "text": report_mod.format_text_report(rep),
+        "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
 
 
