@@ -833,8 +833,20 @@
       </div>`;
   }
 
-  const newsHtml = () => sectionTitle('NOTICIAS', 'Noticias del símbolo', '')
-    + '<div class="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-6 text-center text-sm text-slate-400">📰 Próximamente — aún sin fuente de noticias conectada.</div>';
+  function newsHtml(d) {
+    const items = d.news || [];
+    if (!items.length) return sectionTitle('NOTICIAS', 'Noticias del símbolo', '')
+      + '<div class="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-6 text-center text-sm text-slate-400">📰 Sin noticias recientes para este símbolo.</div>';
+    const cards = items.map((a) => `
+      <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer"
+         class="block rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+        <div class="text-sm font-semibold leading-snug">${esc(a.title)}</div>
+        <div class="text-[11px] text-slate-400 mt-1">${esc(a.publisher)}${a.published ? ' · ' + esc(a.published) : ''}</div>
+        ${a.description ? `<div class="text-xs text-slate-500 dark:text-slate-400 mt-1">${esc(a.description)}</div>` : ''}
+      </a>`).join('');
+    return sectionTitle('NOTICIAS', 'Noticias del símbolo', 'Titulares recientes del ticker (Polygon).')
+      + `<div class="grid md:grid-cols-2 gap-2">${cards}</div>`;
+  }
 
   const knowhowModalHtml = () => `<div id="sentKnowhow" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
     <div class="absolute inset-0 bg-black/50" data-modal-close></div>
@@ -872,7 +884,7 @@
       + `<div class="rounded-xl border-2 border-brand/30 bg-white dark:bg-slate-900 p-4"><div id="sentFlowBody">${flowBodyHtml(sbFlow)}</div></div>`
       + sectionTitle('CONCLUSIÓN', 'Precio + estructura', 'Bucket seleccionable · sólo niveles estructurales. Tú dibujas tu plan.')
       + collapsible('conc', 'Precio + estructura', 'Sólo niveles estructurales (educativo)', conclusionInnerHtml(d), true)
-      + whalesHtml(d) + newsHtml()
+      + whalesHtml(d) + newsHtml(d)
       + collapsible('notas', 'Notas & Reporte completo', 'Texto del análisis', `<pre class="overflow-x-auto whitespace-pre text-[11px] leading-relaxed font-mono text-slate-700 dark:text-slate-200">${esc(d.text || '')}</pre>`, false)
       + knowhowModalHtml();
     buildSentCandle(d);

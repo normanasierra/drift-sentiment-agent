@@ -405,6 +405,37 @@ def _ticker_name(ticker: str) -> str:
     return name
 
 
+_NEWS: dict[str, tuple[float, list]] = {}
+
+
+def _ticker_news(ticker: str, *, limit: int = 6, ttl: int = 900) -> list[dict]:
+    """Recent headlines for the symbol (Polygon news). Cached 15 min, best-effort
+    — returns [] on any failure so it never blocks the sentiment view."""
+    now = time.time()
+    hit = _NEWS.get(ticker)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    out: list[dict] = []
+    try:
+        key = polygon_client._api_key()
+        r = requests.get(f"{BASE}/v2/reference/news", timeout=10, params={
+            "ticker": ticker, "limit": limit, "order": "desc",
+            "sort": "published_utc", "apiKey": key})
+        if r.status_code == 200:
+            for a in r.json().get("results", [])[:limit]:
+                out.append({
+                    "title": (a.get("title") or "").strip(),
+                    "url": a.get("article_url") or "",
+                    "publisher": ((a.get("publisher") or {}).get("name") or "").strip(),
+                    "published": (a.get("published_utc") or "")[:10],
+                    "description": (a.get("description") or "").strip()[:220],
+                })
+    except Exception:  # noqa: BLE001
+        out = []
+    _NEWS[ticker] = (now, out)
+    return out
+
+
 @app.get("/api/sentiment")
 def api_sentiment(ticker: str = ""):
     """Options — Sentiment + GEX: macro (GEX + matrix) → structure (walls/notional/σ)
@@ -472,6 +503,7 @@ def api_sentiment(ticker: str = ""):
         "header": header, "macro": macro, "matrix": matrix, "buckets": buckets,
         "flow": flow, "notional": notional, "levels": sentiment_view.chart_levels(rep.buckets, spot),
         "whales": sentiment_view.whales(ticker, sweeps, contracts, spot), "candles": candles,
+        "news": _ticker_news(ticker),
         "text": report_mod.format_text_report(rep),
         "generated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
