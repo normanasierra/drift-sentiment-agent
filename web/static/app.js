@@ -278,39 +278,34 @@
   function sweepCard(c, withConf) {
     const conf = withConf && c.confluence ? c.confluence : null;
     const notes = conf && conf.notes && conf.notes.length
-      ? `<ul class="mt-1 text-xs text-slate-500 dark:text-slate-400 list-disc list-inside">
-           ${conf.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : '';
+      ? `<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">${esc(conf.notes.slice(0, 2).join(' · '))}</div>` : '';
     const verdict = conf && conf.verdict && conf.verdict !== 'n/d'
       ? `<div class="text-xs font-semibold ${verdictCls(conf.verdict)} mt-1">▶ ${esc(conf.verdict)}</div>` : '';
     const constr = conf && conf.construction ? conf.construction : null;
     let build = '';
     if (constr) {
-      const v = constr.vertical;
-      const row = (lbl, s, note) => s == null ? ''
-        : `<div>• <span class="font-medium">${esc(lbl)}:</span> ~$${fmt(s, 0)} <span class="opacity-70">(${esc(note)})</span></div>`;
+      const parts = [];
+      if (constr.aggressive && constr.aggressive.strike != null) parts.push(`Agr ~$${fmt(constr.aggressive.strike, 0)}`);
+      if (constr.conviction && constr.conviction.strike != null) parts.push(`Conv ~$${fmt(constr.conviction.strike, 0)}`);
       build = `<div class="mt-1 pt-1 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-        <span class="font-semibold text-brand-soft">Cómo seguirlo (educativo):</span>
-        ${row('Agresivo', constr.aggressive.strike, constr.aggressive.desc)}
-        ${row('Convicción', constr.conviction.strike, constr.conviction.desc)}
-        ${v ? `<div>• <span class="font-medium">Vertical:</span> ${esc(v.note)}</div>` : ''}
-        <div class="italic mt-0.5">${esc(constr.roll)}</div>
-        ${constr.iv_note ? `<div class="text-amber-500 mt-0.5">⚠ ${esc(constr.iv_note)}</div>` : ''}
+        ${parts.length ? `<span class="font-semibold text-brand-soft">Seguirlo:</span> ${esc(parts.join(' · '))}` : ''}
+        ${constr.iv_note ? `<span class="text-amber-500"> · ⚠ ${esc(constr.iv_note)}</span>` : ''}
       </div>`;
     } else if (conf && conf.guidance) {
       build = `<div class="text-[11px] text-slate-400 mt-1 italic">${esc(conf.guidance)}</div>`;
     }
-    const reasons = (c.reasons || []).slice(0, 4).join(' · ');
+    const reasons = (c.reasons || []).slice(0, 3).join(' · ');
     const scoreCls = c.score >= 70 ? 'text-emerald-500' : 'text-rose-500';
     return `<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
       <div class="flex items-start justify-between gap-2">
         <div class="text-sm">${sweepLine(c)}</div>
         <div class="flex items-center gap-2 whitespace-nowrap">
           ${dirBadge(c.bullish)}
-          <span class="text-4xl font-black leading-none ${scoreCls}" title="Convicción ${esc(c.tier)} (${c.score}/100)">${c.score}</span>
+          <span class="text-4xl font-black leading-none ${scoreCls}" title="Convicción ${esc(c.tier)} (${c.score}/100)">${c.score}%</span>
           <span class="text-lg" title="Convicción ${esc(c.tier)}">${esc(c.emoji)}</span>
         </div>
       </div>
-      <div class="text-xs text-slate-500 dark:text-slate-400 mt-1"><span class="font-bold ${scoreCls}">${c.score}/100</span> · ${esc(c.tier)} · ${esc(reasons)}</div>
+      <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">${esc(c.tier)} · ${esc(reasons)}</div>
       ${verdict}${notes}${build}
     </div>`;
   }
@@ -453,12 +448,12 @@
     applyTheme(S.get('theme', 'dark'));
     // One-time bump: default reading size is now 18px. Migrate users still on the
     // old default (16 / unset) up once; anyone who chose a size keeps their choice.
-    if (!S.get('fontBumped')) {
+    if (!S.get('fontBumped3')) {
       const cur = S.get('fontSize', null);
-      if (cur === null || cur === 16) S.set('fontSize', 18);
-      S.set('fontBumped', true);
+      if (cur === null || cur === 16 || cur === 18) S.set('fontSize', 21);
+      S.set('fontBumped3', true);
     }
-    applyFont(S.get('fontSize', 18));
+    applyFont(S.get('fontSize', 21));
     greeting();
     initAutocomplete();
     initFullscreen();
