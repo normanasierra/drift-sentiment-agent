@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -69,6 +70,43 @@ def _between(text: str, start: str, end: str) -> str:
     if i == -1 or j == -1 or j < i:
         return ""
     return text[i + len(start): j].strip()
+
+
+def _strip_html(html: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+
+
+def _extract_email(text: str) -> str:
+    """The email HTML — tolerant of Haiku dropping/mangling the markers."""
+    e = _between(text, EMAIL_START, EMAIL_END)
+    if e:
+        return e
+    i = text.find(EMAIL_START)  # START present, END missing -> up to WA block / end
+    if i != -1:
+        seg = text[i + len(EMAIL_START):].split(WA_START)[0]
+        return seg.replace(EMAIL_END, "").strip()
+    for tag in ("<!DOCTYPE", "<!doctype", "<html", "<body", "<div", "<table"):  # no markers
+        k = text.find(tag)
+        if k != -1:
+            return text[k:].split(WA_START)[0].replace(EMAIL_END, "").strip()
+    return ""
+
+
+def _extract_wa(text: str, email: str) -> str:
+    """The WhatsApp text — tolerant, and SYNTHESIZED from the email if missing so a
+    dropped WhatsApp block never blocks the whole send."""
+    w = _between(text, WA_START, WA_END)
+    if w:
+        return w
+    i = text.find(WA_START)
+    if i != -1:
+        seg = text[i + len(WA_START):].replace(WA_END, "").strip()
+        if seg:
+            return seg[:850]
+    plain = _strip_html(email)
+    if plain:
+        return "📊 Brief de mercado — " + plain[:760] + "… (detalle completo en el email)."
+    return "📊 Brief de mercado listo — revisa tu email para el detalle. No es asesoría."
 
 
 def _real_data() -> str:
@@ -126,21 +164,21 @@ def generate() -> None:
             sys.exit(last_err)
         sys.exit(last_err)
 
-    # Haiku occasionally ignores the output markers; regenerate a few times before
-    # giving up so a one-off bad format doesn't cost the whole day's brief.
+    # Haiku occasionally mangles the output markers; regenerate a few times, then
+    # extract TOLERANTLY (email even without clean markers; WhatsApp synthesized from
+    # the email if missing) so a one-off bad format never costs the whole day's brief.
     email = wa = text = ""
     for _ in range(3):
         data = _post()
         text = "".join(
             b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
         )
-        email = _between(text, EMAIL_START, EMAIL_END)
-        wa = _between(text, WA_START, WA_END)
-        if email and wa:
-            break
-    if not email or not wa:
-        sys.exit("Could not parse brief output between markers after 3 tries.\n"
-                 "--- raw ---\n" + text[:1500])
+        email = _extract_email(text)
+        wa = _extract_wa(text, email)
+        if email and _between(text, WA_START, WA_END):
+            break  # clean run; otherwise loop tries again but we can still send below
+    if not email:
+        sys.exit("Could not extract brief email after 3 tries.\n--- raw ---\n" + text[:1500])
 
     OUT_DIR.mkdir(exist_ok=True)
     EMAIL_FILE.write_text(email, encoding="utf-8")
