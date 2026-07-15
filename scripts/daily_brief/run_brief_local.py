@@ -67,6 +67,27 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001 - never let the check block a normal day
             log(f"aviso: no pude checar el calendario ({exc}); sigo igual.")
 
+    # Schwab token health: WhatsApp a re-auth reminder (once/day) when it expires,
+    # so his positions stop silently dropping out of the brief. Best-effort.
+    try:
+        from data_sources import schwab
+        marker = OUT / "schwab_reauth_reminded.txt"
+        today = datetime.date.today().isoformat()
+        done_today = marker.exists() and marker.read_text(encoding="utf-8").strip() == today
+        if not done_today and not dry and schwab.needs_reauth():
+            subprocess.run(
+                [PY, str(BRIEF / "send_whatsapp.py")],
+                input=("⚠️ Schwab: el token venció (pasan ~7 días). Doble-clic a "
+                       "schwab-login.cmd para renovar (login → Approve → 'Continuar'). "
+                       "Así tus posiciones vuelven al brief."),
+                text=True, cwd=str(BRIEF),
+            )
+            OUT.mkdir(exist_ok=True)
+            marker.write_text(today, encoding="utf-8")
+            log("Schwab: token vencido — recordatorio enviado por WhatsApp.")
+    except Exception as exc:  # noqa: BLE001 — never block the brief
+        log(f"aviso: chequeo de Schwab falló ({exc}); sigo igual.")
+
     log(f"===== local brief run start ({'DRY' if dry else 'SEND'}) =====")
 
     for f in (EMAIL, WA):

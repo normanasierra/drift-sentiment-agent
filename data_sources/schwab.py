@@ -108,6 +108,24 @@ def positions() -> list[dict]:
         return []
 
 
+def needs_reauth() -> bool:
+    """True if Schwab WAS set up (a refresh token exists) but can no longer pull data
+    — i.e. the ~7-day refresh token expired and a fresh login is due. False if it's
+    not set up (nothing to nag about) or if it's working fine. Network blips don't
+    false-alarm."""
+    if not _load().get("refresh_token"):
+        return False
+    tok = _access_token()
+    if not tok:
+        return True
+    try:
+        r = requests.get(f"{BASE}/accounts", params={"fields": "positions"},
+                         headers={"Authorization": f"Bearer {tok}"}, timeout=15)
+        return r.status_code == 401
+    except Exception:  # noqa: BLE001 — a network blip isn't an expiry
+        return False
+
+
 if __name__ == "__main__":
     if not configured():
         print("Schwab sin autorizar todavía — corre scripts/schwab_auth.py una vez.")
