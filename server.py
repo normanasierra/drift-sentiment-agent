@@ -384,6 +384,27 @@ def _load_sentiment(ticker: str, ttl: int = 180):
     return spot, rep, contracts
 
 
+_NAMES: dict[str, str] = {}
+
+
+def _ticker_name(ticker: str) -> str:
+    """Company name for the matrix header (e.g. 'Intel Corp'). Cached, best-effort
+    — returns '' on any failure so it never blocks the sentiment view."""
+    if ticker in _NAMES:
+        return _NAMES[ticker]
+    name = ""
+    try:
+        key = polygon_client._api_key()
+        r = requests.get(f"{BASE}/v3/reference/tickers/{ticker}",
+                         params={"apiKey": key}, timeout=8)
+        if r.status_code == 200:
+            name = ((r.json().get("results") or {}).get("name") or "").strip()
+    except Exception:  # noqa: BLE001
+        name = ""
+    _NAMES[ticker] = name
+    return name
+
+
 @app.get("/api/sentiment")
 def api_sentiment(ticker: str = ""):
     """Options — Sentiment + GEX: macro (GEX + matrix) → structure (walls/notional/σ)
@@ -434,7 +455,8 @@ def api_sentiment(ticker: str = ""):
         "call_gamma_wall": near.call_gamma_wall, "put_gamma_wall": near.put_gamma_wall,
     }
     header = {
-        "ticker": ticker, "spot": spot, "as_of": rep.as_of.isoformat(),
+        "ticker": ticker, "name": _ticker_name(ticker),
+        "spot": spot, "as_of": rep.as_of.isoformat(),
         "bias": "Bullish" if rep.total_notional > 0 else "Bearish",
         "regime": "Long γ" if matrix["net"] >= 0 else "Short γ",
         "flip": near.zero_gamma, "net_notional": rep.total_notional,

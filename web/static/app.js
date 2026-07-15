@@ -592,30 +592,49 @@
   function matrixCardHtml(d) {
     const m = d.matrix, h = d.header;
     const chg = candleChangePct(d.candles);
-    const chgHtml = chg == null ? '' : `<span class="${chg >= 0 ? 'text-emerald-500' : 'text-rose-500'}">(${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%)</span>`;
-    const regLabel = m.net >= 0 ? 'Long γ (positivo)' : 'Short γ (negativo)';
-    const infobar = `<div class="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span class="font-bold text-slate-700 dark:text-slate-200">${esc(h.ticker)}</span>
-      <span>$${fmt(m.spot, 2)} ${chgHtml}</span>
-      <span>+GEX <span class="text-sky-500 font-semibold">${gexC(m.total_pos)}</span></span>
-      <span>−GEX <span class="text-purple-500 font-semibold">${gexC(m.total_neg)}</span></span>
-      <span>Net <span class="${m.net >= 0 ? 'text-emerald-500' : 'text-rose-500'} font-semibold">${gexC(m.net)}</span></span>
-      <span>${regLabel}</span>
-      <span>Flip $${fmt(h.flip, 0)}</span>
-      <span>+GEX @ <span class="text-sky-500">${esc(shortExp(m.most_pos_exp))}</span></span>
-      <span>−GEX @ <span class="text-purple-500">${esc(shortExp(m.most_neg_exp))}</span></span>
+    const chgHtml = chg == null ? '' : `<span class="${chg >= 0 ? 'text-emerald-500' : 'text-rose-500'} text-xs font-semibold">${chg >= 0 ? '▲ +' : '▼ '}${chg.toFixed(2)}%</span>`;
+    const regLabel = m.net >= 0 ? 'Long γ' : 'Short γ';
+    const initials = esc((h.ticker || '?').slice(0, 4));
+    const stat = (label, val, cls = '') => `
+      <div class="px-1">
+        <div class="text-[9px] uppercase tracking-wide text-slate-400 whitespace-nowrap">${label}</div>
+        <div class="text-sm font-bold whitespace-nowrap ${cls}">${val}</div>
+      </div>`;
+    const header = `<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div class="flex items-center gap-2 shrink-0">
+        <div class="w-9 h-9 rounded-full bg-brand/15 text-brand-soft grid place-items-center text-[10px] font-black">${initials}</div>
+        <div>
+          <div class="font-bold leading-tight">${esc(h.ticker)}</div>
+          ${h.name ? `<div class="text-[10px] text-slate-400 leading-tight">${esc(h.name)}</div>` : ''}
+        </div>
+      </div>
+      ${stat('Precio', `$${fmt(m.spot, 2)} ${chgHtml}`)}
+      ${stat('+GEX', gexC(m.total_pos), 'text-sky-500')}
+      ${stat('−GEX', gexC(m.total_neg), 'text-purple-500')}
+      ${stat('Net GEX', gexC(m.net), m.net >= 0 ? 'text-emerald-500' : 'text-rose-500')}
+      ${stat('Régimen', regLabel, gammaCls(regLabel))}
+      ${stat('Gamma Flip', `$${fmt(h.flip, 0)}`)}
+      ${stat('Más +GEX @', shortExp(m.most_pos_exp), 'text-sky-500')}
+      ${stat('Más −GEX @', shortExp(m.most_neg_exp), 'text-purple-500')}
+    </div>`;
+    const legend = `<div class="flex flex-wrap items-center gap-3 mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+      <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm" style="background:rgba(168,85,247,.55)"></span>más −GEX</span>
+      <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm bg-slate-300 dark:bg-slate-700"></span>neutral</span>
+      <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm" style="background:rgba(56,189,248,.55)"></span>más +GEX</span>
+      <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-sm" style="background:rgba(234,179,8,.85)"></span>mayor |GEX| ★</span>
     </div>`;
     return `<div id="sentMatrixCard" class="chart-card rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
-      <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
-        ${infobar}
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        ${header}
         <div class="flex gap-1 shrink-0">
-          <button data-export class="px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700">⬇ Export Excel</button>
-          <button data-knowhow class="px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700">ℹ GEX KnowHow</button>
+          <button data-export class="px-2 py-1 text-xs rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-500/25">⬇ Export Excel</button>
+          <button data-knowhow class="px-2 py-1 text-xs rounded-lg bg-brand/15 text-brand-soft hover:bg-brand/25">ℹ GEX KnowHow</button>
           <button data-fs="sentMatrixCard" class="fsBtn px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">⛶ Pantalla completa</button>
           <button data-restore="sentMatrixCard" class="rsBtn hidden px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">↩ Restaurar</button>
         </div>
       </div>
-      <div class="chart-body overflow-auto max-h-[60vh]">${matrixTableHtml(m)}</div>
+      ${legend}
+      <div class="chart-body overflow-auto max-h-[60vh] mt-2">${matrixTableHtml(m)}</div>
     </div>`;
   }
 
@@ -845,7 +864,7 @@
       sentHeaderHtml(d) + sentCardsHtml(d)
       + sectionTitle('MACRO · el ambiente', 'Gamma Exposure (GEX)', 'Toda la cadena — dónde los dealers amortiguan o amplifican el movimiento.')
       + collapsible('gex', 'Gamma Exposure (GEX) · toda la cadena', 'Perfil por strike, régimen y gamma walls', gexBodyHtml(d), true)
-      + collapsible('matrix', 'GEX Matrix · strike × vencimiento', 'Azul +GEX · Morado −GEX · Amarillo ★ mayor |GEX|', matrixCardHtml(d), false)
+      + collapsible('matrix', 'GEX Matrix · strike × vencimiento', 'Azul +GEX · Morado −GEX · Amarillo ★ mayor |GEX|', matrixCardHtml(d), true)
       + sectionTitle('ESTRUCTURA · los muros', 'Paredes por vencimiento', 'Call/Put walls, imán y gamma flip por bucket DTE.')
       + collapsible('paredes', 'Paredes por vencimiento', '', paredesHtml(d), true)
       + collapsible('walls', 'Walls & Net Notional por strike', 'Calls (+) verde · Puts (−) rojo', `<div id="sentStructChart">${structChartHtml(sbStruct)}</div>`, true)
