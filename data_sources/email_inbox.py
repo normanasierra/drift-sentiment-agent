@@ -25,7 +25,7 @@ IMAP_HOST = os.getenv("IMAP_HOST", "imap.gmail.com")
 # both live under response.cnbc.com, caught by "cnbc.com".
 NEWSLETTER_SENDERS = [
     "marketsnacks", "snacks", "barrons.com", "dowjones.com",
-    "cnbc.com", "wsj.com", "yahoofinance", "finance.yahoo",
+    "cnbcpro", "cnbc.com", "wsj.com", "yahoofinance", "finance.yahoo",
 ]
 
 
@@ -85,6 +85,7 @@ def recent_newsletters(*, since_days: int = 1, max_msgs: int = 8) -> list[dict]:
     since = (date.today() - timedelta(days=since_days)).strftime("%d-%b-%Y")
 
     out: list[dict] = []
+    seen: set[str] = set()  # dedup across overlapping sender fragments (e.g. cnbcpro vs cnbc.com)
     try:
         M = imaplib.IMAP4_SSL(IMAP_HOST)
         M.login(user, pw)
@@ -98,6 +99,10 @@ def recent_newsletters(*, since_days: int = 1, max_msgs: int = 8) -> list[dict]:
                 if typ != "OK":
                     continue
                 msg = email.message_from_bytes(msg_data[0][1])
+                mid = _decode(msg.get("Message-ID")) or _decode(msg.get("Subject"))
+                if mid in seen:
+                    continue
+                seen.add(mid)
                 out.append({
                     "sender": _decode(msg.get("From")),
                     "subject": _decode(msg.get("Subject")),
