@@ -120,7 +120,9 @@ INSTIT_BODY = ("Hi Norman, we detected 1 Institutional Trade. "
 def test_parse_extracts_execution_time_and_price():
     c = parse_contracts(INSTIT_BODY, today=TODAY)[0]
     assert c["ticker"] == "TLT" and c["cp"] == "P"
-    assert c["exec_time"] == "4:01:17 PM ET"   # time only — the date is dropped
+    # Body time is US Eastern; shown in Puerto Rico time (summer EDT == AST, so the
+    # clock is unchanged here) and labeled "PR". The date is dropped (time only).
+    assert c["exec_time"] == "4:01:17 PM PR"
     assert c["contract_price"] == 3.0
     assert c["premium"] == 1.6e6 and c["size"] == 5320 and c["side"] == "Bid"
 
