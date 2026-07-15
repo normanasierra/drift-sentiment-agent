@@ -19,6 +19,8 @@ from pathlib import Path
 
 BRIEF = Path(__file__).resolve().parent
 REPO = BRIEF.parents[1]
+if str(REPO) not in sys.path:  # so `from data_sources import ...` works when run as a script
+    sys.path.insert(0, str(REPO))
 PY = sys.executable  # the venv python running this
 OUT = REPO / "output"
 EMAIL = OUT / "brief_email.html"
