@@ -134,6 +134,33 @@ def test_parse_uses_fallback_time_when_body_has_none():
     assert c["volume"] == 14456 and c["open_interest"] == 1415
 
 
+# --- single-leg-only filter (drop multi-leg spreads/combos) ---
+_COMBO_BODY = (  # a 2-leg combo (same ticker + same body time, diff strikes) + a single
+    "Hi Norman, we detected 3 Institutional Trade signals. "
+    "SPX Jul 17, 26 | 7000C Jul 14 · 10:28:50 PM $500.00 Contract Price 160M Premium 3000 Size 3D DTE Ask Side "
+    "SPX Jul 17, 26 | 8000P Jul 14 · 10:28:50 PM $46.00 Contract Price 100M Premium 2000 Size 3D DTE Ask Side "
+    "MU Jul 17, 26 | 900C Jul 14 · 11:07:46 PM $83.50 Contract Price 1.67M Premium 200 Size 3D DTE Ask Side")
+
+
+def test_drop_multileg_drops_combo_keeps_single():
+    from data_sources.sweeps import drop_multileg
+    kept = drop_multileg(parse_contracts(_COMBO_BODY, today=TODAY))
+    keys = {(c["ticker"], c["strike"], c["cp"]) for c in kept}
+    assert ("SPX", 7000.0, "C") not in keys and ("SPX", 8000.0, "P") not in keys  # combo out
+    assert ("MU", 900.0, "C") in keys                                             # single stays
+
+
+def test_drop_multileg_keeps_voloi_spikes_sharing_fallback_time():
+    # Volume/OI-Spike lines carry NO body time; the whole batch shares the email's
+    # fallback time. Same ticker + same fallback time must NOT be treated as multi-leg.
+    from data_sources.sweeps import drop_multileg
+    body = ("SPY Jul 13, 26 | 750P 637051 Volume 14913 Open Interest "
+            "SPY Jul 13, 26 | 753C 545351 Volume 17817 Open Interest "
+            "SPY Jul 13, 26 | 749P 536657 Volume 15000 Open Interest")
+    kept = drop_multileg(parse_contracts(body, today=TODAY, fallback_time="3:00 PM PR"))
+    assert len(kept) == 3   # all kept — shared time is the email fallback, not a trade time
+
+
 # --- quality filter (premium ≥ $1M · volume ≥ 20K · OI ≥ 5K) ------------------
 
 def test_filter_keeps_big_institutional_trade():

@@ -175,6 +175,7 @@ def parse_contracts(
         out.append({
             "ticker": tk, "strike": strike_f, "cp": cp,
             "exp": f"{mon.title()} {int(day)}", "dte": dte, "exec_time": exec_time,
+            "exec_body": bool(mt),  # True = timestamp from the body (a real trade time)
             "premium": prem, "contract_price": price, "notional": notional,
             "size": size, "side": side, "volume": vol, "open_interest": oi,
             "iv": iv, "otm_pct": otm, "score": sc,
@@ -226,3 +227,25 @@ def passes_filter(c: dict, *, min_premium: float = MIN_PREMIUM,
 def filter_contracts(contracts: list[dict], **kw) -> list[dict]:
     """Keep only contracts that clear the quality floor (see ``passes_filter``)."""
     return [c for c in contracts if passes_filter(c, **kw)]
+
+
+def drop_multileg(contracts: list[dict]) -> list[dict]:
+    """Keep only SINGLE-LEG trades — drop the legs of multi-leg trades (spreads,
+    straddles, verticals, combos…).
+
+    A multi-leg order surfaces in a MarketSnack "Institutional Trade" alert as 2+ legs
+    on the SAME ticker executed at the SAME body timestamp with DIFFERENT strikes/types;
+    every leg of such a group is dropped. Only the trade's OWN body timestamp
+    (``exec_body``) is grouped on — Volume/OI-Spike signals carry no body time (they
+    fall back to the email's received time, which the whole batch shares) and are
+    single-contract volume reads, never multi-leg, so they are always kept. Apply this
+    PER ALERT so unrelated trades that merely share a clock time aren't grouped.
+    """
+    from collections import defaultdict
+    legs: dict[tuple, set] = defaultdict(set)
+    for c in contracts:
+        if c.get("exec_body") and c.get("exec_time"):  # only real per-trade body times
+            legs[(c["ticker"], c["exec_time"])].add((c.get("strike"), c.get("cp")))
+    multileg = {k for k, v in legs.items() if len(v) >= 2}
+    return [c for c in contracts
+            if not (c.get("exec_body") and (c["ticker"], c.get("exec_time")) in multileg)]

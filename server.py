@@ -393,9 +393,9 @@ def api_unusual(ticker: str = ""):
             iv_atm = near.iv_atm if near else None
 
     all_contracts: list[dict] = []
-    for it in raw:
-        all_contracts.extend(sweeps_mod.parse_contracts(
-            it.get("body") or "", spot=spot_map, fallback_time=it.get("date")))
+    for it in raw:  # single-leg only — drop multi-leg (spread/combo) legs per alert
+        all_contracts.extend(sweeps_mod.drop_multileg(sweeps_mod.parse_contracts(
+            it.get("body") or "", spot=spot_map, fallback_time=it.get("date"))))
     all_contracts.sort(key=lambda c: c["score"].score, reverse=True)
 
     # History + multi-day rolls use the FULL set (more detection power); the
