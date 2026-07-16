@@ -1,6 +1,8 @@
-# Lean dependencies for the Flask web deploy (Render). The Streamlit app uses
-# the full requirements.txt; the web UI only needs these.
-flask>=3.0
+# Lean dependencies for the Wakanda Forever web deploy (Render) — the FastAPI app
+# in server.py. NOT the full requirements.txt (which also pulls Streamlit, etc.).
+fastapi>=0.110
+uvicorn[standard]>=0.29
+jinja2>=3.1
 requests>=2.32
 python-dotenv>=1.0
-gunicorn>=21.0
+matplotlib>=3.8          # server.py imports drift_sentiment.plotting (box/GEX PNGs)

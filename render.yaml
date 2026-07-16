@@ -1,15 +1,19 @@
-# Render blueprint for the Flask web UI (app_web.py).
-# Deploy: render.com -> New -> Blueprint -> connect this repo. Then set the
-# POLYGON_API_KEY value in the dashboard (it is not stored in the repo).
+# Render blueprint for the Wakanda Forever web UI (FastAPI, server.py).
+# One app, in the cloud (PC / Mac / phone). Deploy: render.com -> New -> Blueprint
+# -> connect this repo. Then set POLYGON_API_KEY and WAKANDA_PASSWORD in the
+# dashboard (secrets — never stored in the repo). Optional: IMAP_USER/IMAP_PASSWORD
+# to also show the MarketSnack sweeps (Unusual Activity / flow) in the cloud.
 services:
   - type: web
     name: drift-sentiment-web
     runtime: python
     plan: free
     buildCommand: "pip install -r requirements-web.txt"
-    startCommand: "gunicorn app_web:app --bind 0.0.0.0:$PORT --timeout 120"
+    startCommand: "uvicorn server:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: POLYGON_API_KEY
         sync: false          # set this secret in the Render dashboard
+      - key: WAKANDA_PASSWORD
+        sync: false          # set a password so the public app is gated (important)
       - key: PYTHON_VERSION
         value: "3.12.6"
