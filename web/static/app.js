@@ -986,6 +986,150 @@
     document.addEventListener('fullscreenchange', () => { if (sentCandle) sentCandle.timeScale().fitContent(); });
   }
 
+  // ============================================================ Macro layers — Market Context + Alignment
+  // Educational macro reads ported from the old Flask app. Render-only: the data
+  // (lastReport.market_context / lastReport.alignment) rides on the /api/report
+  // response analyze() already fetched — NO extra network call. Both are best-effort
+  // and may be null. Compliance: render ONLY the descriptive fields the server
+  // provides; never add buy/sell/entry/stop/target/position-sizing language.
+  const EDU_FOOT = 'Educativo — no es asesoría financiera.';
+  const mcClampPct = (v) => Math.max(2, Math.min(100, Number(v) || 0));
+  const mcNote = (msg) => `<div class="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center text-slate-400">${esc(msg)}</div>`;
+  const eduFootHtml = () => `<p class="mt-5 text-[11px] text-slate-400 text-center">${EDU_FOOT}</p>`;
+
+  // Score-threshold color (matches market_context_ui.py: ≥60 emerald · ≤40 rose · mid amber).
+  const mcScoreText = (s) => s >= 60 ? 'text-emerald-500' : s <= 40 ? 'text-rose-500' : 'text-amber-500';
+  const mcScoreBar = (s) => s >= 60 ? 'bg-emerald-500' : s <= 40 ? 'bg-rose-500' : 'bg-amber-500';
+  // Bias color (bullish emerald · bearish rose · neutral slate). Text via biasTxtCls.
+  const mcBiasBar = (b) => /bull/i.test(b) ? 'bg-emerald-500' : /bear/i.test(b) ? 'bg-rose-500' : 'bg-slate-400';
+  const mcBiasChip = (b) => /bull/i.test(b)
+    ? 'border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
+    : /bear/i.test(b)
+      ? 'border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400'
+      : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400';
+  // Market Context bias badge tint (Risk-On emerald · Risk-Off rose · Mixed/other amber).
+  const mcCtxBadge = (b) => /risk-?on/i.test(b)
+    ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+    : /risk-?off/i.test(b)
+      ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+      : 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400';
+  // Alignment label color (Strong emerald · Conflict rose · Partial/other amber).
+  const alignText = (l) => /strong/i.test(l) ? 'text-emerald-500' : /conflict/i.test(l) ? 'text-rose-500' : 'text-amber-500';
+  const alignGuide = (l) => /strong/i.test(l)
+    ? 'border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200'
+    : /conflict/i.test(l)
+      ? 'border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-200'
+      : 'border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200';
+
+  // Shared score card (components + reads): label, bias chip, score, bias-colored bar, detail.
+  function mcScoreCard(name, score, bias, detail, scoreCls) {
+    return `<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-sm font-semibold min-w-0 truncate">${esc(name)}</span>
+        <span class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border whitespace-nowrap ${mcBiasChip(bias)}">${esc(bias)}</span>
+      </div>
+      <div class="mt-2 ${scoreCls} font-black ${biasTxtCls(bias)}">${fmt(score, 0)}</div>
+      <div class="mt-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+        <div class="h-full rounded-full ${mcBiasBar(bias)}" style="width:${mcClampPct(score)}%"></div>
+      </div>
+      <p class="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">${esc(detail)}</p>
+    </div>`;
+  }
+
+  function renderMarketContext() {
+    const box = $('mcontextBody'); if (!box) return;
+    if (!lastReport) { box.innerHTML = mcNote('Analiza un ticker.'); return; }
+    const mc = lastReport.market_context;
+    if (!mc) { box.innerHTML = mcNote('Contexto macro no disponible.'); return; }
+
+    const hero = `<div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 md:p-6 mb-4">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+          <div class="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Market Context</div>
+          <div class="mt-1 flex items-end gap-1">
+            <span class="text-6xl font-black leading-none ${mcScoreText(mc.score)}">${fmt(mc.score, 0)}</span>
+            <span class="text-xl font-semibold text-slate-400 mb-1">/100</span>
+          </div>
+          <div class="mt-2 text-base font-semibold">${esc(mc.headline)}</div>
+          <div class="mt-3 h-2 w-72 max-w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+            <div class="h-full rounded-full ${mcScoreBar(mc.score)}" style="width:${mcClampPct(mc.score)}%"></div>
+          </div>
+        </div>
+        <div class="text-right shrink-0">
+          <span class="inline-block px-4 py-1.5 rounded-xl border text-lg font-black ${mcCtxBadge(mc.bias)}">${esc(mc.bias)}</span>
+          <div class="mt-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">Confianza</div>
+          <div class="text-3xl font-black ${mcScoreText(mc.score)}">${fmt(mc.confidence, 0)}<span class="text-base text-slate-400">%</span></div>
+        </div>
+      </div>
+    </div>`;
+
+    const comps = (mc.components || []).map((c) => mcScoreCard(c.label, c.score, c.bias, c.detail, 'text-2xl')).join('');
+    const compGrid = comps
+      ? `<div class="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">${comps}</div>`
+      : mcNote('Sin componentes macro.');
+
+    const li = (icon, iconCls, txt) => `<li class="flex items-start gap-2 py-1 text-sm">
+      <span class="${iconCls} shrink-0">${icon}</span>
+      <span class="text-slate-600 dark:text-slate-300">${esc(txt)}</span></li>`;
+    const factors = (mc.top_factors || []).map((f) => li('✓', 'text-emerald-500', f)).join('')
+      || '<li class="text-sm text-slate-400 py-1">Sin factores destacados.</li>';
+    const risks = (mc.top_risks || []).map((r) => li('⚠', 'text-rose-500', r)).join('')
+      || '<li class="text-sm text-slate-400 py-1">Sin riesgos destacados.</li>';
+    const lists = `<div class="grid gap-3 md:grid-cols-2 mt-4">
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+        <div class="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1.5">Factores a favor</div>
+        <ul>${factors}</ul>
+      </div>
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+        <div class="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-1.5">Riesgos</div>
+        <ul>${risks}</ul>
+      </div>
+    </div>`;
+
+    const intro = `<p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Lectura macro del ambiente de mercado —
+      <span class="text-emerald-500 font-medium">Risk-On</span> / <span class="text-rose-500 font-medium">Risk-Off</span>.
+      Capa independiente que sólo lee las salidas del análisis.</p>`;
+    box.innerHTML = intro + hero
+      + sectionTitle('COMPONENTES', 'Componentes macro', 'Cada factor con su sesgo y puntuación.')
+      + compGrid + lists + eduFootHtml();
+  }
+
+  function renderAlignment() {
+    const box = $('alignmentBody'); if (!box) return;
+    if (!lastReport) { box.innerHTML = mcNote('Analiza un ticker.'); return; }
+    const a = lastReport.alignment;
+    if (!a) { box.innerHTML = mcNote('Contexto macro no disponible.'); return; }
+
+    const hero = `<div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 md:p-6 mb-4">
+      <div class="flex flex-wrap items-start gap-5">
+        <div class="shrink-0">
+          <div class="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Institutional Alignment</div>
+          <div class="mt-1 flex items-end gap-1">
+            <span class="text-6xl font-black leading-none ${alignText(a.label)}">${fmt(a.score, 0)}</span>
+            <span class="text-xl font-semibold text-slate-400 mb-1">/100</span>
+          </div>
+          <div class="mt-1 text-xl font-bold ${alignText(a.label)}">${esc(a.label)}</div>
+        </div>
+        <div class="flex-1 min-w-[240px]">
+          <p class="text-sm font-semibold text-slate-700 dark:text-slate-200 leading-relaxed">${esc(a.verdict)}</p>
+          <div class="mt-2 rounded-xl border p-3 text-sm leading-relaxed ${alignGuide(a.label)}">${esc(a.guidance)}</div>
+        </div>
+      </div>
+    </div>`;
+
+    const reads = (a.reads || []).map((r) => mcScoreCard(r.name, r.score, r.bias, r.detail, 'text-3xl')).join('');
+    const readGrid = reads
+      ? `<div class="grid gap-3 md:grid-cols-3">${reads}</div>`
+      : mcNote('Sin lecturas disponibles.');
+
+    const intro = `<p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Cómo se alinean tres lecturas independientes —
+      <span class="font-medium">contexto macro</span>, <span class="font-medium">estructura de opciones</span> y
+      <span class="font-medium">posicionamiento de dealers</span>. Capa de sólo lectura sobre el análisis.</p>`;
+    box.innerHTML = intro + hero
+      + sectionTitle('LECTURAS', 'Las tres lecturas', 'Macro, estructura y dealers — cada una con su sesgo.')
+      + readGrid + eduFootHtml();
+  }
+
   // ---------------------------------------------------------------- tabs
   function activateTab(name) {
     document.querySelectorAll('.tabBtn').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
@@ -998,6 +1142,10 @@
       if (sentThemeDirty && lastSentiment) { buildSentCandle(lastSentiment); sentThemeDirty = false; }
       else if (sentCandle) { sentCandle.timeScale().fitContent(); }
     }
+    // Macro tabs render straight from lastReport (no cache/guard) so a fresh analyze
+    // always paints fresh data when its tab is (re)activated.
+    if (name === 'mcontext') { renderMarketContext(); }
+    if (name === 'alignment') { renderAlignment(); }
   }
 
   // ---------------------------------------------------------------- analyze

@@ -23,8 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from drift_sentiment import (
-    chain_filter, drift, polygon_client, report as report_mod, scenarios,
-    sentiment_view,
+    alignment as align_mod, chain_filter, drift, market_context as mc, market_data,
+    polygon_client, report as report_mod, scenarios, sentiment_view,
 )
 from drift_sentiment.plotting import build_box_plots, build_gex_profiles
 
@@ -216,6 +216,65 @@ def search(q: str = ""):
     return {"results": merged[:8]}
 
 
+# --- Macro layers (ported from the Leo/Flask app): Market Context + Alignment ---
+_MACRO: tuple[float, object] | None = None
+
+
+def _market_context(ttl: int = 300):
+    """Ticker-independent macro context (Risk-On/Off). Cached — it's the same for
+    every ticker, so compute once per TTL and reuse across analyses."""
+    global _MACRO
+    now = time.time()
+    if _MACRO and now - _MACRO[0] < ttl:
+        return _MACRO[1]
+    ctx = mc.build_market_context(market_data.fetch_moves(mc.all_symbols()),
+                                  market_data.today())
+    _MACRO = (now, ctx)
+    return ctx
+
+
+def _mctx_payload(ctx) -> dict:
+    return {
+        "score": ctx.score, "confidence": ctx.confidence, "bias": ctx.bias,
+        "headline": ctx.headline,
+        "components": [{"label": c.label, "score": c.score, "bias": c.bias,
+                        "detail": c.detail} for c in ctx.components],
+        "top_factors": ctx.top_factors, "top_risks": ctx.top_risks,
+    }
+
+
+# The alignment engine's raw guidance is prescriptive ("trade with full conviction",
+# "reduce position size", "wait before committing") = position-management ADVICE.
+# We surface an educational, DESCRIPTIVE read instead — it explains what the alignment
+# means, never what to trade. (Engine untouched; the Flask app keeps its own text.)
+_ALIGN_GUIDANCE = {
+    "Strong Alignment": "Las tres capas — macro, estructura de opciones y dealers — "
+                        "apuntan en la misma dirección: lectura coherente y fuerte.",
+    "Partial Alignment": "Señales mixtas — las tres capas no coinciden del todo; "
+                         "contexto ambiguo.",
+    "Conflict": "Conflicto — macro, estructura y dealers no concuerdan; lectura "
+                "contradictoria.",
+}
+
+
+def _align_payload(a) -> dict:
+    return {
+        "score": a.score, "label": a.label, "verdict": a.verdict,
+        "guidance": _ALIGN_GUIDANCE.get(a.label, ""),
+        "reads": [{"name": r.name, "score": r.score, "bias": r.bias,
+                   "detail": r.detail} for r in a.reads],
+    }
+
+
+def _macro_payloads(rep) -> tuple[dict | None, dict | None]:
+    """(market_context, alignment) — best-effort; macro never breaks the report."""
+    try:
+        ctx = _market_context()
+        return _mctx_payload(ctx), _align_payload(align_mod.build_alignment(ctx, rep))
+    except Exception:  # noqa: BLE001 — macro is a bonus, not required
+        return None, None
+
+
 @app.get("/api/report")
 def api_report(ticker: str = ""):
     ticker = (ticker or "").strip().upper()
@@ -255,11 +314,13 @@ def api_report(ticker: str = ""):
     except Exception:  # noqa: BLE001
         candles = []
 
+    market_context, alignment = _macro_payloads(rep)
     return {
         "ticker": rep.ticker, "spot": spot, "as_of": rep.as_of.isoformat(),
         "total_notional": rep.total_notional, "total_shares": rep.total_shares,
         "total_gex_m": round(rep.total_gex / 1e6, 2), "gex_regime": rep.gex_regime,
         "buckets": buckets, "candles": candles,
+        "market_context": market_context, "alignment": alignment,
         "text": report_mod.format_text_report(rep),
     }
 
