@@ -1,8 +1,15 @@
-# Lean dependencies for the Wakanda Forever web deploy (Render) — the FastAPI app
-# in server.py. NOT the full requirements.txt (which also pulls Streamlit, etc.).
+# Web-deploy dependencies. During the Wakanda<-Leo consolidation this file serves
+# BOTH apps so neither breaks:
+#   * Wakanda (server.py, FastAPI) — what the Render blueprint runs (uvicorn) and the
+#     target of the consolidation.
+#   * Leo (app_web.py, Flask) — still runnable locally (e.g. on the Mac) until it's
+#     retired. DO NOT drop flask/gunicorn until Leo is actually removed.
+# (The full requirements.txt additionally pulls Streamlit for the original app.py.)
 fastapi>=0.110
 uvicorn[standard]>=0.29
 jinja2>=3.1
+matplotlib>=3.8          # server.py imports drift_sentiment.plotting (box/GEX PNGs)
+flask>=3.0               # Leo / app_web.py (kept until Leo is retired)
+gunicorn>=21.0           # Leo's Render start command
 requests>=2.32
 python-dotenv>=1.0
-matplotlib>=3.8          # server.py imports drift_sentiment.plotting (box/GEX PNGs)
