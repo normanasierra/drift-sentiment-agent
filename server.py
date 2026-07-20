@@ -112,13 +112,20 @@ async def _require_login(request: Request, call_next):
 
 
 # Small TTL cache so a single Analyze reuses one chain fetch across report+plots.
+# Short by design now that Massive is real-time — 30s keeps the data near-live while
+# still deduping the chain fetch across a single Analyze's report+plot sub-requests.
+# Tune with WAKANDA_CACHE_TTL (floored at 5s so one Analyze never refetches mid-render).
 _CACHE: dict[str, tuple[float, float, object]] = {}
+try:
+    _CACHE_TTL = max(5, int(os.getenv("WAKANDA_CACHE_TTL", "30")))
+except ValueError:
+    _CACHE_TTL = 30
 
 
 _TARGETS = sorted({dte for _, dte in chain_filter.DTE_TARGETS}, reverse=True)
 
 
-def _load(ticker: str, ttl: int = 120):
+def _load(ticker: str, ttl: int = _CACHE_TTL):
     now = time.time()
     hit = _CACHE.get(ticker)
     if hit and now - hit[0] < ttl:

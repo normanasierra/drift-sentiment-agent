@@ -1,9 +1,15 @@
 """Gamma Exposure (GEX) — dealer gamma per strike, walls, and the zero-gamma flip.
 
-Polygon's free tier returns unreliable greeks (negative gammas, absurd IVs), so
-gamma is computed here from a Black-Scholes model using the (sanitized) implied
+Gamma is computed from a Black-Scholes model using the (sanitized) implied
 volatility on each contract, falling back to the bucket's ATM IV when a contract's
-own IV is missing or out of range.
+own IV is missing or out of range. This stays true even on the paid real-time plan,
+where the feed's native greeks are now sane (validated 2026-07-20 within ~10% of
+these BS values). BS is kept deliberately: it covers the many contracts the feed
+leaves blank (via the ATM-IV fallback — native gamma there is simply absent), works
+for index underlyings that ship no IV at all (SPX → see ``implied_vol``), and is
+required anyway by the zero-gamma flip, which re-prices gamma across a grid of spot
+levels where a single static feed greek can't help. Now that the snapshot IV is
+real-time, this BS gamma is real-time too.
 
 Sign convention (standard dealer/SqueezeMetrics): calls contribute positive gamma
 exposure, puts negative. Net GEX is in dollars of delta change per 1% move in spot:
