@@ -186,8 +186,19 @@
     // rather than a misleading 0 that reads as "gamma-neutral".
     const hasIV = r.buckets.some((b) => b.sigma != null);
     const regimeCls = /pos|long/i.test(r.gex_regime) ? 'text-emerald-500' : /neg|short/i.test(r.gex_regime) ? 'text-rose-500' : 'text-slate-400';
+    // Truthful data-freshness badge — read straight from the Massive snapshot's
+    // timeframe (REAL-TIME on the paid plan). No field → no badge (never fakes "live").
+    const tf = (r.data_timeframe || '').toUpperCase();
+    const live = tf === 'REAL-TIME';
+    const badge = tf
+      ? `<span class="ml-2 align-middle inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+          live ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+               : 'bg-amber-500/15 text-amber-600 dark:text-amber-300'}"
+          title="${live ? 'Datos en tiempo real (Massive)' : 'Datos diferidos ~15 min'}">${
+          live ? '🟢 Tiempo real' : '🟡 Diferido'}</span>`
+      : '';
     $('metrics').innerHTML =
-      card('Spot', `$${fmt(r.spot, 0)}`) +
+      card('Spot', `$${fmt(r.spot, 0)}${badge}`) +
       card('Sesgo neto (notional)', fmtBig(r.total_notional), biasCls(r.total_notional)) +
       card('GEX neto', hasIV ? `${fmt(r.total_gex_m, 0)}M` : 'N/D',
            hasIV ? regimeCls : 'text-slate-400') +

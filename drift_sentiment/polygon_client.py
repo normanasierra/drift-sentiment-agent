@@ -77,6 +77,26 @@ def _api_key() -> str:
     return key
 
 
+# Freshness of the last snapshot seen per ticker — "REAL-TIME" on the paid Massive
+# plan, "DELAYED" (~15 min) on the free tier — read straight from the snapshot's
+# ``underlying_asset.timeframe`` so the UI can show a TRUTHFUL live/delayed badge
+# instead of a hard-coded guess. Best-effort telemetry; never touches the analysis.
+_LAST_TIMEFRAME: dict[str, str] = {}
+
+
+def _record_timeframe(ticker: str, timeframe: str | None) -> None:
+    if timeframe:
+        _LAST_TIMEFRAME[ticker.upper()] = timeframe.upper()
+
+
+def data_timeframe(ticker: str) -> str | None:
+    """Freshness of the most recent chain fetched for ``ticker``: ``"REAL-TIME"``
+    or ``"DELAYED"`` (from the snapshot's ``underlying_asset.timeframe``). ``None``
+    if the ticker hasn't been fetched yet this process. Read-only; drives the UI
+    'en vivo' badge and never affects any options calculation."""
+    return _LAST_TIMEFRAME.get(ticker.upper())
+
+
 def _parse_contract(result: dict) -> Contract | None:
     """Map one snapshot result to a Contract, or None if unusable."""
     details = result.get("details", {})
@@ -123,6 +143,7 @@ def fetch_chain(ticker: str, *, timeout: int = 30) -> tuple[float, list[Contract
                 ua = result.get("underlying_asset", {})
                 if ua.get("price"):
                     spot = float(ua["price"])
+                    _record_timeframe(ticker, ua.get("timeframe"))
             contract = _parse_contract(result)
             if contract is not None:
                 contracts.append(contract)
@@ -184,6 +205,7 @@ def _fetch_expiration(
                 ua = result.get("underlying_asset", {})
                 if ua.get("price"):
                     spot = float(ua["price"])
+                    _record_timeframe(ticker, ua.get("timeframe"))
             c = _parse_contract(result)
             if c is not None:
                 out.append(c)
@@ -237,9 +259,11 @@ def fetch_chain_targeted(
 def _fetch_spot(ticker: str, key: str, timeout: int) -> float:
     """Determine spot price: real-time last trade, then Yahoo, then prev close.
 
-    The last-trade endpoint requires a paid Polygon plan; on the free tier it
-    returns 403, so we fall back to Yahoo Finance's near-current price (~15-min
-    delayed, free), and finally to the previous daily close if both fail.
+    Only a fallback: the chain snapshot already carries a real-time
+    ``underlying_asset.price`` on the paid Massive plan, so this runs only when
+    that's missing. The last-trade endpoint returns a live price on the paid plan;
+    if it's ever unavailable (free tier → 403) we degrade to Yahoo's near-current
+    price (~15-min delayed, free), and finally the previous daily close.
     """
     price = _fetch_last_trade(ticker, key, timeout)
     if price is None:
@@ -271,9 +295,9 @@ _YF_SYMBOL = {"SPX": "^GSPC", "NDX": "^NDX", "VIX": "^VIX", "RUT": "^RUT", "DJI"
 def _fetch_yahoo_spot(ticker: str, timeout: int) -> float | None:
     """Near-current spot from Yahoo Finance (free, no key, ~15-min delayed).
 
-    Bridges the gap when the paid real-time last-trade endpoint isn't on the plan,
-    so the app shows a near-current price instead of yesterday's close. Returns
-    None on any failure so the caller can fall back to the previous close.
+    Degraded fallback for when the real-time last-trade call fails, so the app
+    still shows a near-current price instead of yesterday's close. Returns None on
+    any failure so the caller can fall back to the previous close.
     """
     yf = _YF_SYMBOL.get(ticker.upper().replace("I:", ""), ticker.upper())
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf}"

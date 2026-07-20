@@ -317,6 +317,7 @@ def api_report(ticker: str = ""):
     market_context, alignment = _macro_payloads(rep)
     return {
         "ticker": rep.ticker, "spot": spot, "as_of": rep.as_of.isoformat(),
+        "data_timeframe": polygon_client.data_timeframe(ticker),
         "total_notional": rep.total_notional, "total_shares": rep.total_shares,
         "total_gex_m": round(rep.total_gex / 1e6, 2), "gex_regime": rep.gex_regime,
         "buckets": buckets, "candles": candles,

@@ -48,12 +48,22 @@ Needs a free Polygon.io key in `.env` (gitignored, never commit it):
 - `polygon_client.py` and `market_data.py` are the only network modules.
 - Never commit `.env`. Verify it's excluded before every push.
 
-## Polygon free-tier constraints
+## Data plan (Massive) — real-time
 
-Delayed + rate-limited (~5 req/min). No real-time last-trade (403 → spot falls back to
-previous close). Greeks are unreliable (negative gamma, absurd IV) → gamma is computed
-via Black-Scholes from sanitized IV. Macro layer uses the grouped-daily endpoint (all
-stocks in one call) to stay under the rate limit; futures/VIX index/yields are proxied.
+Norman's key is the paid **Massive Options Advanced ($199/mo): real-time + unlimited**
+options. `_api_key()` prefers `MASSIVE_API_KEY` over `POLYGON_API_KEY` (same host —
+Massive = Polygon rebranded). The options snapshot now returns
+`underlying_asset.timeframe == "REAL-TIME"`; `polygon_client.data_timeframe(ticker)`
+surfaces it read-only for the UI's live/delayed badge. Real-time last-trade works too
+(no more 403), though spot normally comes straight from the snapshot; Yahoo /
+previous-close remain only as degraded fallbacks.
+
+Still conservative on greeks: the snapshot's greeks can be unreliable (negative gamma,
+absurd IV) → gamma is computed via Black-Scholes from sanitized IV regardless of tier.
+Macro layer uses the grouped-daily endpoint (all stocks in one call); index VIX /
+yields / futures are still proxied via Yahoo (not part of the options entitlement).
+
+_Free-tier note (if the key ever downgrades): delayed, ~5 req/min, last-trade → 403._
 
 ## Git workflow (two machines: Mac + a Windows PC)
 

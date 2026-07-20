@@ -54,7 +54,7 @@ with st.sidebar:
         help="Drop buckets whose nearest monthly is outside the tolerance window.",
     )
     st.markdown("---")
-    st.caption("API key is read from `.env` (POLYGON_API_KEY).")
+    st.caption("API key is read from `.env` (MASSIVE_API_KEY / POLYGON_API_KEY).")
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -257,8 +257,8 @@ if run and ticker:
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
     st.caption(
-        "⚠️ Mechanical projections from current option positioning (delayed "
-        "free-tier data) — structural levels, not predictions or financial advice."
+        "⚠️ Mechanical projections from current option positioning (real-time "
+        "Massive data) — structural levels, not predictions or financial advice."
     )
 
     # --- 4 box plots (Section 7) ---
