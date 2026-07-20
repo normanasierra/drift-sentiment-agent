@@ -73,6 +73,9 @@ def _between(text: str, start: str, end: str) -> str:
 
 
 def _strip_html(html: str) -> str:
+    # Drop <style>/<script> blocks WITH their contents first — otherwise the email's
+    # CSS leaks into the text (the WhatsApp fallback showed "body { font-family… }").
+    html = re.sub(r"<(style|script)\b[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
 
 

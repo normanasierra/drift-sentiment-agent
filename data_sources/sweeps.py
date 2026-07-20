@@ -249,3 +249,8 @@ def drop_multileg(contracts: list[dict]) -> list[dict]:
     multileg = {k for k, v in legs.items() if len(v) >= 2}
     return [c for c in contracts
             if not (c.get("exec_body") and (c["ticker"], c.get("exec_time")) in multileg)]
+
+
+def calls_only(contracts: list[dict]) -> list[dict]:
+    """Keep only CALL contracts, dropping every put — Norman wants call-only alerts."""
+    return [c for c in contracts if c.get("cp") == "C"]

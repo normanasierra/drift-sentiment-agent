@@ -28,7 +28,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 from data_sources.email_inbox import _email_when, _plain_body  # noqa: E402
 from data_sources.sweeps import (  # noqa: E402
-    drop_multileg, filter_contracts, format_contract, parse_contracts,
+    calls_only, drop_multileg, filter_contracts, format_contract, parse_contracts,
 )
 
 SEEN = REPO / "output" / "marketsnack_seen.json"
@@ -59,7 +59,7 @@ def format_alert(subject: str, body: str, when: str | None = None) -> str:
     ``when`` is the email's received time, used as the execution-time fallback."""
     title = re.split(r"\s*[—–-]\s*\d+\s+signal", subject or "")[0].strip() or "Alerta"
     header = f"⚡ MarketSnack · {title}"
-    contracts = filter_contracts(drop_multileg(parse_contracts(body, fallback_time=when)))[:3]
+    contracts = filter_contracts(calls_only(drop_multileg(parse_contracts(body, fallback_time=when))))[:3]
     if not contracts:
         return ""  # nothing cleared the quality floor -> don't send this alert
     lines = [format_contract(c) for c in contracts]
