@@ -47,6 +47,8 @@ JUNK = re.compile(
     r"rosen|encourages\s+.*investors|class action|securities fraud|lawsuit|law firm|"
     r"rights counsel|shareholder (alert|rights)|investigation on behalf|deadline "
     r"reminder|contact.*attorney|national trial", re.I)
+# Publishers dropped ENTIRELY (low-signal PR wire), whatever the headline says.
+BLOCK_PUB = re.compile(r"globenewswire", re.I)
 
 
 def load_env() -> None:
@@ -98,7 +100,8 @@ def _fetch() -> list[dict]:
 
 def _relevant(a: dict) -> bool:
     title = a.get("title") or ""
-    if JUNK.search(title):
+    pub = (a.get("publisher") or {}).get("name") or ""
+    if BLOCK_PUB.search(pub) or JUNK.search(title):
         return False
     tickers = {t.upper() for t in (a.get("tickers") or [])}
     return bool(tickers & TRACKED) or bool(MACRO_KW.search(title))
