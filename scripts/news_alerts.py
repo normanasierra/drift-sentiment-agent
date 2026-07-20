@@ -49,6 +49,11 @@ JUNK = re.compile(
     r"reminder|contact.*attorney|national trial", re.I)
 # Publishers dropped ENTIRELY (low-signal PR wire), whatever the headline says.
 BLOCK_PUB = re.compile(r"globenewswire", re.I)
+# Off-topic for a stock-market watcher — dropped even if a stock ticker is tagged
+# (Polygon over-tags: e.g. a crypto piece tagged AMZN/NVDA). Only equities/market news.
+OFFTOPIC = re.compile(
+    r"\bcrypto|\bbitcoin\b|\bbtc\b|ethereum|\beth\b|dogecoin|solana|\bxrp\b|litecoin|"
+    r"\bnft\b|blockchain|\bweb3\b|memecoin|stablecoin|coinbase wallet", re.I)
 
 
 def load_env() -> None:
@@ -101,7 +106,7 @@ def _fetch() -> list[dict]:
 def _relevant(a: dict) -> bool:
     title = a.get("title") or ""
     pub = (a.get("publisher") or {}).get("name") or ""
-    if BLOCK_PUB.search(pub) or JUNK.search(title):
+    if BLOCK_PUB.search(pub) or JUNK.search(title) or OFFTOPIC.search(title):
         return False
     tickers = {t.upper() for t in (a.get("tickers") or [])}
     return bool(tickers & TRACKED) or bool(MACRO_KW.search(title))
