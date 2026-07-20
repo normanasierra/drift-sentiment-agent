@@ -9,6 +9,9 @@ $log = Join-Path $repo 'output\git_autosync.log'
 New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
 
 Add-Content $log ("[{0}] === autosync ===" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -Encoding utf8
-& $git pull --rebase --autostash *>> $log
-& $git push *>> $log
+# Redirect git's stdout+stderr at the OS level via cmd, so PowerShell doesn't wrap
+# git's normal progress (which it writes to stderr) as "NativeCommandError" noise.
+$q = '"'
+& cmd /c ("$q$git$q pull --rebase --autostash >> $q$log$q 2>&1")
+& cmd /c ("$q$git$q push >> $q$log$q 2>&1")
 Add-Content $log "[done]" -Encoding utf8
