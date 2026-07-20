@@ -62,8 +62,19 @@ _jinja = Environment(
 )
 
 
+def _asset_version() -> int:
+    """Cache-busting token = app.js mtime. It changes whenever the JS is redeployed
+    (git pull / edit), so the browser fetches the new bundle automatically — no more
+    hand-bumped ?v and no Ctrl+F5. Pairs with the no-cache revalidation above."""
+    try:
+        return int(os.path.getmtime(WEB / "static" / "app.js"))
+    except OSError:
+        return 0
+
+
 def render(name: str, **ctx) -> HTMLResponse:
     ctx.setdefault("auth_on", bool(APP_PASSWORD))
+    ctx.setdefault("asset_version", _asset_version())
     return HTMLResponse(_jinja.get_template(name).render(**ctx))
 
 
