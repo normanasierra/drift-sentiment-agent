@@ -70,15 +70,50 @@ def today() -> datetime.date:
     return datetime.datetime.now().date()
 
 
+def _snapshot_moves(symbols: list[str], key: str, timeout: int) -> dict | None:
+    """LIVE today's % change from the full-market snapshot (real-time plans).
+
+    Returns {sym: {"prev","last","pct"}} using the real-time last trade vs the
+    previous close, or None if the endpoint isn't entitled / returns nothing.
+    """
+    url = f"{BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers"
+    try:
+        resp = requests.get(
+            url, params={"tickers": ",".join(symbols), "apiKey": key}, timeout=timeout
+        )
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200:
+        return None
+    moves: dict[str, dict] = {}
+    for t in resp.json().get("tickers") or []:
+        sym = t.get("ticker")
+        last = (t.get("lastTrade") or {}).get("p") or (t.get("day") or {}).get("c")
+        prev = (t.get("prevDay") or {}).get("c")
+        if not sym or not last or not prev:
+            continue
+        moves[sym] = {
+            "prev": float(prev), "last": float(last),
+            "pct": (last - prev) / prev * 100.0,
+        }
+    return moves or None
+
+
 def fetch_moves(
     symbols: list[str], *, as_of: datetime.date | None = None, timeout: int = 30
 ) -> dict:
-    """Latest-session % change (close over prior close) for each symbol.
+    """Latest % change for each symbol — LIVE on real-time plans, else EOD.
 
     Returns {"moves": {sym: {"prev","last","pct"}}, "last_date", "prev_date"}.
-    Walks back from `as_of` to find the two most recent trading days with data.
+    First tries the real-time full-market snapshot (today's live move); falls back
+    to walking grouped-daily closes (yesterday vs the day before) on older plans.
     """
     key = _api_key()
+    if as_of is None:  # only go live for the current session, not backtests
+        live = _snapshot_moves(symbols, key, timeout)
+        if live:
+            d = today()
+            return {"moves": live, "last_date": d, "prev_date": d, "live": True}
     cursor = as_of or today()
     found: list[tuple[datetime.date, dict[str, dict]]] = []
     tries = 0
