@@ -254,3 +254,18 @@ def drop_multileg(contracts: list[dict]) -> list[dict]:
 def calls_only(contracts: list[dict]) -> list[dict]:
     """Keep only CALL contracts, dropping every put — Norman wants call-only alerts."""
     return [c for c in contracts if c.get("cp") == "C"]
+
+
+def drop_0dte(contracts: list[dict]) -> list[dict]:
+    """Drop 0DTE (same-day-expiry) contracts — no same-day gambles. Unknown DTE kept."""
+    return [c for c in contracts if c.get("dte") is None or c["dte"] > 0]
+
+
+def by_buy_volume(contracts: list[dict]) -> list[dict]:
+    """Order so the biggest BUYS lead: aggressive buys (Ask side = bought) first, then
+    by volume/size — 'alertas con mayor volumen de compra'."""
+    def _k(c: dict):
+        bought = (c.get("side") or "").lower().startswith("ask")
+        vol = c.get("volume") or c.get("size") or 0
+        return (1 if bought else 0, vol)
+    return sorted(contracts, key=_k, reverse=True)

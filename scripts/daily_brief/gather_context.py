@@ -161,7 +161,8 @@ def _sweeps_block() -> str:
     try:
         from data_sources import email_inbox
         from data_sources.sweeps import (
-            calls_only, drop_multileg, filter_contracts, format_contract, parse_contracts)
+            calls_only, drop_0dte, drop_multileg, filter_contracts,
+            format_contract, parse_contracts)
         items = email_inbox.marketsnack_alerts(since_days=1)
     except Exception:  # noqa: BLE001
         return ""
@@ -169,8 +170,8 @@ def _sweeps_block() -> str:
         return ""
     # Single-leg only: drop multi-leg (spread/combo) legs per alert (Norman's pref).
     scored = [c for it in items
-              for c in calls_only(drop_multileg(
-                  parse_contracts(it.get("body") or "", fallback_time=it.get("date"))))]
+              for c in drop_0dte(calls_only(drop_multileg(
+                  parse_contracts(it.get("body") or "", fallback_time=it.get("date")))))]
     scored.sort(key=lambda c: c["score"].score, reverse=True)
     try:  # feed the multi-day rolling history from the FULL set (deduped per day)
         from datetime import date
