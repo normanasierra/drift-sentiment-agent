@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-1">💼 Portafolio <span class="text-brand-soft">GEX + Soportes</span></h1>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4">
+  Tus posiciones de Schwab agrupadas por subyacente, con sus niveles clave:
+  <span class="text-emerald-500 font-medium">GEX</span>, Zero-Γ, Gamma Walls y soporte/resistencia por acción.
+  <span class="text-emerald-500 font-medium">Verde = Calls/Bullish</span> ·
+  <span class="text-rose-500 font-medium">Rojo = Puts/Bearish</span>.
+</p>
+
+<!-- summary bar -->
+<div id="pfSummary" class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5 hidden"></div>
+
+<!-- states -->
+<div id="pfLoading" class="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center text-slate-400">
+  Cargando posiciones de Schwab…
+</div>
+<div id="pfDisconnected" class="hidden rounded-xl border border-amber-300 dark:border-amber-800
+     bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 px-5 py-6">
+  <div class="text-lg font-semibold mb-1">🔌 Conecta Schwab</div>
+  <p class="text-sm">
+    Aún no hay una sesión de Schwab autorizada. Corre <code class="px-1 rounded bg-black/10 dark:bg-white/10">scripts/schwab_auth.py</code>
+    una sola vez para conectar tu cuenta (solo lectura, nunca ejecuta órdenes) y vuelve a esta página.
+  </p>
+</div>
+<div id="pfEmpty" class="hidden rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center text-slate-400">
+  Schwab está conectado pero no devolvió posiciones abiertas ahora mismo.
+</div>
+
+<!-- cards grid -->
+<div id="pfGrid" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"></div>
+
+<p class="mt-6 text-[11px] text-slate-400">Educativo — no es asesoría financiera. Solo lectura; nunca ejecuta órdenes.</p>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const fmt = (n, d = 2) => (n == null || isNaN(n) ? '—'
+    : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fmtBig = (n) => {
+    if (n == null || isNaN(n)) return '—';
+    const a = Math.abs(n), s = n < 0 ? '-' : '';
+    if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(2)}B`;
+    if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}M`;
+    if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
+    return `${s}$${a.toFixed(0)}`;
+  };
+  const currentTheme = () => (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  const CHART_THEME = {
+    dark:  { bg: '#11161f', text: '#e6edf3', grid: '#2a3441' },
+    light: { bg: '#ffffff', text: '#0b0e14', grid: '#e2e8f0' },
+  };
+  const BULL = '#16a34a', BULL_SOFT = '#22c55e', BEAR = '#dc2626', BEAR_SOFT = '#ef4444', BRAND = '#a855f7';
+
+  const regimeCls = (s) => /pos|long/i.test(s) ? 'text-emerald-500'
+    : /neg|short/i.test(s) ? 'text-rose-500' : 'text-slate-400';
+  const regimeBadge = (s, hasIV) => {
+    if (!hasIV) return `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-500/15 text-slate-400">GEX N/D</span>`;
+    const long = /pos|long/i.test(s);
+    const cls = long ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+                     : 'bg-rose-500/15 text-rose-600 dark:text-rose-300';
+    return `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ${cls}">${long ? 'Long γ' : 'Short γ'}</span>`;
+  };
+
+  // Nearest-DTE bucket = the one Norman is most exposed to right now.
+  const nearestBucket = (r) => (r.buckets || []).reduce((best, b) =>
+    (!best || (b.actual_dte ?? 1e9) < (best.actual_dte ?? 1e9)) ? b : best, null);
+
+  const store = new Map();   // ticker -> { report, chart }
+
+  function cardShell(h) {
+    const id = `pf-${h.ticker.replace(/[^A-Za-z0-9]/g, '')}`;
+    return `
+      <div id="${id}" class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-col">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="text-xl font-bold">${esc(h.ticker)}</div>
+            <div class="text-xs text-slate-400">Posición: <span class="font-semibold text-slate-500 dark:text-slate-300">${fmtBig(h.market_value)}</span></div>
+          </div>
+          <a href="/" data-analyze="${esc(h.ticker)}" title="Analizar en detalle"
+             class="text-xs px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-brand/10 hover:text-brand-soft">Analizar →</a>
+        </div>
+        <div data-body class="mt-3 flex items-center justify-center h-40 text-slate-400 text-sm">
+          <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.4 0 0 5.4 0 12h4z"></path>
+          </svg>
+          Calculando niveles…
+        </div>
+      </div>`;
+  }
+
+  const levelBox = (label, value, cls) => `
+    <div class="rounded-lg border border-slate-200 dark:border-slate-800 px-2 py-1.5">
+      <div class="text-[10px] uppercase tracking-wide text-slate-400">${label}</div>
+      <div class="text-sm font-semibold ${cls || ''}">${value}</div>
+    </div>`;
+
+  function cardBodyHtml(h, r) {
+    const b = nearestBucket(r);
+    const hasIV = (r.buckets || []).some((x) => x.sigma != null);
+    const px = (v) => (v == null || isNaN(v)) ? '—' : `$${fmt(v, 0)}`;
+    const tf = (r.data_timeframe || '').toUpperCase();
+    const badge = tf === 'REAL-TIME'
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500">🟢 Real</span>`
+      : tf ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500">🟡 Dif.</span>` : '';
+    const chartId = `chart-${h.ticker.replace(/[^A-Za-z0-9]/g, '')}`;
+    const b0 = b || {};
+    return `
+      <div class="flex items-center gap-2 flex-wrap mb-2 text-sm">
+        <span>Spot <span class="font-semibold">${px(r.spot)}</span></span> ${badge}
+        <span class="ml-auto">${regimeBadge(r.gex_regime, hasIV)}</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        ${levelBox('Resistencia (Call Wall)', px(b0.call_wall), 'text-emerald-600 dark:text-emerald-400')}
+        ${levelBox('Soporte (Put Wall)', px(b0.put_wall), 'text-rose-600 dark:text-rose-400')}
+      </div>
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        ${levelBox('Zero-Γ flip', hasIV ? px(b0.zero_gamma) : 'N/D', 'text-slate-500 dark:text-slate-300')}
+        ${levelBox('Call Γ Wall', hasIV ? px(b0.call_gamma_wall) : 'N/D', 'text-cyan-600 dark:text-cyan-400')}
+        ${levelBox('Put Γ Wall', hasIV ? px(b0.put_gamma_wall) : 'N/D', 'text-amber-600 dark:text-amber-400')}
+      </div>
+      <div id="${chartId}" class="w-full rounded-lg overflow-hidden" style="height:170px;"></div>
+      <div class="mt-1 text-[10px] text-slate-400">
+        ${b ? esc(b.label) + ' · ' + (b.actual_dte ?? '—') + ' DTE' : ''} ·
+        Sólido = Walls · Guiones = Zero-Γ / Gamma Walls
+      </div>`;
+  }
+
+  function drawChart(chartId, r) {
+    const el = document.getElementById(chartId);
+    if (!el || !window.LightweightCharts) return null;
+    const t = CHART_THEME[currentTheme()];
+    const chart = LightweightCharts.createChart(el, {
+      autoSize: true,
+      layout: { background: { color: t.bg }, textColor: t.text },
+      grid: { vertLines: { color: t.grid }, horzLines: { color: t.grid } },
+      rightPriceScale: { borderColor: t.grid },
+      timeScale: { borderColor: t.grid, visible: false },
+      crosshair: { mode: 0 },
+      handleScroll: false, handleScale: false,
+    });
+    const series = chart.addCandlestickSeries({
+      upColor: BULL_SOFT, downColor: BEAR_SOFT, borderUpColor: BULL_SOFT,
+      borderDownColor: BEAR_SOFT, wickUpColor: BULL_SOFT, wickDownColor: BEAR_SOFT,
+    });
+    series.setData(r.candles || []);
+    const b = nearestBucket(r);
+    const hasIV = (r.buckets || []).some((x) => x.sigma != null);
+    const LSt = LightweightCharts.LineStyle;
+    const add = (price, color, style, width, title) => {
+      if (price == null || isNaN(price)) return;
+      series.createPriceLine({ price, color, lineWidth: width, lineStyle: style, axisLabelVisible: true, title });
+    };
+    if (b) {
+      add(b.call_wall, BULL, LSt.Solid, 2, 'Call');
+      add(b.put_wall, BEAR, LSt.Solid, 2, 'Put');
+      if (hasIV) {
+        add(b.zero_gamma, '#9aa4b2', LSt.LargeDashed, 1, '0Γ');
+        add(b.call_gamma_wall, '#06b6d4', LSt.Dotted, 1, 'CΓ');
+        add(b.put_gamma_wall, '#f59e0b', LSt.Dotted, 1, 'PΓ');
+      }
+    }
+    chart.timeScale().fitContent();
+    return chart;
+  }
+
+  async function loadHolding(h) {
+    const card = document.getElementById(`pf-${h.ticker.replace(/[^A-Za-z0-9]/g, '')}`);
+    if (!card) return;
+    const body = card.querySelector('[data-body]');
+    try {
+      const res = await fetch(`/api/report?ticker=${encodeURIComponent(h.ticker)}`);
+      const j = await res.json();
+      if (!res.ok || j.error || !(j.buckets && j.buckets.length)) {
+        body.className = 'mt-3 text-sm text-slate-400';
+        body.innerHTML = `<div class="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-4 text-center">
+          Sin estructura de opciones para ${esc(h.ticker)}${j.error ? ' — ' + esc(j.error) : ''}.</div>`;
+        return;
+      }
+      body.className = 'mt-3';
+      body.innerHTML = cardBodyHtml(h, j);
+      const chartId = `chart-${h.ticker.replace(/[^A-Za-z0-9]/g, '')}`;
+      const chart = drawChart(chartId, j);
+      store.set(h.ticker, { report: j, chartId, chart });
+    } catch (e) {
+      body.className = 'mt-3 text-sm text-rose-400';
+      body.innerHTML = `Error de red al analizar ${esc(h.ticker)}.`;
+    }
+  }
+
+  // Limited concurrency so we don't hammer the chain API with 20 parallel fetches.
+  async function runPool(items, worker, size = 3) {
+    let i = 0;
+    const next = async () => { while (i < items.length) { const idx = i++; await worker(items[idx]); } };
+    await Promise.all(Array.from({ length: Math.min(size, items.length) }, next));
+  }
+
+  // Re-theme all rendered charts when Norman toggles light/dark.
+  function rethemeAll() {
+    store.forEach((v, ticker) => {
+      if (v.chart) { try { v.chart.remove(); } catch {} }
+      const chart = drawChart(v.chartId, v.report);
+      store.set(ticker, { ...v, chart });
+    });
+  }
+  $('themeBtn')?.addEventListener('click', () => setTimeout(rethemeAll, 30));
+
+  // "Analizar →" — hand the ticker to the index page via the shared `wakanda` cookie
+  // (same key app.js reads on load) so it auto-analyzes on arrival.
+  $('pfGrid')?.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-analyze]');
+    if (!a) return;
+    try {
+      const m = document.cookie.match(/(?:^|; )wakanda=([^;]*)/);
+      const obj = m ? (JSON.parse(decodeURIComponent(m[1])) || {}) : {};
+      obj.lastTicker = a.dataset.analyze;
+      document.cookie = `wakanda=${encodeURIComponent(JSON.stringify(obj))}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+    } catch { /* fall through — link still navigates to / */ }
+  });
+
+  async function init() {
+    let data;
+    try {
+      const res = await fetch('/api/portfolio');
+      data = await res.json();
+    } catch {
+      $('pfLoading').textContent = 'Error de red al conectar con el servidor.';
+      return;
+    }
+    $('pfLoading').classList.add('hidden');
+    if (!data.configured) { $('pfDisconnected').classList.remove('hidden'); return; }
+    const holdings = data.holdings || [];
+    if (!holdings.length) { $('pfEmpty').classList.remove('hidden'); return; }
+
+    const total = holdings.reduce((s, h) => s + (h.market_value || 0), 0);
+    const box = (label, value, cls) => `
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-400">${label}</div>
+        <div class="text-2xl font-bold ${cls || ''}">${value}</div>
+      </div>`;
+    $('pfSummary').innerHTML =
+      box('Valor total', fmtBig(total)) +
+      box('Subyacentes', String(holdings.length)) +
+      box('Posiciones', String(data.positions ?? '—'));
+    $('pfSummary').classList.remove('hidden');
+
+    $('pfGrid').innerHTML = holdings.map(cardShell).join('');
+    runPool(holdings, loadHolding, 3);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+{% endblock %}

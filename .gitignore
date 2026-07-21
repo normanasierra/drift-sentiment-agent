@@ -11,3 +11,4 @@ scratchpad_*.log
 .streamlit/secrets.toml
 
 .backups/
+*.bak

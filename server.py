@@ -160,6 +160,11 @@ def home():
     return render("index.html", page="drift", title="Drift Sentiment + GEX")
 
 
+@app.get("/portfolio", response_class=HTMLResponse)
+def portfolio_page():
+    return render("portfolio.html", page="portfolio", title="Portafolio")
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
     if not APP_PASSWORD:
@@ -232,6 +237,55 @@ def search(q: str = ""):
     seen = {i["ticker"] for i in idx}
     merged = idx + [s for s in stocks if s["ticker"] not in seen]
     return {"results": merged[:8]}
+
+
+# --- Portafolio (Schwab holdings → underlying tickers for GEX + supports) -------
+def _underlying(symbol: str) -> str:
+    """Underlying ticker from a Schwab symbol. Option symbols are like
+    'SPX   270115C08025000' → first whitespace token. Equities are the symbol
+    itself. SPXW (weekly SPX) collapses to SPX so it aggregates with the index."""
+    tok = (symbol or "").split()
+    root = (tok[0] if tok else "").strip().upper()
+    return "SPX" if root == "SPXW" else root
+
+
+@app.get("/api/portfolio")
+def api_portfolio():
+    """Schwab holdings aggregated by underlying ticker, sorted by market value desc.
+    READ-ONLY. Degrades to configured:false / empty on any Schwab error so the page
+    can show a friendly 'Conecta Schwab' message instead of erroring."""
+    try:
+        from data_sources import schwab
+    except Exception:  # noqa: BLE001
+        return {"configured": False, "holdings": []}
+
+    try:
+        configured = bool(schwab.configured())
+    except Exception:  # noqa: BLE001
+        configured = False
+    if not configured:
+        return {"configured": False, "holdings": []}
+
+    try:
+        positions = schwab.positions() or []
+    except Exception:  # noqa: BLE001
+        return {"configured": True, "holdings": [], "error": "schwab_unreachable"}
+
+    agg: dict[str, float] = {}
+    for p in positions:
+        ticker = _underlying(p.get("symbol", ""))
+        if not ticker:
+            continue
+        mv = p.get("market_value") or 0
+        try:
+            agg[ticker] = agg.get(ticker, 0.0) + float(mv)
+        except (TypeError, ValueError):
+            agg.setdefault(ticker, 0.0)
+
+    holdings = [{"ticker": t, "market_value": round(v, 2)}
+                for t, v in sorted(agg.items(), key=lambda kv: kv[1], reverse=True)]
+    return {"configured": True, "holdings": holdings,
+            "count": len(holdings), "positions": len(positions)}
 
 
 # --- Macro layers (ported from the Leo/Flask app): Market Context + Alignment ---

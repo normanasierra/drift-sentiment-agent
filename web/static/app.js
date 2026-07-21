@@ -1266,7 +1266,7 @@
     $('analyzeBtn')?.addEventListener('click', analyze);
 
     const last = S.get('lastTicker', '');
-    if (last) { $('ticker').value = last; analyze(); }
+    if (last && $('ticker')) { $('ticker').value = last; analyze(); }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
