@@ -41,7 +41,11 @@ def _save(d: dict) -> None:
 
 
 def configured() -> bool:
-    return bool(_load().get("refresh_token") or os.getenv("SCHWAB_ACCESS_TOKEN"))
+    return bool(
+        _load().get("refresh_token")
+        or os.getenv("SCHWAB_REFRESH_TOKEN")
+        or os.getenv("SCHWAB_ACCESS_TOKEN")
+    )
 
 
 def _access_token() -> str | None:
@@ -52,7 +56,8 @@ def _access_token() -> str | None:
     if tok.get("access_token") and now < tok.get("access_expires_at", 0) - 60:
         return tok["access_token"]
 
-    rt = tok.get("refresh_token")
+    # File token first; on ephemeral hosts (Render) fall back to an env var.
+    rt = tok.get("refresh_token") or os.getenv("SCHWAB_REFRESH_TOKEN")
     key, secret = os.getenv("SCHWAB_APP_KEY"), os.getenv("SCHWAB_APP_SECRET")
     if rt and key and secret:
         try:
