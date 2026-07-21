@@ -271,6 +271,18 @@ def api_portfolio():
     except Exception:  # noqa: BLE001
         return {"configured": True, "holdings": [], "error": "schwab_unreachable"}
 
+    # Empty means one of two very different things: the account truly holds nothing,
+    # or the ~7-day refresh token expired and positions() silently returned []. Ask
+    # needs_reauth() (only on the empty path, since it costs a Schwab round-trip) so
+    # the page can say "reconnect Schwab" instead of a misleading "no open positions".
+    if not positions:
+        try:
+            reauth = bool(schwab.needs_reauth())
+        except Exception:  # noqa: BLE001
+            reauth = False
+        return {"configured": True, "holdings": [], "count": 0,
+                "positions": 0, "needs_reauth": reauth}
+
     agg: dict[str, float] = {}
     for p in positions:
         ticker = _underlying(p.get("symbol", ""))
@@ -285,7 +297,8 @@ def api_portfolio():
     holdings = [{"ticker": t, "market_value": round(v, 2)}
                 for t, v in sorted(agg.items(), key=lambda kv: kv[1], reverse=True)]
     return {"configured": True, "holdings": holdings,
-            "count": len(holdings), "positions": len(positions)}
+            "count": len(holdings), "positions": len(positions),
+            "needs_reauth": False}
 
 
 # --- Macro layers (ported from the Leo/Flask app): Market Context + Alignment ---

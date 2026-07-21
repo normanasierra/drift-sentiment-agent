@@ -24,7 +24,16 @@
   </p>
 </div>
 <div id="pfEmpty" class="hidden rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center text-slate-400">
-  Schwab está conectado pero no devolvió posiciones abiertas ahora mismo.
+  Schwab está conectado y no tienes posiciones abiertas ahora mismo.
+</div>
+<div id="pfReauth" class="hidden rounded-xl border border-amber-300 dark:border-amber-800
+     bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 px-5 py-6">
+  <div class="text-lg font-semibold mb-1">🔑 Reconecta Schwab</div>
+  <p class="text-sm">
+    La sesión de Schwab expiró (el token se renueva ~cada 7 días, es normal). Corre
+    <code class="px-1 rounded bg-black/10 dark:bg-white/10">schwab-login.cmd</code>
+    una vez para volver a iniciar sesión (solo lectura, nunca ejecuta órdenes) y recarga esta página.
+  </p>
 </div>
 
 <!-- cards grid -->
@@ -234,7 +243,11 @@
     $('pfLoading').classList.add('hidden');
     if (!data.configured) { $('pfDisconnected').classList.remove('hidden'); return; }
     const holdings = data.holdings || [];
-    if (!holdings.length) { $('pfEmpty').classList.remove('hidden'); return; }
+    if (!holdings.length) {
+      // Distinguish an expired Schwab session (reconnect) from a truly empty account.
+      $(data.needs_reauth ? 'pfReauth' : 'pfEmpty').classList.remove('hidden');
+      return;
+    }
 
     const total = holdings.reduce((s, h) => s + (h.market_value || 0), 0);
     const box = (label, value, cls) => `
