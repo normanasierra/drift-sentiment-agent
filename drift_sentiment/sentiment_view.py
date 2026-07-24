@@ -62,6 +62,11 @@ def gex_matrix(
     for exp in exps:
         ecs = [c for c in contracts if c.expiration == exp]
         dte = max((exp - as_of).days, 0)
+        # Recover IV from price where the feed ships none (SPX and other indices),
+        # exactly like the engine's build_report — otherwise index GEX comes back 0
+        # and the matrix/profile show "IV no disponible" while the walls (from the
+        # report buckets, which DO recover IV) still render. Keeps them consistent.
+        ecs = gex.with_recovered_iv(ecs, spot, dte)
         iv = stats.atm_iv(ecs, spot)   # fallback IV; per-contract IV wins when present
         key = exp.isoformat()
         for k, v in gex.gex_by_strike(ecs, spot, dte, iv).items():

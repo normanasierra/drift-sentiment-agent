@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import date
 
 from . import chain_filter, drift, gex, magneto, scenarios, stats, walls
@@ -18,17 +17,10 @@ def _with_computed_iv(
     """Fill in missing IV by inverting Black-Scholes from each option's price.
 
     Only reached when a bucket has NO feed IV at all (index underlyings like SPX);
-    equities keep their feed IV untouched, so their output is unchanged.
+    equities keep their feed IV untouched. Delegates to the shared
+    ``gex.with_recovered_iv`` so the Sentiment+GEX view recovers IV identically.
     """
-    t = dte / 365.0
-    out: list[Contract] = []
-    for c in contracts:
-        if c.implied_volatility is None and c.price is not None:
-            iv = gex.implied_vol(c.price, spot, c.strike, t, c.is_call)
-            out.append(replace(c, implied_volatility=iv) if iv is not None else c)
-        else:
-            out.append(c)
-    return out
+    return gex.with_recovered_iv(contracts, spot, dte)
 
 
 def build_report(

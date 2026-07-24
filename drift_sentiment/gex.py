@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from dataclasses import replace
 
 from .models import Contract
 
@@ -114,6 +115,27 @@ def implied_vol(price, spot, strike, t_years, is_call, r=0.0):
             hi = mid
     iv = 0.5 * (lo + hi)
     return iv if IV_MIN <= iv <= IV_MAX else None
+
+
+def with_recovered_iv(
+    contracts: list[Contract], spot: float, dte: int
+) -> list[Contract]:
+    """Return ``contracts`` with IV inverted from each option's price wherever the
+    feed shipped none — index underlyings like SPX ship 0 feed IV, so without this
+    their GEX can't be computed. Contracts that already have a usable IV (equities)
+    or have no price to invert are returned untouched. ``dte`` is the days-to-expiry
+    of this SINGLE expiration, so call it per-expiration on a mixed-expiry list.
+    The source-of-truth engine (report.build_report) and the Sentiment+GEX view
+    both go through here, so index GEX is consistent across every screen."""
+    t = dte / 365.0
+    out: list[Contract] = []
+    for c in contracts:
+        if c.implied_volatility is None and c.price is not None:
+            iv = implied_vol(c.price, spot, c.strike, t, c.is_call)
+            out.append(replace(c, implied_volatility=iv) if iv is not None else c)
+        else:
+            out.append(c)
+    return out
 
 
 def _iv_for(contract: Contract, fallback_iv: float | None) -> float | None:
