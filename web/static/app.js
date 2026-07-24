@@ -286,7 +286,15 @@
     return line;
   };
 
-  function sweepCard(c, withConf) {
+  function sweepCard(c, withConf, maxPrem) {
+    const big = (c.premium || 0) >= 1e6;                        // prima ≥ $1M → amarillo
+    const isTop = maxPrem > 0 && (c.premium || 0) >= maxPrem;   // la más alta del día → ★
+    const cardCls = big
+      ? 'border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-950/30 ring-1 ring-amber-400/50'
+      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900';
+    const star = isTop
+      ? '<span class="text-amber-500 text-lg leading-none mr-1" title="La transacción más alta del día">★</span>'
+      : '';
     const conf = withConf && c.confluence ? c.confluence : null;
     const notes = conf && conf.notes && conf.notes.length
       ? `<div class="mt-1 text-xs text-slate-500 dark:text-slate-400">${esc(conf.notes.slice(0, 2).join(' · '))}</div>` : '';
@@ -307,9 +315,9 @@
     }
     const reasons = (c.reasons || []).slice(0, 3).join(' · ');
     const scoreCls = c.score >= 70 ? 'text-emerald-500' : 'text-rose-500';
-    return `<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+    return `<div class="rounded-xl border ${cardCls} p-3">
       <div class="flex items-start justify-between gap-2">
-        <div class="text-sm">${sweepLine(c)}</div>
+        <div class="text-sm">${star}${sweepLine(c)}</div>
         <div class="flex items-center gap-2 whitespace-nowrap">
           ${dirBadge(c.bullish)}
           <span class="text-4xl font-black leading-none ${scoreCls}" title="Convicción ${esc(c.tier)} (${c.score}/100)">${c.score}%</span>
@@ -341,7 +349,10 @@
       box.innerHTML = head + `<div class="rounded-xl border border-slate-200 dark:border-slate-800 p-6 text-center text-slate-400">${msg}</div>`;
       return;
     }
-    let html = head;
+    // Marcado: amarillo = prima ≥ $1M · ★ = la transacción más alta del día.
+    const shown = [...(d.on_ticker || []), ...(d.top || [])];
+    const maxPrem = shown.reduce((m, c) => Math.max(m, c.premium || 0), 0);
+    let html = head + `<div class="text-[11px] text-slate-400 mb-3">🟡 Amarillo = prima ≥ $1M · <span class="text-amber-500 font-bold">★</span> = la más alta del día</div>`;
     if (d.ticker && d.iv_context && (d.iv_context.hist_vol || d.iv_context.iv_atm)) {
       const hv = d.iv_context.hist_vol, iva = d.iv_context.iv_atm;
       const ratio = (hv && iva) ? iva / hv : null;
@@ -356,7 +367,7 @@
     }
     if (d.on_ticker && d.on_ticker.length) {
       html += `<h3 class="font-semibold mb-2">En ${esc(d.ticker)} — confluencia con tu estructura</h3>
-        <div class="grid gap-2 mb-5">${d.on_ticker.map((c) => sweepCard(c, true)).join('')}</div>`;
+        <div class="grid gap-2 mb-5">${d.on_ticker.map((c) => sweepCard(c, true, maxPrem)).join('')}</div>`;
     } else if (d.ticker) {
       html += `<p class="text-xs text-slate-400 mb-5">Sin sweeps para ${esc(d.ticker)} en el flujo de hoy.</p>`;
     }
@@ -365,15 +376,15 @@
       html += `<div class="mb-2 text-xs text-purple-600 dark:text-purple-300"><span class="font-semibold">🔁 Rolling multi-día:</span> ${rollTickers.map((k) => esc(k)).join(' · ')}</div>`;
     }
     html += `<h3 class="font-semibold mb-2">Flujo del día — mayor convicción (todos los tickers)</h3>
-      <div class="grid gap-2 md:grid-cols-2">${d.top.map((c) => sweepCard(c, false)).join('')}</div>`;
+      <div class="grid gap-2 md:grid-cols-2">${d.top.map((c) => sweepCard(c, false, maxPrem)).join('')}</div>`;
     box.innerHTML = html;
   }
 
-  async function loadUnusual(ticker) {
+  async function loadUnusual(ticker, force) {
     const box = $('unusualBody'); if (!box) return;
     const key = ticker || '';
-    if (unusualLoadedFor === key) return;
-    box.innerHTML = '<div class="p-6 text-center text-slate-400">Cargando flujo…</div>';
+    if (!force && unusualLoadedFor === key) return;
+    if (!force) box.innerHTML = '<div class="p-6 text-center text-slate-400">Cargando flujo…</div>';
     try {
       const r = await fetch(`/api/unusual?ticker=${encodeURIComponent(key)}`);
       const d = await r.json();
@@ -1236,6 +1247,15 @@
     // Tabs
     document.querySelectorAll('.tabBtn').forEach((b) => b.addEventListener('click', () => activateTab(b.dataset.tab)));
     activateTab(S.get('tab', 'buckets'));
+
+    // Auto-refresh de las transacciones (Actividad Inusual) cada 30s mientras la
+    // pestaña esté abierta — así el flujo del día se mantiene en vivo sin recargar.
+    setInterval(() => {
+      const panel = $('unusualBody') && $('unusualBody').closest('[data-panel]');
+      if (panel && !panel.classList.contains('hidden')) {
+        loadUnusual((lastReport && lastReport.ticker) || S.get('lastTicker', ''), true);
+      }
+    }, 30000);
 
     // GEX toggle (persisted)
     const gexBox = $('gexToggle');
