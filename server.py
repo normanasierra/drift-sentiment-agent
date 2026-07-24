@@ -482,6 +482,8 @@ def api_unusual(ticker: str = ""):
     for it in raw:  # single-leg only — drop multi-leg (spread/combo) legs per alert
         all_contracts.extend(sweeps_mod.drop_multileg(sweeps_mod.parse_contracts(
             it.get("body") or "", spot=spot_map, fallback_time=it.get("date"))))
+    for c in all_contracts:  # fold SPX weeklies (SPXW) into SPX so analyzing SPX matches them
+        c["ticker"] = sweeps_mod.underlying_root(c.get("ticker"))
     all_contracts.sort(key=lambda c: c["score"].score, reverse=True)
 
     # History + multi-day rolls use the FULL set (more detection power); the
@@ -494,7 +496,10 @@ def api_unusual(ticker: str = ""):
         rolls = {}
 
     contracts = sweeps_mod.filter_contracts(all_contracts)
-    on_ticker = ua.scan(rep, contracts, hist_vol=hist_vol) if rep is not None else []
+    # "En <ticker>" shows ALL of the analyzed ticker's single-leg sweeps, UNFILTERED by
+    # the global quality floor — when you analyze SPX you want to see SPX's flow even if
+    # those sweeps are smaller than the $1M/20K/5K floor used for the all-ticker "top".
+    on_ticker = ua.scan(rep, all_contracts, hist_vol=hist_vol) if rep is not None else []
     ladders = ua.detect_ladders(contracts)
 
     return {
@@ -605,6 +610,8 @@ def api_sentiment(ticker: str = ""):
     for it in _todays_sweeps():
         sweeps.extend(sweeps_mod.parse_contracts(
             it.get("body") or "", spot={ticker: spot}, fallback_time=it.get("date")))
+    for c in sweeps:  # fold SPX weeklies (SPXW) into SPX so the SPX flow matches
+        c["ticker"] = sweeps_mod.underlying_root(c.get("ticker"))
 
     matrix = sentiment_view.gex_matrix(contracts, spot, today)
 

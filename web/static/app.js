@@ -963,12 +963,12 @@
     drawSentLevels(i);
   }
 
-  async function loadSentiment(ticker) {
+  async function loadSentiment(ticker, force) {
     const box = $('sentBody'); if (!box) return;
     const key = ticker || '';
     if (!key) { box.innerHTML = '<div class="p-10 text-center text-slate-400">Escribe un ticker y pulsa Analizar.</div>'; return; }
-    if (sentLoadedFor === key) return;
-    box.innerHTML = '<div class="p-10 text-center text-slate-400">Cargando estructura (cadena completa)…</div>';
+    if (!force && sentLoadedFor === key) return;
+    if (!force) box.innerHTML = '<div class="p-10 text-center text-slate-400">Cargando estructura (cadena completa)…</div>';
     try {
       const r = await fetch(`/api/sentiment?ticker=${encodeURIComponent(key)}`);
       const d = await r.json();
@@ -1248,13 +1248,14 @@
     document.querySelectorAll('.tabBtn').forEach((b) => b.addEventListener('click', () => activateTab(b.dataset.tab)));
     activateTab(S.get('tab', 'buckets'));
 
-    // Auto-refresh de las transacciones (Actividad Inusual) cada 30s mientras la
-    // pestaña esté abierta — así el flujo del día se mantiene en vivo sin recargar.
+    // Auto-refresh cada 30s de las vistas EN VIVO (GEX + transacciones) mientras
+    // estén abiertas — siguen el mercado en tiempo real sin recargar la página.
     setInterval(() => {
-      const panel = $('unusualBody') && $('unusualBody').closest('[data-panel]');
-      if (panel && !panel.classList.contains('hidden')) {
-        loadUnusual((lastReport && lastReport.ticker) || S.get('lastTicker', ''), true);
-      }
+      const tkr = (lastReport && lastReport.ticker) || S.get('lastTicker', '');
+      const shown = (id) => { const el = $(id), p = el && el.closest('[data-panel]'); return p && !p.classList.contains('hidden'); };
+      if (shown('unusualBody')) loadUnusual(tkr, true);                                   // transacciones
+      if (shown('sentBody') && tkr) { const y = window.scrollY; loadSentiment(tkr, true).then(() => window.scrollTo(0, y)); }  // GEX matriz+perfil
+      if (shown('gexImg') && tkr) loadPlots(tkr);                                         // gráfica GEX (Gráfico)
     }, 30000);
 
     // GEX toggle (persisted)

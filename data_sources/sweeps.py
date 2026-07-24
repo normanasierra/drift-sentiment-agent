@@ -116,6 +116,18 @@ def _dte(mon: str, day: str, yy: str, today: date | None) -> int | None:
     return (exp - (today or date.today())).days
 
 
+# Index weeklies are the SAME underlying as their index for flow purposes — MarketSnack
+# tags most SPX flow as "SPXW" (SPX weekly), so analyzing "SPX" must pick those up too.
+_WEEKLY_ROOT = {"SPXW": "SPX", "NDXP": "NDX", "RUTW": "RUT", "VIXW": "VIX"}
+
+
+def underlying_root(ticker: str | None) -> str:
+    """Underlying root for matching sweeps to an analyzed ticker: SPXW→SPX, NDXP→NDX,
+    RUTW→RUT, VIXW→VIX. Every other ticker is returned uppercased, unchanged."""
+    t = (ticker or "").upper()
+    return _WEEKLY_ROOT.get(t, t)
+
+
 def parse_contracts(
     body: str,
     *,
