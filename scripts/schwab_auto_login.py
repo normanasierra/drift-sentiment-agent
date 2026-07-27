@@ -38,6 +38,18 @@ TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token"
 
 _result = {"done": False, "ok": False, "msg": ""}
 
+LOG = REPO / "output" / "schwab_auth.log"
+_START = time.time()
+
+
+def _log(m: str) -> None:
+    try:
+        LOG.parent.mkdir(exist_ok=True)
+        with LOG.open("a", encoding="utf-8") as f:
+            f.write(f"[auto {time.strftime('%H:%M:%S')}] {m}\n")
+    except Exception:  # noqa: BLE001
+        pass
+
 
 def _exchange(code: str, key: str, secret: str, redirect: str) -> tuple[bool, str]:
     auth = base64.b64encode(f"{key}:{secret}".encode()).decode()
@@ -50,7 +62,12 @@ def _exchange(code: str, key: str, secret: str, redirect: str) -> tuple[bool, st
             timeout=30,
         )
     except Exception as exc:  # noqa: BLE001
+        _log(f"exchange network-error: {exc}")
         return False, f"Error de red al canjear: {exc}"
+    # NEVER log the body on success — it contains the refresh/access tokens. Only the
+    # error body (no secrets) on failure, for diagnosing invalid_grant/expiry.
+    _log(f"exchange status={r.status_code} secret_len={len(secret)} redirect={redirect} "
+         f"code_len={len(code)}" + ("" if r.status_code == 200 else f" err={r.text[:250]}"))
     if r.status_code == 200:
         TOKENS.parent.mkdir(exist_ok=True)
         tok = r.json()
@@ -70,6 +87,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_response(204)  # ignore favicon / stray requests, keep waiting
             self.end_headers()
             return
+        _log(f"code received {time.time() - _START:.0f}s after start (len={len(code)})")
         ok, msg = _exchange(code, self.server.k, self.server.s, self.server.r)  # type: ignore[attr-defined]
         _result.update(done=True, ok=ok, msg=msg)
         html = ("<html><body style='font-family:sans-serif;text-align:center;padding:48px'>"
