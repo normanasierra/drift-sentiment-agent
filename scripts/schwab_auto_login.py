@@ -53,7 +53,9 @@ def _exchange(code: str, key: str, secret: str, redirect: str) -> tuple[bool, st
         return False, f"Error de red al canjear: {exc}"
     if r.status_code == 200:
         TOKENS.parent.mkdir(exist_ok=True)
-        TOKENS.write_text(json.dumps(r.json(), indent=2), encoding="utf-8")
+        tok = r.json()
+        tok["reauth_at"] = time.time()  # so we can WhatsApp a reminder before it expires
+        TOKENS.write_text(json.dumps(tok, indent=2), encoding="utf-8")
         return True, "Autorizado — tokens guardados. Ya puedes cerrar esta pestaña."
     return False, f"Schwab rechazo ({r.status_code}): {r.text[:200]}"
 

@@ -20,6 +20,7 @@ import base64
 import json
 import os
 import sys
+import time
 import urllib.parse
 import webbrowser
 from pathlib import Path
@@ -140,6 +141,7 @@ def main() -> None:
     _log("exchange OK -> tokens guardados")
 
     tok = r.json()
+    tok["reauth_at"] = time.time()  # so we can WhatsApp a reminder before it expires
     TOKENS.parent.mkdir(exist_ok=True)
     TOKENS.write_text(json.dumps(tok, indent=2), encoding="utf-8")
     print(f"\n✅ Listo — tokens guardados en {TOKENS}")

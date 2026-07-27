@@ -131,6 +131,27 @@ def needs_reauth() -> bool:
         return False
 
 
+_REFRESH_LIFE_DAYS = 7.0  # Schwab refresh tokens die ~7 days after issuance.
+
+
+def reauth_age_days() -> float | None:
+    """Days since the last full re-auth (schwab-login.cmd), from the ``reauth_at``
+    stamp the auth flow writes. None if unknown (token pre-dates the stamp)."""
+    at = _load().get("reauth_at")
+    try:
+        return (time.time() - float(at)) / 86400.0 if at else None
+    except (TypeError, ValueError):
+        return None
+
+
+def reauth_due_soon(within_days: float = 1.5) -> bool:
+    """True when the refresh token is within ``within_days`` of its ~7-day expiry —
+    so Norman gets a heads-up to renew BEFORE it dies. The already-expired case is
+    handled separately by needs_reauth(). False if the age is unknown."""
+    age = reauth_age_days()
+    return age is not None and (_REFRESH_LIFE_DAYS - within_days) <= age < _REFRESH_LIFE_DAYS
+
+
 if __name__ == "__main__":
     if not configured():
         print("Schwab sin autorizar todavía — corre scripts/schwab_auth.py una vez.")
