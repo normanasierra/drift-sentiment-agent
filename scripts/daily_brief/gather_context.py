@@ -22,6 +22,17 @@ INDICES: list[tuple[str, str]] = [
     ("SPX", "^GSPC"), ("QQQ", "QQQ"), ("VIX", "^VIX"), ("10Y yield", "^TNX"),
 ]
 
+# Global markets Norman follows — UK, Germany, Japan, China (Yahoo index symbols).
+WORLD: list[tuple[str, str]] = [
+    ("Reino Unido · FTSE 100", "^FTSE"),
+    ("Alemania · DAX", "^GDAXI"),
+    ("Japón · Nikkei 225", "^N225"),
+    ("China · Shanghái Comp.", "000001.SS"),
+]
+
+# US Treasury yields Norman wants front-and-center (Yahoo yield symbols; 2Y via future).
+BONDS: list[tuple[str, str]] = [("2 años", "2YY=F"), ("5 años", "^FVX"), ("10 años", "^TNX")]
+
 # The reader's portfolio universe (kept in sync with brief_prompt.md).
 PORTFOLIO: list[str] = [
     "CRM", "AMZN", "AMD", "TSLA", "INTC", "IBM", "STM", "COIN", "NOW",
@@ -33,7 +44,7 @@ PORTFOLIO: list[str] = [
 WATCHLIST: list[tuple[str, list[tuple[str, str]]]] = [
     ("Futuros índices", [("ES", "ES=F"), ("NQ", "NQ=F"), ("YM", "YM=F"), ("RTY", "RTY=F")]),
     ("Volatilidad", [("VIX", "^VIX"), ("VIX1D", "^VIX1D")]),
-    ("Bonos (rend. %)", [("10Y", "^TNX"), ("2Y", "2YY=F")]),
+    ("Bonos (rend. %)", [("2Y", "2YY=F"), ("5Y", "^FVX"), ("10Y", "^TNX")]),
     ("Mag 7", [("NVDA", "NVDA"), ("MSFT", "MSFT"), ("AAPL", "AAPL"), ("AMZN", "AMZN"),
                ("META", "META"), ("GOOGL", "GOOGL"), ("TSLA", "TSLA")]),
     ("Semis", [("AVGO", "AVGO"), ("AMD", "AMD"), ("INTC", "INTC"), ("MU", "MU"),
@@ -75,17 +86,58 @@ def _indices_block() -> str:
     return f"ÍNDICES / MACRO (reales, {tag}):\n" + "\n".join(rows) if rows else ""
 
 
+def _world_block() -> str:
+    q = _quotes([y for _, y in WORLD])
+    if not q:
+        return ""
+    rows = [f"  {label}: {d['price']:,.2f} ({_fmt_pct(d)})"
+            for label, ysym in WORLD if (d := q.get(ysym))]
+    return "MERCADOS GLOBALES (reales, ~15min delay):\n" + "\n".join(rows) if rows else ""
+
+
+def _bonds_block() -> str:
+    q = _quotes([y for _, y in BONDS])
+    if not q:
+        return ""
+    rows = [f"  Tesoro {label}: {d['price']:.2f} ({_fmt_pct(d)})"
+            for label, ysym in BONDS if (d := q.get(ysym))]
+    return "BONOS DEL TESORO — rendimiento % (reales):\n" + "\n".join(rows) if rows else ""
+
+
+def _portfolio_tickers() -> tuple[list[str], bool]:
+    """The reader's portfolio universe. His REAL Schwab holdings when connected (so the
+    brief analyzes what he actually OWNS) — otherwise the static watchlist. Returns
+    (tickers, from_schwab)."""
+    try:
+        from data_sources import schwab
+        if schwab.configured():
+            held: list[str] = []
+            for p in schwab.positions():
+                sym = (p.get("symbol") or "").split()[0].upper()  # underlying of options
+                if sym and sym not in held:
+                    held.append(sym)
+            if held:  # real holdings first, then any watchlist names he doesn't hold
+                return held + [t for t in PORTFOLIO if t not in held], True
+    except Exception:  # noqa: BLE001 — Schwab down/expired → fall back to the watchlist
+        pass
+    return PORTFOLIO, False
+
+
 def _portfolio_block() -> str:
-    q = _quotes(PORTFOLIO)
+    tickers, from_schwab = _portfolio_tickers()
+    q = _quotes(tickers)
     if not q:
         return ""
     ordered = sorted(
-        (q[s] for s in PORTFOLIO if s in q),
+        (q[s] for s in tickers if s in q),
         key=lambda d: abs(d.get("change_pct") or 0), reverse=True,
     )
     rows = [f"  {d['symbol']}: {d['price']:.2f} ({_fmt_pct(d)})" for d in ordered]
     tag = "pre-mercado de HOY" if _is_premarket() else "del día"
-    return f"PORTAFOLIO — cambio % {tag} (real):\n" + "\n".join(rows)
+    src = ("TUS POSICIONES REALES de Schwab" if from_schwab
+           else "watchlist (Schwab sin conectar — re-autentica para ver tus posiciones reales)")
+    return (f"PORTAFOLIO — {src} · cambio % {tag} (real). ANALIZA CADA UNA:\n"
+            + "\n".join(rows))
 
 
 def _watchlist_block() -> str:
@@ -229,8 +281,9 @@ def _schwab_block() -> str:
 def gather() -> str:
     """Return a compact REAL-DATA block for the prompt, or '' if nothing loaded."""
     blocks = [
-        _indices_block(), _watchlist_block(), _movers_block(), _portfolio_block(),
-        _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
+        _indices_block(), _bonds_block(), _world_block(), _watchlist_block(),
+        _movers_block(), _portfolio_block(), _newsletters_block(), _sweeps_block(),
+        _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
     if not body:

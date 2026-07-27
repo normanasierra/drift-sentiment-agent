@@ -20,8 +20,17 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
 ## Pasos de investigación
 
 1. **Mercado general**: SPX y QQQ (nivel, cambio %, niveles clave), VIX (nivel
-   y dirección), Tesoro a 10 años (nivel y dirección). Forma una lectura:
+   y dirección), y la **curva del Tesoro 2 / 5 / 10 años** (usa el bloque DATOS
+   REALES "BONOS DEL TESORO": nivel y dirección de cada uno; nota si la curva se
+   aplana o empina y si el 2-10 sigue invertido). Forma una lectura:
    **Risk-On / Risk-Off / Mixto** con una frase de justificación.
+
+1b. **Mercados globales** (usa el bloque DATOS REALES "MERCADOS GLOBALES"; NO los
+   busques en web): **Reino Unido** (FTSE 100), **Alemania** (DAX), **Japón**
+   (Nikkei 225) y **China** (Shanghái Comp.). Una línea por mercado — nivel + % +
+   una nota de qué lo movió si hay noticia relevante hoy — y una frase de **tono
+   global**: ¿Europa y Asia amanecen en verde o rojo? ¿marcan la pauta para la
+   apertura de EE. UU.?
 
 2. **Watchlist SPX (pre-mercado)** — usa los DATOS REALES del bloque
    "WATCHLIST SPX" (NO busques estos en web). Sintetiza en 4-6 viñetas para
@@ -51,13 +60,15 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    ejecutivas). Resume en 2-4 viñetas con enfoque en impacto de mercado. Si no
    hay nada relevante hoy, dilo en una línea.
 
-5. **Portafolio del lector** (educativo, NO recomendaciones): estos son sus
-   tickers. Para cada uno consigue el cambio % del día (o pre-mercado) y anota
-   solo si hay una **noticia/catalizador** relevante hoy. Prioriza profundizar
-   en los que más se mueven o tienen titulares; a los demás, solo el % del día.
-
-   `SPX, CRM, AMZN, AMD, TSLA, INTC, IBM, UFO, STM, COIN, NOW, MU, MRVL,
-   PLTR, QS, IREN, MSFT, NVDA, CRWV, SPCX, NFLX, CBRS`
+5. **Tu portafolio — análisis de CADA acción** (educativo, NO recomendaciones):
+   usa los tickers del bloque DATOS REALES → **PORTAFOLIO** (son tus **posiciones
+   reales de Schwab** cuando está conectado; si la línea dice "watchlist", usa esa
+   lista). Para **CADA acción** da, en su fila: el **% del día** (del bloque real),
+   una **lectura corta** (tendencia/momentum: ¿rompe, rebota, consolida, sobre/bajo
+   su media?), la **noticia o catalizador de HOY** si lo hay (búscalo en web /
+   newsletters), y un **nivel clave** o dato de contexto. Profundiza más en las que
+   más se mueven o tienen titulares, pero **no dejes NINGUNA sin al menos una línea**.
+   Nunca digas comprar/vender — solo el estado y el porqué.
 
 6. **Lo que sucederá HOY (agenda del día)** — sección CLAVE que Norman quiere.
    Busca y lista, con **HORA (ET / hora local)** cuando la haya, lo programado para
@@ -85,7 +96,11 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
 
 - Título: `Brief de Mercado — <fecha de hoy en español>`
 - Insignia de **sesgo** (Risk-On / Risk-Off / Mixto) + una frase.
-- **Índices**: SPX, QQQ, VIX, 10Y (niveles + lectura).
+- **Índices**: SPX, QQQ, VIX, y la **curva del Tesoro 2 / 5 / 10 años** (niveles +
+  lectura de la curva: ¿aplana/empina?, ¿2-10 invertido?).
+- **Mercados globales**: tabla compacta con **Reino Unido** (FTSE 100), **Alemania**
+  (DAX), **Japón** (Nikkei 225) y **China** (Shanghái) — nivel + % día + una frase de
+  **tono global** (Europa/Asia en verde o rojo; pauta para la apertura de EE. UU.).
 - **Watchlist SPX (pre-mercado)**: tabla compacta POR GRUPOS (Futuros
   ES/NQ/YM/RTY · Volatilidad VIX/VIX1D · Bonos 10Y/2Y · Mag 7 · Semis ·
   Financieras · Pesos pesados · ETFs SPY/QQQ/IWM/SMH) con Último y % día; debajo,
@@ -111,10 +126,12 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   NO sugieras perseguir el strike exacto (la IV ya está inflada) — es educativo, solo
   contexto. Si no hay datos, OMITE esta sección por completo.
 - **Trump hoy**: 2-4 viñetas de impacto de mercado (o "sin novedad relevante").
-- **Tu portafolio** (educativo): una **tabla** con columnas
-  `Ticker | Último | % Día | Nivel/nota`. Incluye todos los tickers; en la
-  columna nota, pon la noticia/catalizador si lo hay, o un nivel clave, o "—".
-  Ordena por mayor movimiento del día. Encabezado recordando que es educativo.
+- **Tu portafolio — análisis por acción** (educativo): usa tus **posiciones REALES**
+  del bloque DATOS REALES → PORTAFOLIO. Una **tabla** `Ticker | Último | % Día | Lectura`
+  con **TODAS** tus acciones (columna Lectura = tendencia/momentum + la noticia o
+  catalizador de HOY si lo hay, o un nivel clave; **nunca** "compra/vende"). Ordena por
+  mayor movimiento del día. Si el portafolio viene de la watchlist (Schwab sin conectar),
+  dilo en una línea al inicio de la sección. Encabezado recordando que es educativo.
 - **Agenda de HOY — lo que sucederá durante el día** (sección DESTACADA): datos
   económicos con **hora** y consenso, Fed, earnings (marca los del portafolio) y
   demás catalizadores, ordenados por hora / importancia.
@@ -127,7 +144,8 @@ Usa números reales; "n/d" si falta un dato. Que sea escaneable.
 Texto plano, ESPAÑOL, **menos de 850 caracteres** (límite duro), sin HTML.
 Incluye, en este orden y muy conciso:
 - Línea inicial: `📊 Brief <fecha>` + sesgo.
-- SPX/QQQ (nivel clave), VIX, 10Y en una o dos líneas.
+- SPX/QQQ (nivel clave), VIX, y bonos **2/5/10Y** en una o dos líneas.
+- **Global** (1 línea): FTSE/DAX/Nikkei/China en verde o rojo (tono de Europa/Asia).
 - Futuros ES/NQ (↑/↓) del pre-mercado de hoy y si las 7 Magníficas están alineadas (1 línea).
 - La **noticia** de HOY más importante (1 línea).
 - **Hoy**: el dato / evento clave del día con su **hora** (1 línea, p.ej. "Hoy 8:30am CPI").
