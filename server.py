@@ -699,3 +699,20 @@ def plot_box(ticker: str = "", theme: str = "dark"):
 def plot_gex(ticker: str = "", theme: str = "dark"):
     spot, rep = _load(ticker.strip().upper())
     return _png(build_gex_profiles(rep.buckets, spot, theme))
+
+
+@app.get("/api/thinkscript")
+def api_thinkscript(ticker: str = ""):
+    """Download the Put/Call Walls + Magneto + Gamma (Zero-Γ flip, gamma walls) + ±σ
+    levels as a thinkorswim thinkScript study, to draw them natively on a ToS chart."""
+    ticker = (ticker or "").strip().upper()
+    if not ticker:
+        return JSONResponse({"error": "No ticker"}, status_code=400)
+    try:
+        _spot, rep = _load(ticker)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    from drift_sentiment import thinkscript
+    study = thinkscript.build_study(rep)
+    return Response(study, media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{ticker}_walls_gamma.ts"'})

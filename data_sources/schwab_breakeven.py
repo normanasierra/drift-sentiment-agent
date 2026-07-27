@@ -141,6 +141,49 @@ def positions_breakeven() -> list[dict]:
     return rows
 
 
+def _c(x, f="$%.2f"):
+    return (f % x) if x is not None else "n/d"
+
+
+def report_html(rows: list[dict] | None = None) -> str:
+    """Self-contained HTML break-even report (for email / the daily file). Educational."""
+    rows = rows if rows is not None else positions_breakeven()
+    tot_cost = sum(r.get("cost") or 0 for r in rows)
+    tot_mv = sum(r.get("market_value") or 0 for r in rows)
+    tot_pnl = sum(r.get("pnl") or 0 for r in rows)
+    green = sum(1 for r in rows if (r.get("pnl") or 0) >= 0)
+    head = ("<!doctype html><meta charset='utf-8'><style>"
+            "body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:18px;color:#0f172a}"
+            "h1{font-size:19px;margin:0 0 2px}.sub{color:#334155;font-size:13px}"
+            ".dis{background:#fef9c3;border:1px solid #fde047;padding:7px 11px;border-radius:8px;font-size:12.5px}"
+            "table{border-collapse:collapse;width:100%;font-size:12px;margin-top:10px}"
+            "th,td{border:1px solid #e2e8f0;padding:4px 7px;text-align:right}th{background:#f1f5f9}"
+            "td:first-child,td:nth-child(2){text-align:left}"
+            "tr.neg td.pnl{color:#b91c1c;font-weight:600}tr.pos td.pnl{color:#15803d;font-weight:600}"
+            "tr.pos{background:#f0fdf4}</style>")
+    body = [head,
+            "<h1>Break-even por posición — Schwab</h1>",
+            f"<p class='sub'>{len(rows)} opciones · Costo ${tot_cost:,.0f} · Valor ${tot_mv:,.0f} · "
+            f"<b>P&amp;L ${tot_pnl:,.0f}</b> · en ganancia {green}/{len(rows)} · {date.today().isoformat()}</p>",
+            "<p class='dis'>Educativo — <b>NO es asesoría financiera</b>. Es tu matemática de break-even "
+            "(tu costo), como la pestaña Analyze de thinkorswim. No es recomendación de vender ni mantener.</p>",
+            "<table><thead><tr><th>Subyac.</th><th>Opción</th><th>DTE</th><th>Qty</th><th>Prima</th>"
+            "<th>Mark</th><th>P&amp;L $</th><th>P&amp;L %</th><th>BE-hoy</th><th>% a hoy</th>"
+            "<th>BE-venc</th><th>Spot</th><th>% a venc</th></tr></thead><tbody>"]
+    for d in rows:
+        cls = "pos" if (d.get("pnl") or 0) >= 0 else "neg"
+        opc = f"{d['strike']:g} {d['cp'][0]} {d['exp']}" if d.get("strike") else "?"
+        body.append(
+            f"<tr class='{cls}'><td>{d['under']}</td><td>{opc}</td><td>{d['dte']}</td>"
+            f"<td>{d['qty']:g}</td><td>{_c(d['premium'])}</td><td>{_c(d['mark'])}</td>"
+            f"<td class='pnl'>${round(d['pnl']):,}</td><td>{_c(d['pnl_pct'],'%+.0f%%')}</td>"
+            f"<td>{_c(d['be_today'])}</td><td>{_c(d['pct_to_be_today'],'%+.1f%%')}</td>"
+            f"<td>{_c(d['be_expiration'])}</td><td>{_c(d['spot'])}</td>"
+            f"<td>{_c(d['pct_to_be_exp'],'%+.1f%%')}</td></tr>")
+    body.append("</tbody></table>")
+    return "".join(body)
+
+
 if __name__ == "__main__":
     for d in positions_breakeven():
         print(f"{d['under']:6} {d['strike']:g}{d['cp'][0]} {d['exp']} | pnl ${d['pnl']:,.0f} "

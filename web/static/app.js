@@ -650,6 +650,9 @@
         ${header}
         <div class="flex gap-1 shrink-0">
           <button data-export class="px-2 py-1 text-xs rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-500/25">⬇ Export Excel</button>
+          <a href="/api/thinkscript?ticker=${encodeURIComponent(h.ticker)}" download
+             title="Descarga los Walls + Magneto + Gamma como estudio thinkScript para thinkorswim"
+             class="px-2 py-1 text-xs rounded-lg bg-sky-500/15 text-sky-600 dark:text-sky-300 hover:bg-sky-500/25">📈 thinkScript (ToS)</a>
           <button data-knowhow class="px-2 py-1 text-xs rounded-lg bg-brand/15 text-brand-soft hover:bg-brand/25">ℹ GEX KnowHow</button>
           <button data-fs="sentMatrixCard" class="fsBtn px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">⛶ Pantalla completa</button>
           <button data-restore="sentMatrixCard" class="rsBtn hidden px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800">↩ Restaurar</button>
