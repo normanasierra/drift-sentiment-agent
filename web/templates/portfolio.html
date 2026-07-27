@@ -311,6 +311,10 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+
+  // Break-even en vivo: refresca la sección sola cada 30s mientras la pestaña esté
+  // visible, para que el P&L y los break-even sigan el mercado sin recargar la página.
+  setInterval(() => { if (!document.hidden) loadBreakeven(); }, 30000);
 })();
 </script>
 {% endblock %}
