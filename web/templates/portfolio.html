@@ -39,6 +39,9 @@
 <!-- cards grid -->
 <div id="pfGrid" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"></div>
 
+<!-- break-even por posición (opciones) -->
+<div id="pfBreakeven" class="mt-8 hidden"></div>
+
 <p class="mt-6 text-[11px] text-slate-400">Educativo — no es asesoría financiera. Solo lectura; nunca ejecuta órdenes.</p>
 
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
@@ -263,6 +266,47 @@
 
     $('pfGrid').innerHTML = holdings.map(cardShell).join('');
     runPool(holdings, loadHolding, 3);
+    loadBreakeven();
+  }
+
+  async function loadBreakeven() {
+    let d;
+    try { d = await (await fetch('/api/portfolio/breakeven')).json(); } catch { return; }
+    const rows = (d && d.positions) || [];
+    if (!rows.length) return;
+    const m = (x, dp = 2) => (x == null ? 'n/d' : '$' + fmt(x, dp));
+    const pc = (x) => (x == null ? 'n/d' : (x >= 0 ? '+' : '') + fmt(x, 1) + '%');
+    const body = rows.map((r) => {
+      const neg = (r.pnl || 0) < 0, pnlCls = neg ? 'text-rose-500' : 'text-emerald-500';
+      return `<tr class="border-t border-slate-100 dark:border-slate-800 ${neg ? '' : 'bg-emerald-50/60 dark:bg-emerald-950/20'}">
+        <td class="px-2 py-1 font-semibold text-left">${esc(r.under)}</td>
+        <td class="px-2 py-1 text-left whitespace-nowrap">${fmt(r.strike, 0)}${esc(r.cp[0])} ${esc(r.exp || '')}</td>
+        <td class="px-2 py-1 text-right">${r.dte ?? '—'}</td>
+        <td class="px-2 py-1 text-right">${fmt(r.qty, 0)}</td>
+        <td class="px-2 py-1 text-right">${m(r.premium)}</td>
+        <td class="px-2 py-1 text-right">${m(r.mark)}</td>
+        <td class="px-2 py-1 text-right font-semibold ${pnlCls}">${m(r.pnl, 0)}</td>
+        <td class="px-2 py-1 text-right ${pnlCls}">${r.pnl_pct == null ? 'n/d' : (r.pnl_pct >= 0 ? '+' : '') + Math.round(r.pnl_pct) + '%'}</td>
+        <td class="px-2 py-1 text-right font-medium">${m(r.be_today)}</td>
+        <td class="px-2 py-1 text-right text-slate-400">${pc(r.pct_to_be_today)}</td>
+        <td class="px-2 py-1 text-right">${m(r.be_expiration)}</td>
+        <td class="px-2 py-1 text-right text-slate-400">${pc(r.pct_to_be_exp)}</td>
+      </tr>`;
+    }).join('');
+    const heads = ['Subyac.', 'Opción', 'DTE', 'Qty', 'Prima', 'Mark', 'P&L $', 'P&L %', 'BE-hoy', '% a hoy', 'BE-venc', '% a venc'];
+    $('pfBreakeven').innerHTML = `
+      <h2 class="text-lg font-bold mb-1">🎯 Break-even por posición</h2>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">
+        Costo ${fmtBig(d.total_cost)} · P&L <span class="${d.total_pnl < 0 ? 'text-rose-500' : 'text-emerald-500'} font-semibold">${fmtBig(d.total_pnl)}</span> · en ganancia ${d.in_profit}/${d.count}.
+        <b>BE-hoy</b> = precio del subyacente HOY para valer tu costo (Black-Scholes). <b>BE-venc</b> = strike + prima. Educativo, no es asesoría.</p>
+      <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+        <table class="w-full text-xs">
+          <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500"><tr>${heads.map((h, i) =>
+            `<th class="px-2 py-1.5 ${i < 2 ? 'text-left' : 'text-right'} font-semibold whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+    $('pfBreakeven').classList.remove('hidden');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

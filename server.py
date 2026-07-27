@@ -301,6 +301,23 @@ def api_portfolio():
             "needs_reauth": False}
 
 
+@app.get("/api/portfolio/breakeven")
+def api_portfolio_breakeven():
+    """Per-position break-even for the reader's Schwab OPTIONS (educational, READ-ONLY):
+    sell BE (premium), today BE (Black-Scholes) and expiration BE (strike +/- premium).
+    Never a trade recommendation. Degrades to empty on any error."""
+    try:
+        from data_sources import schwab_breakeven
+        rows = schwab_breakeven.positions_breakeven()
+    except Exception:  # noqa: BLE001
+        return {"positions": []}
+    tot_cost = sum(r.get("cost") or 0 for r in rows)
+    tot_pnl = sum(r.get("pnl") or 0 for r in rows)
+    return {"positions": rows, "count": len(rows),
+            "total_cost": round(tot_cost, 2), "total_pnl": round(tot_pnl, 2),
+            "in_profit": sum(1 for r in rows if (r.get("pnl") or 0) >= 0)}
+
+
 # --- Macro layers (ported from the Leo/Flask app): Market Context + Alignment ---
 _MACRO: tuple[float, object] | None = None
 

@@ -90,6 +90,13 @@ def _bs_price(spot, strike, iv, t_years, is_call, r=0.0):
     return strike * disc * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
 
 
+def bs_price(spot, strike, iv, t_years, is_call, r=0.0):
+    """Public Black-Scholes European option price (thin wrapper over ``_bs_price``)
+    so callers outside this module (e.g. the Schwab break-even engine) can price an
+    option at an arbitrary underlying level."""
+    return _bs_price(spot, strike, iv, t_years, is_call, r)
+
+
 def implied_vol(price, spot, strike, t_years, is_call, r=0.0):
     """Recover implied volatility from an option price by inverting Black-Scholes.
 
