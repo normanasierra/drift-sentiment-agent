@@ -43,6 +43,17 @@ def main() -> None:
     if MARKER.exists() and MARKER.read_text(encoding="utf-8").strip() == today:
         return  # already reminded today (by this task or the brief)
 
+    # Before nagging: if the token looks expired, try pulling the fresh one the PC
+    # already pushed to Render. Silently recovers so we DON'T nag for a re-login
+    # that isn't actually needed. Best-effort — never blocks the check.
+    try:
+        if str(Path(__file__).resolve().parent) not in sys.path:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from schwab_sync import ensure_fresh
+        ensure_fresh(quiet=True)
+    except Exception:  # noqa: BLE001
+        pass
+
     msg = None
     try:
         if schwab.needs_reauth():

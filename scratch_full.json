@@ -1,0 +1,55 @@
+{
+  "spot": 7406.05,
+  "Long ~320 DTE": {
+    "actual_dte": 297,
+    "expiration": "2027-05-21",
+    "call_wall": 7000.0,
+    "put_wall": 7000.0,
+    "magneto_strike": 8100.0,
+    "magneto_notional": 4052430000.0,
+    "zero_gamma": 6875.139709,
+    "call_gamma_wall": 8100.0,
+    "put_gamma_wall": 7200.0,
+    "total_gex": 102625309.5887,
+    "sigma": 1532.47351
+  },
+  "Long ~120 DTE": {
+    "actual_dte": 115,
+    "expiration": "2026-11-20",
+    "call_wall": 7000.0,
+    "put_wall": 7000.0,
+    "magneto_strike": 8700.0,
+    "magneto_notional": 5164320000.0,
+    "zero_gamma": 7763.427092,
+    "call_gamma_wall": 7900.0,
+    "put_gamma_wall": 7300.0,
+    "total_gex": -1703318107.1862,
+    "sigma": 780.465771
+  },
+  "Short ~90 DTE": {
+    "actual_dte": 80,
+    "expiration": "2026-10-16",
+    "call_wall": 8000.0,
+    "put_wall": 7000.0,
+    "magneto_strike": 6500.0,
+    "magneto_notional": -10645700000.0,
+    "zero_gamma": 7675.221814,
+    "call_gamma_wall": 7900.0,
+    "put_gamma_wall": 7000.0,
+    "total_gex": -3882362060.4431,
+    "sigma": 596.215828
+  },
+  "Short ~30 DTE": {
+    "actual_dte": 24,
+    "expiration": "2026-08-21",
+    "call_wall": 8800.0,
+    "put_wall": 7000.0,
+    "magneto_strike": 8800.0,
+    "magneto_notional": 171103680000.0,
+    "zero_gamma": 7548.930222,
+    "call_gamma_wall": 7600.0,
+    "put_gamma_wall": 7300.0,
+    "total_gex": -9828441979.2522,
+    "sigma": 299.418921
+  }
+}

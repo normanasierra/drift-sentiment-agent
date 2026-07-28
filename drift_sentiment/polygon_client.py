@@ -5,6 +5,7 @@ from __future__ import annotations
 import calendar
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 
 import requests
@@ -214,40 +215,68 @@ def _fetch_expiration(
     return spot, out
 
 
+def _resolve_target(
+    ticker: str, as_of: date, target: int, key: str, timeout: int
+) -> tuple[date, float | None, list[Contract]]:
+    """The nearest *listed* monthly expiration to a DTE target, with its contracts.
+
+    Walks ``_monthly_candidates`` (already sorted nearest-target-first) and returns
+    the first 3rd-Friday that's actually listed. Raises PolygonError if none near
+    this target is listed (caller falls back to the full chain).
+    """
+    for cand in _monthly_candidates(as_of, target):
+        s, cs = _fetch_expiration(ticker, cand, key, timeout)
+        if cs:  # this 3rd-Friday is actually listed
+            return cand, s, cs
+    raise PolygonError(
+        f"No monthly expiration near {target} DTE for {ticker.upper()}."
+    )
+
+
 def fetch_chain_targeted(
     ticker: str, as_of: date, targets: list[int], *, timeout: int = 30
 ) -> tuple[float, list[Contract]]:
     """Fetch only the monthly expirations nearest each DTE target (fast path).
 
     Returns the same (spot, contracts) that build_report needs for its buckets,
-    but downloads *only* those expirations instead of the entire chain — a ~14x
-    win on huge underlyings like SPX. It is same-universe as fetch_chain (the
-    snapshot endpoint, 3rd-Friday monthlies) and picks each expiration exactly the
-    way chain_filter.nearest_expiration would, so build_report's output is
-    unchanged. Raises PolygonError if nothing resolves (caller may fall back).
+    but downloads *only* those expirations instead of the entire chain — a big win
+    on huge underlyings like SPX. It is same-universe as fetch_chain (the snapshot
+    endpoint, 3rd-Friday monthlies) and picks each expiration exactly the way
+    chain_filter.nearest_expiration would, so build_report's output is unchanged.
+    Raises PolygonError if nothing resolves (caller may fall back).
+
+    The per-target expirations are fetched CONCURRENTLY: each is an independent
+    paginated download, and the slowest (nearest-DTE, densest strikes) otherwise
+    serialises behind the others. Concurrency is result-identical — each target
+    still resolves to its own nearest listed monthly (independent resolution stops
+    at the first listed candidate, exactly what the old sequential dedup picked),
+    and results are merged deterministically in ``targets`` order with the same
+    dedup-by-expiration, so the contract set and chosen spot are bit-for-bit the
+    same as the sequential version. It just collapses the wall-clock from the SUM
+    of the per-expiration fetches to roughly the MAX of them.
     """
     key = _api_key()
-    chosen: dict[date, list[Contract]] = {}  # dedup across targets
+
+    # Resolve+download each target's expiration in parallel. A worker raising
+    # PolygonError (no listed monthly near its target) propagates through
+    # future.result() so the caller still falls back to a full-chain fetch.
+    with ThreadPoolExecutor(max_workers=max(1, len(targets))) as pool:
+        futures = [
+            pool.submit(_resolve_target, ticker, as_of, t, key, timeout)
+            for t in targets
+        ]
+        resolved = [f.result() for f in futures]  # in submit (== targets) order
+
+    # Merge deterministically in targets order: dedup shared expirations by date and
+    # take the first non-None snapshot spot — identical to the sequential ordering.
+    chosen: dict[date, list[Contract]] = {}
     spot: float | None = None
-    for target in targets:
-        resolved = False
-        for cand in _monthly_candidates(as_of, target):
-            if cand in chosen:
-                resolved = True  # a nearer target already claimed this expiration
-                break
-            s, cs = _fetch_expiration(ticker, cand, key, timeout)
-            if cs:  # this 3rd-Friday is actually listed
-                chosen[cand] = cs
-                if spot is None and s is not None:
-                    spot = s
-                resolved = True
-                break
-        if not resolved:
-            # No listed monthly near this target — bail so the caller can fall
-            # back to a full-chain fetch rather than risk a wrong bucket.
-            raise PolygonError(
-                f"No monthly expiration near {target} DTE for {ticker.upper()}."
-            )
+    for cand, s, cs in resolved:
+        if cand not in chosen:
+            chosen[cand] = cs
+            if spot is None and s is not None:
+                spot = s
+
     contracts = [c for cs in chosen.values() for c in cs]
     if not contracts:
         raise PolygonError(f"No monthly option contracts for {ticker.upper()}.")
