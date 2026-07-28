@@ -13,3 +13,4 @@ flask>=3.0               # Leo / app_web.py (kept until Leo is retired)
 gunicorn>=21.0           # Leo's Render start command
 requests>=2.32
 python-dotenv>=1.0
+python-multipart>=0.0.9   # FastAPI request.form() en el login lo necesita
