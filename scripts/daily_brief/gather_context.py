@@ -22,12 +22,37 @@ INDICES: list[tuple[str, str]] = [
     ("SPX", "^GSPC"), ("QQQ", "QQQ"), ("VIX", "^VIX"), ("10Y yield", "^TNX"),
 ]
 
-# Global markets Norman follows — UK, Germany, Japan, China (Yahoo index symbols).
+# Global markets Norman follows — the major national indices (Yahoo index symbols).
 WORLD: list[tuple[str, str]] = [
     ("Reino Unido · FTSE 100", "^FTSE"),
     ("Alemania · DAX", "^GDAXI"),
+    ("Francia · CAC 40", "^FCHI"),
+    ("Eurozona · Euro Stoxx 50", "^STOXX50E"),
+    ("España · IBEX 35", "^IBEX"),
     ("Japón · Nikkei 225", "^N225"),
     ("China · Shanghái Comp.", "000001.SS"),
+    ("Hong Kong · Hang Seng", "^HSI"),
+    ("Corea del Sur · KOSPI", "^KS11"),
+    ("India · Nifty 50", "^NSEI"),
+    ("Taiwán · TAIEX", "^TWII"),
+    ("Australia · ASX 200", "^AXJO"),
+    ("Canadá · TSX", "^GSPTSE"),
+    ("Brasil · Bovespa", "^BVSP"),
+    ("México · IPC", "^MXX"),
+]
+
+# Sector & broad-market ETFs Norman tracks: SPX proxy + Nasdaq/Russell/Dow, the two
+# semiconductor ETFs, health, and every SPDR sector (Yahoo symbols).
+ETFS: list[tuple[str, str]] = [
+    ("S&P 500 · SPY", "SPY"), ("Nasdaq 100 · QQQ", "QQQ"),
+    ("Russell 2000 · IWM", "IWM"), ("Dow · DIA", "DIA"),
+    ("Semiconductores · SMH", "SMH"), ("Semis · SOXX", "SOXX"),
+    ("Salud · XLV", "XLV"), ("Biotech · XBI", "XBI"),
+    ("Tecnología · XLK", "XLK"), ("Financieras · XLF", "XLF"),
+    ("Energía · XLE", "XLE"), ("Consumo disc. · XLY", "XLY"),
+    ("Consumo básico · XLP", "XLP"), ("Industriales · XLI", "XLI"),
+    ("Servicios púb. · XLU", "XLU"), ("Materiales · XLB", "XLB"),
+    ("Inmobiliario · XLRE", "XLRE"), ("Comunicaciones · XLC", "XLC"),
 ]
 
 # US Treasury yields Norman wants front-and-center (Yahoo yield symbols; 2Y via future).
@@ -93,6 +118,15 @@ def _world_block() -> str:
     rows = [f"  {label}: {d['price']:,.2f} ({_fmt_pct(d)})"
             for label, ysym in WORLD if (d := q.get(ysym))]
     return "MERCADOS GLOBALES (reales, ~15min delay):\n" + "\n".join(rows) if rows else ""
+
+
+def _etfs_block() -> str:
+    q = _quotes([y for _, y in ETFS])
+    if not q:
+        return ""
+    rows = [f"  {label}: {d['price']:,.2f} ({_fmt_pct(d)})"
+            for label, ysym in ETFS if (d := q.get(ysym))]
+    return "ETFs — índice y sectores (reales):\n" + "\n".join(rows) if rows else ""
 
 
 def _bonds_block() -> str:
@@ -278,12 +312,48 @@ def _schwab_block() -> str:
     return "POSICIONES SCHWAB/ToS (reales):\n" + "\n".join(rows) if rows else ""
 
 
+def _n(x, dec: int = 2) -> str:
+    return f"{x:,.{dec}f}" if isinstance(x, (int, float)) else "n/d"
+
+
+def _p(x) -> str:
+    return f"{x:+.1f}%" if isinstance(x, (int, float)) else "n/d"
+
+
+def _breakeven_block() -> str:
+    """Per-position break-even for the reader's Schwab OPTIONS (sell / hoy / mes /
+    vencimiento) so the brief analyzes each position against the level it must reach —
+    in the SAME report, not a separate email. Educational, never a recommendation.
+    '' if Schwab isn't connected."""
+    try:
+        from data_sources import schwab_breakeven
+        rows = schwab_breakeven.positions_breakeven()
+    except Exception:  # noqa: BLE001
+        return ""
+    if not rows:
+        return ""
+    lines = ["BREAK-EVEN + ANÁLISIS POR POSICIÓN (opciones Schwab, real). sell BE = prima; "
+             "BE-hoy = precio del subyacente HOY para valer tu costo (Black-Scholes); "
+             "BE-mes = a ~30 días; BE-venc = strike ± prima. ANALIZA CADA POSICIÓN: dónde "
+             "está el spot vs cada break-even, cuánto % le falta, y el contexto. "
+             "Educativo, NO es recomendación de comprar/vender/mantener:"]
+    for d in rows:
+        opc = f"{d['strike']:g}{d['cp'][0]}" if d.get("strike") else "?"
+        lines.append(
+            f"  {d['under']} {opc} {d.get('exp') or ''} (DTE {d.get('dte', '?')}): "
+            f"spot {_n(d.get('spot'))} · P&L {_n(d.get('pnl'), 0)} ({_p(d.get('pnl_pct'))}) · "
+            f"BE-hoy {_n(d.get('be_today'))} ({_p(d.get('pct_to_be_today'))}) · "
+            f"BE-mes {_n(d.get('be_month'))} ({_p(d.get('pct_to_be_month'))}) · "
+            f"BE-venc {_n(d.get('be_expiration'))} ({_p(d.get('pct_to_be_exp'))})")
+    return "\n".join(lines)
+
+
 def gather() -> str:
     """Return a compact REAL-DATA block for the prompt, or '' if nothing loaded."""
     blocks = [
-        _indices_block(), _bonds_block(), _world_block(), _watchlist_block(),
-        _movers_block(), _portfolio_block(), _newsletters_block(), _sweeps_block(),
-        _hyperliquid_block(), _schwab_block(),
+        _indices_block(), _bonds_block(), _world_block(), _etfs_block(),
+        _watchlist_block(), _movers_block(), _portfolio_block(), _breakeven_block(),
+        _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
     if not body:

@@ -25,12 +25,21 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    aplana o empina y si el 2-10 sigue invertido). Forma una lectura:
    **Risk-On / Risk-Off / Mixto** con una frase de justificación.
 
-1b. **Mercados globales** (usa el bloque DATOS REALES "MERCADOS GLOBALES"; NO los
-   busques en web): **Reino Unido** (FTSE 100), **Alemania** (DAX), **Japón**
-   (Nikkei 225) y **China** (Shanghái Comp.). Una línea por mercado — nivel + % +
-   una nota de qué lo movió si hay noticia relevante hoy — y una frase de **tono
-   global**: ¿Europa y Asia amanecen en verde o rojo? ¿marcan la pauta para la
-   apertura de EE. UU.?
+1b. **Mercados globales por nación** (usa el bloque DATOS REALES "MERCADOS GLOBALES";
+   NO los busques en web): incluye **TODOS** los que trae el bloque, agrupados por
+   región — Europa (Reino Unido/FTSE, Alemania/DAX, Francia/CAC, Eurozona/Euro Stoxx,
+   España/IBEX), Asia (Japón/Nikkei, China/Shanghái, Hong Kong/Hang Seng, **Corea del
+   Sur/KOSPI**, India/Nifty, Taiwán) y América-Pacífico (Canadá/TSX, Brasil/Bovespa,
+   México/IPC, Australia/ASX). Una línea por índice (nivel + %), y una frase de **tono
+   global**: ¿Europa y Asia amanecen en verde o rojo? ¿marcan la pauta para la apertura
+   de EE. UU.?
+
+1c. **ETFs por sector** (usa el bloque DATOS REALES "ETFs — índice y sectores"; NO los
+   busques en web): amplios (SPY/QQQ/IWM/DIA), **semiconductores** (SMH/SOXX), **salud**
+   (XLV/XBI) y los sectores SPDR (XLK tecnología, XLF financieras, XLE energía, XLY/XLP
+   consumo, XLI industriales, XLU utilities, XLB materiales, XLRE inmobiliario, XLC
+   comunicaciones). Lectura de **rotación sectorial**: qué sectores lideran y cuáles
+   rezagan hoy.
 
 2. **Watchlist SPX (pre-mercado)** — usa los DATOS REALES del bloque
    "WATCHLIST SPX" (NO busques estos en web). Sintetiza en 4-6 viñetas para
@@ -98,9 +107,15 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
 - Insignia de **sesgo** (Risk-On / Risk-Off / Mixto) + una frase.
 - **Índices**: SPX, QQQ, VIX, y la **curva del Tesoro 2 / 5 / 10 años** (niveles +
   lectura de la curva: ¿aplana/empina?, ¿2-10 invertido?).
-- **Mercados globales**: tabla compacta con **Reino Unido** (FTSE 100), **Alemania**
-  (DAX), **Japón** (Nikkei 225) y **China** (Shanghái) — nivel + % día + una frase de
-  **tono global** (Europa/Asia en verde o rojo; pauta para la apertura de EE. UU.).
+- **Mercados globales por nación**: tabla compacta con **TODOS** los índices del bloque
+  MERCADOS GLOBALES, agrupados por región (Europa: FTSE/DAX/CAC/Euro Stoxx/IBEX · Asia:
+  Nikkei/Shanghái/Hang Seng/**KOSPI**/Nifty/Taiwán · América-Pacífico: TSX/Bovespa/IPC/ASX)
+  — nivel + % día — y una frase de **tono global** (Europa/Asia en verde o rojo; pauta
+  para la apertura de EE. UU.).
+- **ETFs por sector**: tabla compacta con el bloque "ETFs — índice y sectores": amplios
+  (SPY/QQQ/IWM/DIA), **semiconductores** (SMH/SOXX), **salud** (XLV/XBI) y los sectores
+  SPDR (XLK/XLF/XLE/XLY/XLP/XLI/XLU/XLB/XLRE/XLC) — nivel + % día — con una frase de
+  **rotación sectorial** (qué lidera y qué rezaga hoy).
 - **Watchlist SPX (pre-mercado)**: tabla compacta POR GRUPOS (Futuros
   ES/NQ/YM/RTY · Volatilidad VIX/VIX1D · Bonos 10Y/2Y · Mag 7 · Semis ·
   Financieras · Pesos pesados · ETFs SPY/QQQ/IWM/SMH) con Último y % día; debajo,
@@ -132,6 +147,14 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   catalizador de HOY si lo hay, o un nivel clave; **nunca** "compra/vende"). Ordena por
   mayor movimiento del día. Si el portafolio viene de la watchlist (Schwab sin conectar),
   dilo en una línea al inicio de la sección. Encabezado recordando que es educativo.
+- **Break-even + análisis por posición (opciones)** — va EN este mismo reporte (usa el
+  bloque DATOS REALES "BREAK-EVEN + ANÁLISIS POR POSICIÓN"; SOLO si aparece). Haz una
+  **tabla** con CADA opción: `Posición | DTE | Spot | P&L | BE-hoy (% a hoy) | BE-mes
+  (% a mes) | BE-venc (% a venc)`, y debajo 3-5 viñetas destacando las posiciones **más
+  cerca** y **más lejos** de su break-even y qué necesita el subyacente para llegar.
+  **BE-hoy** = precio HOY para valer tu costo (Black-Scholes); **BE-mes** = a ~30 días;
+  **BE-venc** = strike ± prima. Educativo, **nunca** "vende/mantén". Omite la sección si
+  el bloque no aparece (Schwab sin conectar).
 - **Agenda de HOY — lo que sucederá durante el día** (sección DESTACADA): datos
   económicos con **hora** y consenso, Fed, earnings (marca los del portafolio) y
   demás catalizadores, ordenados por hora / importancia.
