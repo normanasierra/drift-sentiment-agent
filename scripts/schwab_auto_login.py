@@ -73,6 +73,12 @@ def _exchange(code: str, key: str, secret: str, redirect: str) -> tuple[bool, st
         tok = r.json()
         tok["reauth_at"] = time.time()  # so we can WhatsApp a reminder before it expires
         TOKENS.write_text(json.dumps(tok, indent=2), encoding="utf-8")
+        try:  # push the fresh token to the cloud (Render) so the web/phone app stays connected
+            sys.path.insert(0, str(REPO / "scripts"))
+            from render_push_token import push
+            push(quiet=True)
+        except Exception:  # noqa: BLE001 — never let the cloud push break the local re-auth
+            pass
         return True, "Autorizado — tokens guardados. Ya puedes cerrar esta pestaña."
     return False, f"Schwab rechazo ({r.status_code}): {r.text[:200]}"
 
