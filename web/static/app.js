@@ -25,6 +25,7 @@
   const BULL = '#16a34a', BULL_SOFT = '#22c55e';
   const BEAR = '#dc2626', BEAR_SOFT = '#ef4444';
   const BRAND = '#a855f7';
+  const GAMMA_FLIP = '#eab308';   // yellow — Gamma Flip (Zero-Γ), visible en claro/oscuro
   const CHART_THEME = {
     dark:  { bg: '#11161f', text: '#e6edf3', grid: '#2a3441' },
     light: { bg: '#ffffff', text: '#0b0e14', grid: '#e2e8f0' },
@@ -48,7 +49,6 @@
     : /bear|short/i.test(s) ? 'text-rose-500' : 'text-slate-400';
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
   const currentTheme = () => (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-  const gexOn = () => ($('gexToggle') ? $('gexToggle').checked : true);
 
   // ---------------------------------------------------------------- theme + font
   function applyTheme(theme) {
@@ -118,7 +118,7 @@
   }
 
   // ---------------------------------------------------------------- candlestick
-  let candleChart = null, candleSeries = null, priceLines = [];
+  let candleChart = null, candleSeries = null, priceLines = [], gammaLines = [];
   const LS = () => (window.LightweightCharts ? LightweightCharts.LineStyle : { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3 });
 
   function buildCandle(report) {
@@ -140,6 +140,7 @@
     candleSeries.setData(report.candles || []);
     candleChart.timeScale().fitContent();
     drawLevels(report, currentBucket);
+    drawGammaAuto(report);
   }
 
   function drawLevels(report, idx) {
@@ -159,12 +160,31 @@
     const magW = { strong: 4, moderate: 2 }[b.magneto_quality] || 1;
     add(b.magneto, BRAND, s.Dashed, magW, `Magneto ${Math.round(b.magneto_strength * 100)}%`);
     if (b.sigma) { add(report.spot + b.sigma, '#94a3b8', s.Dotted, 1, '+σ'); add(report.spot - b.sigma, '#94a3b8', s.Dotted, 1, '−σ'); }
-    // GEX info — only when the checkbox is on.
-    if (gexOn()) {
-      add(b.zero_gamma, '#9aa4b2', s.LargeDashed, 1, 'Zero-Γ');
-      add(b.call_gamma_wall, '#06b6d4', s.Dotted, 1, 'Call Γ');
-      add(b.put_gamma_wall, '#f59e0b', s.Dotted, 1, 'Put Γ');
-    }
+  }
+
+  // The three gamma levels drawn automatically on the price chart (the "100%
+  // automático" alternativa al estudio de thinkScript): Call Γ Wall verde, Put Γ
+  // Wall rojo, Gamma Flip amarillo (guiones). Vienen del bucket de expiración MÁS
+  // cercano con respaldo por-nivel al siguiente (server: report.gamma_levels), así
+  // que se dibujan siempre — independientes del bucket seleccionado y del checkbox
+  // GEX — y se refrescan solos cada 30s. Etiqueta = nombre + precio. Educativo, sólo
+  // niveles: nunca una orden de compra/venta.
+  function drawGammaAuto(report) {
+    if (!candleSeries) return;
+    gammaLines.forEach((l) => candleSeries.removePriceLine(l));
+    gammaLines = [];
+    const g = report.gamma_levels; if (!g) return;
+    const s = LS();
+    const add = (price, color, style, title) => {
+      if (price == null || isNaN(price)) return;
+      gammaLines.push(candleSeries.createPriceLine({
+        price, color, lineWidth: 2, lineStyle: style, axisLabelVisible: true,
+        title: `${title} $${Math.round(price)}`,
+      }));
+    };
+    add(g.call_gamma_wall, BULL_SOFT, s.LargeDashed, 'Call Γ Wall');
+    add(g.put_gamma_wall, BEAR_SOFT, s.LargeDashed, 'Put Γ Wall');
+    add(g.gamma_flip, GAMMA_FLIP, s.Dashed, 'Gamma Flip');
   }
 
   function loadPlots(ticker) {
@@ -1209,6 +1229,24 @@
     }
   }
 
+  // Refresco ligero del tab Gráfico (cada 30s, sólo con la pestaña visible): re-pide
+  // el mismo /api/report que usa Analizar (el server cachea la cadena ~30s) y actualiza
+  // los niveles EN SITIO — las tres líneas de gamma siguen el mercado en vivo sin
+  // reconstruir la gráfica, conservando zoom y bucket seleccionado. READ-ONLY.
+  async function refreshGrafico(ticker) {
+    let j;
+    try {
+      const r = await fetch(`/api/report?ticker=${encodeURIComponent(ticker)}`);
+      j = await r.json();
+      if (!r.ok || j.error || !candleSeries) return;
+    } catch { return; }   // transitorio — conserva los últimos niveles
+    lastReport = j;
+    candleSeries.setData(j.candles || []);
+    drawLevels(j, currentBucket);
+    drawGammaAuto(j);
+    renderMetrics(j);
+  }
+
   // ---------------------------------------------------------------- fullscreen
   function initFullscreen() {
     document.querySelectorAll('.fsBtn').forEach((btn) => {
@@ -1259,9 +1297,11 @@
       if (shown('unusualBody')) loadUnusual(tkr, true);                                   // transacciones
       if (shown('sentBody') && tkr) { const y = window.scrollY; loadSentiment(tkr, true).then(() => window.scrollTo(0, y)); }  // GEX matriz+perfil
       if (shown('gexImg') && tkr) loadPlots(tkr);                                         // gráfica GEX (Gráfico)
+      if (!document.hidden && shown('candleChart') && tkr) refreshGrafico(tkr);           // niveles de gamma (Gráfico)
     }, 30000);
 
-    // GEX toggle (persisted)
+    // GEX toggle (persisted) — sólo muestra/oculta el perfil GEX por strike; los tres
+    // niveles de gamma se dibujan siempre en la gráfica de precio (ver drawGammaAuto).
     const gexBox = $('gexToggle');
     if (gexBox) {
       gexBox.checked = S.get('showGex', true);
@@ -1269,7 +1309,6 @@
       gexBox.addEventListener('change', () => {
         S.set('showGex', gexBox.checked);
         $('gexCard').classList.toggle('hidden', !gexBox.checked);
-        if (lastReport) drawLevels(lastReport, currentBucket);
       });
     }
 

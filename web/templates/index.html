@@ -69,8 +69,8 @@
     <label class="inline-flex items-center gap-2 mb-3 text-sm cursor-pointer select-none">
       <input type="checkbox" id="gexToggle"
              class="h-4 w-4 rounded accent-brand" />
-      <span>Mostrar información <span class="font-semibold text-brand-soft">GEX</span>
-        (Zero-Γ, Gamma Walls y perfil por strike)</span>
+      <span>Mostrar el perfil <span class="font-semibold text-brand-soft">GEX</span> por strike
+        (los tres niveles de gamma se dibujan siempre en la gráfica de precio)</span>
     </label>
 
     <div id="candleCard" class="chart-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
@@ -82,7 +82,7 @@
         </div>
       </div>
       <div id="candleChart" class="chart-body w-full" style="height:50vh;"></div>
-      <p class="text-[11px] text-slate-400 mt-1">Sólido = Walls · Guiones = Magneto (grosor = fuerza) · Punteado = ±σ · Guión largo/GEX = Gamma (usa el checkbox).</p>
+      <p class="text-[11px] text-slate-400 mt-1">Sólido = Walls (OI) · Guiones morado = Magneto (grosor = fuerza) · Punteado = ±σ · Guión largo <span class="text-emerald-500">verde</span>/<span class="text-rose-500">rojo</span> = Gamma Walls · Guiones <span class="text-yellow-500">amarillo</span> = Gamma Flip (automático, cada 30s). Educativo — sólo niveles.</p>
     </div>
 
     <div id="gexCard" class="chart-card rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 mt-4">

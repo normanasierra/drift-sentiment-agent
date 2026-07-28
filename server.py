@@ -420,13 +420,32 @@ def api_report(ticker: str = ""):
     except Exception:  # noqa: BLE001
         candles = []
 
+    # The three gamma levels to auto-draw on the price chart (green Call Γ Wall,
+    # red Put Γ Wall, yellow Gamma Flip): the NEAREST expiration's values — the gamma
+    # pinning price now — with a per-level fallback to the next-nearest bucket that has
+    # one. Same rule as scripts/gamma_levels_report._levels_for. READ-ONLY.
+    by_dte = sorted(rep.buckets, key=lambda b: b.actual_dte)
+
+    def _nearest(attr):
+        for b in by_dte:
+            v = getattr(b, attr, None)
+            if v is not None:
+                return v
+        return None
+
+    gamma_levels = {
+        "call_gamma_wall": _nearest("call_gamma_wall"),
+        "put_gamma_wall": _nearest("put_gamma_wall"),
+        "gamma_flip": _nearest("zero_gamma"),
+    }
+
     market_context, alignment = _macro_payloads(rep)
     return {
         "ticker": rep.ticker, "spot": spot, "as_of": rep.as_of.isoformat(),
         "data_timeframe": polygon_client.data_timeframe(ticker),
         "total_notional": rep.total_notional, "total_shares": rep.total_shares,
         "total_gex_m": round(rep.total_gex / 1e6, 2), "gex_regime": rep.gex_regime,
-        "buckets": buckets, "candles": candles,
+        "buckets": buckets, "candles": candles, "gamma_levels": gamma_levels,
         "market_context": market_context, "alignment": alignment,
         "text": report_mod.format_text_report(rep),
     }
