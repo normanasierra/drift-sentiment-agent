@@ -61,7 +61,11 @@ def main() -> None:
 
     subj = f"Break-even portafolio — {datetime.date.today().isoformat()}"
     _run(SEND_EMAIL, ["--subject", subj, "--body-file", str(HTML), "--html"])
-    _run(SEND_WA, [], stdin=_summary(rows))
+    # WhatsApp via a UTF-8 file, NOT stdin: piping emoji through a Windows subprocess
+    # stdin encodes as cp1252 and dies (UnicodeEncodeError). --text-file reads UTF-8.
+    wa = OUT / "_wa_breakeven.txt"
+    wa.write_text(_summary(rows), encoding="utf-8")
+    _run(SEND_WA, ["--text-file", str(wa)])
 
 
 if __name__ == "__main__":

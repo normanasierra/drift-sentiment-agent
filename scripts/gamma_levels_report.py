@@ -140,7 +140,11 @@ def main() -> None:
 
     subj = f"Gamma Walls (ToS) — {datetime.date.today().isoformat()}"
     _run(SEND_EMAIL, ["--subject", subj, "--body-file", str(HTML), "--html"])
-    _run(SEND_WA, [], stdin=_wa_summary(levels))
+    # WhatsApp via a UTF-8 file, NOT stdin: piping emoji through a Windows subprocess
+    # stdin encodes as cp1252 and dies (UnicodeEncodeError). --text-file reads UTF-8.
+    wa = OUT / "_wa_gamma.txt"
+    wa.write_text(_wa_summary(levels), encoding="utf-8")
+    _run(SEND_WA, ["--text-file", str(wa)])
 
 
 if __name__ == "__main__":
