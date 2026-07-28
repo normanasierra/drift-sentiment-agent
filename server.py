@@ -11,6 +11,9 @@ import hashlib
 import hmac
 import io
 import os
+import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -716,3 +719,40 @@ def api_thinkscript(ticker: str = ""):
     study = thinkscript.build_study(rep)
     return Response(study, media_type="text/plain; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{ticker}_walls_gamma.ts"'})
+
+
+# Report scripts a cloud trigger may run (relative to the repo root).
+_TASK_JOBS = {
+    "morning": ["breakeven_report.py", "gamma_levels_report.py"],
+    "breakeven": ["breakeven_report.py"],
+    "gamma": ["gamma_levels_report.py"],
+}
+
+
+@app.get("/tasks/run")
+def api_tasks_run(job: str = "", key: str = ""):
+    """Cloud-side trigger for the market-morning reports (break-even + gamma walls) so
+    they run 24/7 here in Render, independent of any PC being awake. Guarded by the
+    TASKS_KEY secret; a free GitHub Actions cron pings it pre-open on weekdays. The work
+    (Schwab, chains, email, WhatsApp) runs in a background thread using this service's
+    env secrets, and the call returns at once (a full run fetches ~20 chains). READ-ONLY
+    over Schwab; educational — not financial advice."""
+    expected = os.getenv("TASKS_KEY")
+    if not expected or not hmac.compare_digest(key, expected):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    scripts = _TASK_JOBS.get(job)
+    if not scripts:
+        return JSONResponse({"error": f"unknown job '{job}'"}, status_code=400)
+
+    here = Path(__file__).resolve().parent
+
+    def _work():
+        for name in scripts:
+            try:
+                subprocess.run([sys.executable, str(here / "scripts" / name)],
+                               cwd=str(here), timeout=600)
+            except Exception:  # noqa: BLE001
+                pass
+
+    threading.Thread(target=_work, daemon=True).start()
+    return {"status": "started", "job": job, "scripts": scripts}

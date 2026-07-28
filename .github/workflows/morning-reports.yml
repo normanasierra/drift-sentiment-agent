@@ -1,0 +1,39 @@
+name: Morning reports (cloud)
+
+# Fires the market-morning reports (per-position break-even + ToS gamma walls) BEFORE
+# the US open, so delivery no longer depends on the Windows PC waking up. This job only
+# pings a guarded endpoint on the Render web service; all the real work (Schwab, market
+# data, email, WhatsApp) happens there with its own env secrets. Educational — not advice.
+#
+# One-time setup:
+#   • Render env (drift-sentiment-web): set GMAIL_USER, GMAIL_APP_PASSWORD, BRIEF_EMAIL_TO,
+#     CALLMEBOT_PHONE, CALLMEBOT_APIKEY and TASKS_KEY (values from your local .env).
+#   • GitHub repo: Settings -> Secrets and variables -> Actions -> New secret
+#     TASKS_KEY = the SAME value you set in Render.
+
+on:
+  schedule:
+    # 13:00 UTC on weekdays = 9:00 AM EDT / 8:00 AM EST — both comfortably pre-open.
+    - cron: "0 13 * * 1-5"
+  workflow_dispatch: {}   # manual "Run workflow" button for testing
+
+concurrency:
+  group: morning-reports
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the Render endpoint to run the reports
+        env:
+          TASKS_KEY: ${{ secrets.TASKS_KEY }}
+        run: |
+          if [ -z "$TASKS_KEY" ]; then
+            echo "TASKS_KEY secret is not set — add it in repo Settings > Secrets > Actions." >&2
+            exit 1
+          fi
+          # --retry rides out the free-tier cold start (the service may be spun down).
+          curl -fsS --max-time 120 --retry 5 --retry-all-errors --retry-delay 20 \
+            "https://drift-sentiment-web.onrender.com/tasks/run?job=morning&key=${TASKS_KEY}"
+          echo "\nTriggered."

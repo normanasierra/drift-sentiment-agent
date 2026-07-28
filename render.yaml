@@ -33,5 +33,22 @@ services:
         sync: false
       - key: IMAP_PASSWORD
         sync: false
+      # --- Cloud market-morning reports (break-even + gamma walls). The /tasks/run
+      #     endpoint runs them here 24/7, pinged by a free GitHub Actions cron, so
+      #     delivery never depends on a PC being awake. Delivery creds (from your .env):
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: BRIEF_EMAIL_TO
+        sync: false
+      - key: CALLMEBOT_PHONE
+        sync: false
+      - key: CALLMEBOT_APIKEY
+        sync: false
+      # Shared secret guarding /tasks/run — set the SAME value as the GitHub repo
+      # secret TASKS_KEY (Settings -> Secrets and variables -> Actions).
+      - key: TASKS_KEY
+        sync: false
       - key: PYTHON_VERSION
         value: "3.12.6"
