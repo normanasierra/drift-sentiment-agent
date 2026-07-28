@@ -1,8 +1,8 @@
 # Render blueprint for the Wakanda Forever web UI (FastAPI, server.py).
-# One app, in the cloud (PC / Mac / phone). Deploy: render.com -> New -> Blueprint
-# -> connect this repo. Then set POLYGON_API_KEY and WAKANDA_PASSWORD in the
-# dashboard (secrets — never stored in the repo). Optional: IMAP_USER/IMAP_PASSWORD
-# to also show the MarketSnack sweeps (Unusual Activity / flow) in the cloud.
+# One app, in the cloud (PC / Mac / phone). Deploy in one click:
+#   https://render.com/deploy?repo=https://github.com/normanasierra/drift-sentiment-agent
+# Render reads this file, then PROMPTS you for each `sync: false` secret (paste the
+# values from your local .env). Nothing secret is ever stored in the repo.
 services:
   - type: web
     name: drift-sentiment-web
@@ -11,9 +11,27 @@ services:
     buildCommand: "pip install -r requirements-web.txt"
     startCommand: "uvicorn server:app --host 0.0.0.0 --port $PORT"
     envVars:
+      # --- Market data (paste your Massive/Polygon key) ---
+      - key: MASSIVE_API_KEY
+        sync: false
       - key: POLYGON_API_KEY
-        sync: false          # set this secret in the Render dashboard
+        sync: false
+      # --- App password gate (set one — the app is public otherwise) ---
       - key: WAKANDA_PASSWORD
-        sync: false          # set a password so the public app is gated (important)
+        sync: false
+      # --- Schwab positions + break-even (READ-ONLY). The refresh token is pushed
+      #     here automatically by scripts/render_push_token.py after each re-auth,
+      #     so you can leave SCHWAB_REFRESH_TOKEN blank at deploy time. ---
+      - key: SCHWAB_APP_KEY
+        sync: false
+      - key: SCHWAB_APP_SECRET
+        sync: false
+      - key: SCHWAB_REFRESH_TOKEN
+        sync: false
+      # --- Optional: show today's MarketSnack sweeps (Unusual Activity) in the cloud ---
+      - key: IMAP_USER
+        sync: false
+      - key: IMAP_PASSWORD
+        sync: false
       - key: PYTHON_VERSION
         value: "3.12.6"
