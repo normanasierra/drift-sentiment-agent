@@ -117,7 +117,8 @@ def _valid_token(token: str | None) -> bool:
 async def _require_login(request: Request, call_next):
     if APP_PASSWORD:
         path = request.url.path
-        allowed = path == "/login" or path.startswith("/static/")
+        allowed = (path == "/login" or path.startswith("/static/")
+                   or path.startswith("/tasks/"))  # /tasks/* self-guards with TASKS_KEY
         if not allowed and not _valid_token(request.cookies.get(_COOKIE)):
             if path.startswith("/api/"):
                 return JSONResponse({"error": "auth required"}, status_code=401)
