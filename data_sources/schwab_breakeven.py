@@ -24,6 +24,16 @@ _YF = {"$SPX": "^GSPC", "SPX": "^GSPC", "$SPXW": "^GSPC", "SPXW": "^GSPC",
        "$NDX": "^NDX", "NDX": "^NDX", "$RUT": "^RUT", "RUT": "^RUT", "$VIX": "^VIX"}
 
 
+def _clean_root(sym: str) -> str:
+    """Schwab/OCC root -> options-engine & ToS chart ticker ($SPX->SPX, SPXW->SPX)."""
+    s = (sym or "").upper().strip().lstrip("$")
+    if s in ("SPXW", "SPXPM"):
+        return "SPX"
+    if s == "NDXP":
+        return "NDX"
+    return s
+
+
 def _parse_occ(sym: str):
     """OCC symbol 'AMD   251219C00200000' -> (root, expiry, 'C'/'P', strike)."""
     m = re.match(r"^([A-Z0-9$]+?)\s*(\d{6})([CP])(\d{8})$", (sym or "").strip())
@@ -56,6 +66,38 @@ def _today_be(spot, strike, dte, is_call, mark, premium):
         return lo
     if flo * fhi > 0:
         return None  # premium outside the reachable price range
+    for _ in range(64):
+        mid = 0.5 * (lo + hi)
+        if flo * f(mid) <= 0:
+            hi = mid
+        else:
+            lo, flo = mid, f(mid)
+    return 0.5 * (lo + hi)
+
+
+def _forward_be(spot, strike, dte, is_call, mark, premium, days_forward=30):
+    """Underlying price where the option is worth ``premium`` ``days_forward`` days
+    FROM NOW (IV = the mark's implied vol, held constant) — the 'monthly' break-even,
+    like the future-date curve in thinkorswim's Analyze tab. If the option expires
+    within the horizon the break-even IS the expiration level. None if unsolvable."""
+    if not (spot and strike and dte and dte > 0 and mark and mark > 0 and premium):
+        return None
+    iv = gex.implied_vol(mark, spot, strike, dte / 365.0, is_call)
+    if iv is None:
+        return None
+    t = max(dte - days_forward, 0) / 365.0
+    if t <= 0:  # expires within the horizon -> the monthly BE is just the expiration BE
+        return (strike + premium) if is_call else (strike - premium)
+    lo, hi = (strike * 0.2, strike * 6.0) if is_call else (strike * 0.02, strike * 2.0)
+
+    def f(s):
+        return gex.bs_price(s, strike, iv, t, is_call) - premium
+
+    flo, fhi = f(lo), f(hi)
+    if flo == 0:
+        return lo
+    if flo * fhi > 0:
+        return None
     for _ in range(64):
         mid = 0.5 * (lo + hi)
         if flo * f(mid) <= 0:
@@ -130,15 +172,59 @@ def positions_breakeven() -> list[dict]:
     for d in rows:
         sp = spot.get(d["under"])
         d["spot"] = sp
-        d["be_today"] = _today_be(sp, d.pop("_strike"), d.pop("_dte"),
-                                  d.pop("_is_call"), d.pop("_mark"), d.pop("_prem"))
+        strike, dte_, is_call = d["_strike"], d["_dte"], d["_is_call"]
+        mark, prem = d["_mark"], d["_prem"]
+        d["be_today"] = _today_be(sp, strike, dte_, is_call, mark, prem)
+        d["be_month"] = _forward_be(sp, strike, dte_, is_call, mark, prem, days_forward=30)
+        for _k in ("_strike", "_dte", "_is_call", "_mark", "_prem"):
+            d.pop(_k, None)
         d["pct_to_be_exp"] = ((d["be_expiration"] - sp) / sp * 100
                               if (sp and d["be_expiration"]) else None)
         d["pct_to_be_today"] = ((d["be_today"] - sp) / sp * 100
                                 if (sp and d["be_today"]) else None)
+        d["pct_to_be_month"] = ((d["be_month"] - sp) / sp * 100
+                                if (sp and d["be_month"]) else None)
 
     rows.sort(key=lambda d: (d["pnl"] if d["pnl"] is not None else 0), reverse=True)
     return rows
+
+
+def position_underlyings() -> list[str]:
+    """Deduped underlying symbols across ALL Schwab positions (option underlyings +
+    equity/ETF/index symbols), cleaned to engine/chart tickers. Empty list if Schwab
+    isn't connected. READ-ONLY, never raises — feeds the pre-market gamma-walls job."""
+    try:
+        import requests
+
+        from data_sources import schwab
+        tok = schwab._access_token()
+        if not tok:
+            return []
+        r = requests.get(f"{schwab.BASE}/accounts", params={"fields": "positions"},
+                         headers={"Authorization": f"Bearer {tok}"}, timeout=25)
+        if r.status_code != 200:
+            return []
+        syms: set[str] = set()
+        for acct in r.json():
+            for p in acct.get("securitiesAccount", {}).get("positions", []):
+                ins = p.get("instrument") or {}
+                atype = (ins.get("assetType") or "").upper()
+                if atype == "OPTION":
+                    u = ins.get("underlyingSymbol") or ""
+                    if not u:
+                        parsed = _parse_occ(ins.get("symbol") or "")
+                        u = parsed[0] if parsed else ""
+                elif atype in ("EQUITY", "ETF", "INDEX", "COLLECTIVE_INVESTMENT",
+                               "MUTUAL_FUND"):
+                    u = ins.get("symbol") or ""
+                else:
+                    continue
+                u = _clean_root(u)
+                if u:
+                    syms.add(u)
+        return sorted(syms)
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _c(x, f="$%.2f"):
@@ -169,6 +255,7 @@ def report_html(rows: list[dict] | None = None) -> str:
             "(tu costo), como la pestaña Analyze de thinkorswim. No es recomendación de vender ni mantener.</p>",
             "<table><thead><tr><th>Subyac.</th><th>Opción</th><th>DTE</th><th>Qty</th><th>Prima</th>"
             "<th>Mark</th><th>P&amp;L $</th><th>P&amp;L %</th><th>BE-hoy</th><th>% a hoy</th>"
+            "<th>BE-mes</th><th>% a mes</th>"
             "<th>BE-venc</th><th>Spot</th><th>% a venc</th></tr></thead><tbody>"]
     for d in rows:
         cls = "pos" if (d.get("pnl") or 0) >= 0 else "neg"
@@ -178,6 +265,7 @@ def report_html(rows: list[dict] | None = None) -> str:
             f"<td>{d['qty']:g}</td><td>{_c(d['premium'])}</td><td>{_c(d['mark'])}</td>"
             f"<td class='pnl'>${round(d['pnl']):,}</td><td>{_c(d['pnl_pct'],'%+.0f%%')}</td>"
             f"<td>{_c(d['be_today'])}</td><td>{_c(d['pct_to_be_today'],'%+.1f%%')}</td>"
+            f"<td>{_c(d['be_month'])}</td><td>{_c(d['pct_to_be_month'],'%+.1f%%')}</td>"
             f"<td>{_c(d['be_expiration'])}</td><td>{_c(d['spot'])}</td>"
             f"<td>{_c(d['pct_to_be_exp'],'%+.1f%%')}</td></tr>")
     body.append("</tbody></table>")

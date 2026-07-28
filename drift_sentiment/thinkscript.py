@@ -85,3 +85,59 @@ def build_study(report: DriftReport, bucket: BucketResult | None = None) -> str:
         body.append("")
 
     return "\n".join(header) + "\n".join(body)
+
+
+def _gamma_branch(syms: dict[str, dict], key: str) -> str:
+    """thinkScript if/else chain mapping GetSymbol() -> a per-symbol level, ending
+    in Double.NaN (so charts not in the book simply draw nothing)."""
+    lines = [f'    if sym == "{s}" then {syms[s][key]:.2f} else'
+             for s in sorted(syms) if syms[s].get(key) is not None]
+    return ("\n".join(lines) + "\n    Double.NaN") if lines else "    Double.NaN"
+
+
+def build_gamma_walls_study(levels: dict[str, dict], as_of: str = "") -> str:
+    """Combined thinkorswim study of per-position gamma levels, keyed by the chart
+    symbol via GetSymbol(): paste ONCE, apply to every position chart, and each chart
+    draws its own underlying's Call/Put gamma walls and gamma flip.
+
+    ``levels`` maps a ToS chart symbol -> {"call_wall", "put_wall", "flip"} (any may
+    be None). Symbols with no usable level are skipped. Educational — not advice.
+    """
+    syms = {s: v for s, v in levels.items()
+            if v and any(v.get(k) is not None for k in ("call_wall", "put_wall", "flip"))}
+    out = [
+        "# === Gamma Walls -> thinkorswim (Drift Sentiment Agent) ===",
+        f"# Generado {as_of}. Niveles de gamma por posicion; se refresca cada",
+        "# manana antes de abrir el mercado. Pegalo UNA vez y aplicalo a cada grafica.",
+        "#   Verde  = Call Gamma Wall (resistencia; dealers venden el rally)",
+        "#   Rojo   = Put Gamma Wall  (soporte; dealers compran la caida)",
+        "#   Amarillo (raya) = Gamma Flip / Zero-Gamma (cambia el regimen de vol)",
+        "# ToS: Studies > Edit studies > Create > thinkScript Editor. Educativo, NO es asesoria.",
+        "",
+        "def sym = GetSymbol();",
+        "",
+        f"def callWall =\n{_gamma_branch(syms, 'call_wall')};",
+        f"def putWall =\n{_gamma_branch(syms, 'put_wall')};",
+        f"def gammaFlip =\n{_gamma_branch(syms, 'flip')};",
+        "",
+        "plot CallGammaWall = callWall;",
+        "CallGammaWall.SetDefaultColor(Color.GREEN);",
+        "CallGammaWall.SetStyle(Curve.FIRM);",
+        "CallGammaWall.SetLineWeight(2);",
+        "",
+        "plot PutGammaWall = putWall;",
+        "PutGammaWall.SetDefaultColor(Color.RED);",
+        "PutGammaWall.SetStyle(Curve.FIRM);",
+        "PutGammaWall.SetLineWeight(2);",
+        "",
+        "plot GammaFlip = gammaFlip;",
+        "GammaFlip.SetDefaultColor(Color.YELLOW);",
+        "GammaFlip.SetStyle(Curve.LONG_DASH);",
+        "GammaFlip.SetLineWeight(2);",
+        "",
+        'AddLabel(!IsNaN(callWall), "Call Wall " + callWall, Color.GREEN);',
+        'AddLabel(!IsNaN(putWall), "Put Wall " + putWall, Color.RED);',
+        'AddLabel(!IsNaN(gammaFlip), "Gamma Flip " + gammaFlip, Color.YELLOW);',
+        "",
+    ]
+    return "\n".join(out)

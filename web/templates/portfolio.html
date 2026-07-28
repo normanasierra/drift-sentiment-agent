@@ -289,16 +289,18 @@
         <td class="px-2 py-1 text-right ${pnlCls}">${r.pnl_pct == null ? 'n/d' : (r.pnl_pct >= 0 ? '+' : '') + Math.round(r.pnl_pct) + '%'}</td>
         <td class="px-2 py-1 text-right font-medium">${m(r.be_today)}</td>
         <td class="px-2 py-1 text-right text-slate-400">${pc(r.pct_to_be_today)}</td>
+        <td class="px-2 py-1 text-right font-medium">${m(r.be_month)}</td>
+        <td class="px-2 py-1 text-right text-slate-400">${pc(r.pct_to_be_month)}</td>
         <td class="px-2 py-1 text-right">${m(r.be_expiration)}</td>
         <td class="px-2 py-1 text-right text-slate-400">${pc(r.pct_to_be_exp)}</td>
       </tr>`;
     }).join('');
-    const heads = ['Subyac.', 'Opción', 'DTE', 'Qty', 'Prima', 'Mark', 'P&L $', 'P&L %', 'BE-hoy', '% a hoy', 'BE-venc', '% a venc'];
+    const heads = ['Subyac.', 'Opción', 'DTE', 'Qty', 'Prima', 'Mark', 'P&L $', 'P&L %', 'BE-hoy', '% a hoy', 'BE-mes', '% a mes', 'BE-venc', '% a venc'];
     $('pfBreakeven').innerHTML = `
       <h2 class="text-lg font-bold mb-1">🎯 Break-even por posición</h2>
       <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">
         Costo ${fmtBig(d.total_cost)} · P&L <span class="${d.total_pnl < 0 ? 'text-rose-500' : 'text-emerald-500'} font-semibold">${fmtBig(d.total_pnl)}</span> · en ganancia ${d.in_profit}/${d.count}.
-        <b>BE-hoy</b> = precio del subyacente HOY para valer tu costo (Black-Scholes). <b>BE-venc</b> = strike + prima. Educativo, no es asesoría.</p>
+        <b>BE-hoy</b> = precio del subyacente HOY para valer tu costo (Black-Scholes). <b>BE-mes</b> = precio a ~1 mes (curva Black-Scholes). <b>BE-venc</b> = strike + prima. Educativo, no es asesoría.</p>
       <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
         <table class="w-full text-xs">
           <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500"><tr>${heads.map((h, i) =>
