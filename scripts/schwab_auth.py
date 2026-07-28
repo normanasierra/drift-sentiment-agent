@@ -148,6 +148,15 @@ def main() -> None:
     print("   Refresh token válido ~7 días; re-corre esto cuando expire.")
     print("   Prueba:  .venv\\Scripts\\python.exe -m data_sources.schwab")
 
+    # Best-effort: push the fresh token to the cloud (Render) so the phone/web app
+    # stays connected without any manual copy. No-ops if Render creds aren't set.
+    try:
+        sys.path.insert(0, str(REPO / "scripts"))
+        from render_push_token import push
+        push()
+    except Exception:  # noqa: BLE001 — never let the cloud push break the local re-auth
+        pass
+
 
 if __name__ == "__main__":
     main()
