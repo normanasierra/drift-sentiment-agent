@@ -91,6 +91,7 @@
           <div>
             <div class="text-xl font-bold">${esc(h.ticker)}</div>
             <div class="text-xs text-slate-400">Posición: <span class="font-semibold text-slate-500 dark:text-slate-300">${fmtBig(h.market_value)}</span></div>
+            <div data-flow class="mt-1 empty:hidden"></div>
           </div>
           <a href="/" data-analyze="${esc(h.ticker)}" title="Analizar en detalle"
              class="text-xs px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-brand/10 hover:text-brand-soft">Analizar →</a>
@@ -198,10 +199,44 @@
       const chartId = `chart-${h.ticker.replace(/[^A-Za-z0-9]/g, '')}`;
       const chart = drawChart(chartId, j);
       store.set(h.ticker, { report: j, chartId, chart });
+      loadFlow(h);   // fire-and-forget: report cache is warm, so /api/unusual reuses it
     } catch (e) {
       body.className = 'mt-3 text-sm text-rose-400';
       body.innerHTML = `Error de red al analizar ${esc(h.ticker)}.`;
     }
+  }
+
+  // Najarian "unusual options activity" badge — reads today's F.R.A.M.E.-scored
+  // MarketSnack sweeps ON this underlying (server /api/unusual `on_ticker`, already
+  // filtered to the ticker and sorted by conviction). Degrades to nothing: no sweeps,
+  // no IMAP configured, or an error → the card just omits the badge.
+  function flowBadgeHtml(uf) {
+    const rows = (uf && uf.on_ticker) || [];
+    // "Notable" = tier Alta/Media/Baja (emoji has a 🔥); drop Ruido ("·").
+    const notable = rows.filter((r) => (r.emoji || '').includes('🔥'));
+    if (!notable.length) return '';
+    const top = notable[0];                       // already highest-conviction first
+    const bull = notable.filter((r) => r.bullish === true).length;
+    const bear = notable.filter((r) => r.bullish === false).length;
+    let dir = 'mixto', cls = 'bg-slate-500/15 text-slate-500 dark:text-slate-300';
+    if (bull > bear) { dir = 'alcista'; cls = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'; }
+    else if (bear > bull) { dir = 'bajista'; cls = 'bg-rose-500/15 text-rose-600 dark:text-rose-300'; }
+    const title = `Flujo inusual hoy (Najarian F.R.A.M.E.): ${notable.length} barrido(s), ` +
+      `conviction máx. ${top.score}. Verde=alcista · Rojo=bajista. Educativo.`;
+    return `<span title="${esc(title)}"
+      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cls}">
+      ${esc(top.emoji)} Flujo ${dir} (${notable.length})</span>`;
+  }
+
+  async function loadFlow(h) {
+    const card = document.getElementById(`pf-${h.ticker.replace(/[^A-Za-z0-9]/g, '')}`);
+    const slot = card && card.querySelector('[data-flow]');
+    if (!slot) return;
+    try {
+      const res = await fetch(`/api/unusual?ticker=${encodeURIComponent(h.ticker)}`);
+      if (!res.ok) return;                         // 500/etc. → stay silent
+      slot.innerHTML = flowBadgeHtml(await res.json());
+    } catch { /* network error → no badge, no noise */ }
   }
 
   // Limited concurrency so we don't hammer the chain API with 20 parallel fetches.
