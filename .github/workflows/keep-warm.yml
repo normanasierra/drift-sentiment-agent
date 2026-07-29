@@ -1,0 +1,21 @@
+name: Keep Wakanda warm
+
+# The free Render tier spins the app down after ~15 min idle, so the first visit
+# then waits 40-50s to wake. This pings it every ~14 min during US market hours
+# (weekdays) so it's already warm when Norman opens it. Scoped to market hours so
+# it doesn't burn the whole free-tier month keeping it up 24/7.
+on:
+  schedule:
+    # Every 14 min, 11:00-21:59 UTC (≈7am-5pm ET), Mon-Fri. (GitHub cron is UTC.)
+    - cron: '*/14 11-21 * * 1-5'
+  workflow_dispatch: {}   # manual "Run" button
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the app to keep it awake
+        run: |
+          curl -s -o /dev/null -w "warm-ping -> HTTP %{http_code} (%{time_total}s)\n" \
+            --max-time 90 https://drift-sentiment-web.onrender.com/login || true
