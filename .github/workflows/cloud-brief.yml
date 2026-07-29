@@ -1,0 +1,34 @@
+name: Cloud brief (Render trigger)
+
+# TRIAL (2026-07-29): triggers the FULL brief on Render — fresh Schwab => break-even
+# table, real-time data, Resend email (Cloudflare-safe) + WhatsApp — via /tasks/run.
+# We're testing whether GitHub's SCHEDULED cron fires on time. GitHub crons are known
+# to run late (that was the ~11am duplicate). If this keeps arriving late, we drop it
+# and keep the punctual LOCAL brief. Uses the TASKS_KEY repo secret.
+on:
+  schedule:
+    - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT (pre-open). GitHub may delay this.
+  workflow_dispatch: {}       # manual "Run workflow" button
+
+concurrency:
+  group: cloud-brief
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger the Render cloud brief
+        env:
+          TASKS_KEY: ${{ secrets.TASKS_KEY }}
+        run: |
+          if [ -z "$TASKS_KEY" ]; then
+            echo "TASKS_KEY repo secret is not set." >&2
+            exit 1
+          fi
+          echo "Firing cloud brief at $(date -u '+%Y-%m-%d %H:%M UTC')"
+          curl -fsS --max-time 120 --retry 5 --retry-all-errors --retry-delay 20 \
+            "https://drift-sentiment-web.onrender.com/tasks/run?job=brief&key=${TASKS_KEY}"
+          echo ""
+          echo "Triggered."
