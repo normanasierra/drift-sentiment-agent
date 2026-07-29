@@ -272,6 +272,49 @@ def report_html(rows: list[dict] | None = None) -> str:
     return "".join(body)
 
 
+def report_fragment(rows: list[dict] | None = None) -> str:
+    """Compact, INLINE-styled break-even table for EMBEDDING inside another email (the
+    daily brief) — no <style>/<doctype>, so it can't restyle the host document. Returns
+    '' if Schwab isn't connected. Educational — never a recommendation."""
+    rows = rows if rows is not None else positions_breakeven()
+    if not rows:
+        return ""
+    tot_pnl = sum(r.get("pnl") or 0 for r in rows)
+    green = sum(1 for r in rows if (r.get("pnl") or 0) >= 0)
+    th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;"
+          "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
+    td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
+    tdl = td.replace("text-align:right", "text-align:left")
+    heads = ("Subyac.", "Opción", "DTE", "P&amp;L $", "P&amp;L %", "BE-hoy", "% hoy",
+             "BE-mes", "% mes", "BE-venc", "% venc", "Spot")
+    out = [
+        "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
+        "margin:20px 0 4px'>🎯 Portafolio — break-even por posición</h2>",
+        f"<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
+        f"{len(rows)} opciones · P&amp;L ${tot_pnl:,.0f} · en ganancia {green}/{len(rows)}. "
+        "<b>BE-hoy</b> = precio HOY (Black-Scholes) · <b>BE-mes</b> = ~30 días · "
+        "<b>BE-venc</b> = strike ± prima. Educativo, NO es asesoría.</p>",
+        "<table style='border-collapse:collapse'><thead><tr>"
+        + "".join(f"<th style='{th}'>{h}</th>" for h in heads) + "</tr></thead><tbody>",
+    ]
+    for d in rows:
+        opc = f"{d['strike']:g}{d['cp'][0]} {d.get('exp') or ''}" if d.get("strike") else "?"
+        pnl = d.get("pnl") or 0
+        pcol = "#15803d" if pnl >= 0 else "#b91c1c"
+        cells = [
+            (tdl, d.get("under", "")), (tdl, opc), (td, d.get("dte", "")),
+            (f"{td};color:{pcol};font-weight:600", f"${pnl:,.0f}"),
+            (f"{td};color:{pcol}", _c(d.get("pnl_pct"), "%+.0f%%")),
+            (td, _c(d.get("be_today"))), (td, _c(d.get("pct_to_be_today"), "%+.1f%%")),
+            (td, _c(d.get("be_month"))), (td, _c(d.get("pct_to_be_month"), "%+.1f%%")),
+            (td, _c(d.get("be_expiration"))), (td, _c(d.get("pct_to_be_exp"), "%+.1f%%")),
+            (td, _c(d.get("spot"))),
+        ]
+        out.append("<tr>" + "".join(f"<td style='{s}'>{v}</td>" for s, v in cells) + "</tr>")
+    out.append("</tbody></table>")
+    return "".join(out)
+
+
 if __name__ == "__main__":
     for d in positions_breakeven():
         print(f"{d['under']:6} {d['strike']:g}{d['cp'][0]} {d['exp']} | pnl ${d['pnl']:,.0f} "

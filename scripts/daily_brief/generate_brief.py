@@ -183,6 +183,20 @@ def generate() -> None:
     if not email:
         sys.exit("Could not extract brief email after 3 tries.\n--- raw ---\n" + text[:1500])
 
+    # ALWAYS append the real portfolio break-even table (Norman wants the portfolio +
+    # break-evens IN the same report, guaranteed — not left to the LLM). Best-effort;
+    # inline-styled so it can't restyle the brief. Omitted if Schwab isn't connected.
+    try:
+        if str(REPO) not in sys.path:
+            sys.path.insert(0, str(REPO))
+        from data_sources import schwab_breakeven
+        be_table = schwab_breakeven.report_fragment()
+        if be_table:
+            email += ("\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
+                      + be_table)
+    except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
+        pass
+
     OUT_DIR.mkdir(exist_ok=True)
     EMAIL_FILE.write_text(email, encoding="utf-8")
     WA_FILE.write_text(wa, encoding="utf-8")
