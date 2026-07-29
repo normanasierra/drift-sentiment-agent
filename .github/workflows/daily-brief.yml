@@ -3,15 +3,16 @@ name: Daily Market Brief
 # Runs the daily pre-market brief on GitHub's servers (no dependency on any
 # personal machine). Secrets are stored as encrypted GitHub Actions secrets.
 on:
-  # Scheduled cron DISABLED (2026-07-08): GitHub's cron was delivering the brief
-  # late / off-schedule. Delivery now runs LOCALLY & punctually via the Windows
-  # scheduled tasks DriftBriefOpen (8:45am) / DriftBriefClose (3:15pm) invoking
-  # scripts/daily_brief/run_brief_local.py. Re-enable the two crons below if you
-  # ever want the cloud fallback again (accepting its timing slop).
-  # schedule:
-  #   - cron: '45 12 * * 1-5'
-  #   - cron: '15 19 * * 1-5'
-  workflow_dispatch: {}   # manual "Run workflow" button (cloud fallback / testing)
+  # Cloud fallback ENABLED (2026-07-29): runs on GitHub's servers so the brief goes
+  # out even when the PC is asleep. GitHub can send Gmail SMTP (Render can't), and all
+  # secrets already live here. NOTE: the break-even TABLE needs a live Schwab session,
+  # which only the LOCAL/Render runs have — this GitHub run delivers everything else
+  # (indices, bonds, world markets, ETFs, portfolio prices, news, agenda). Times are
+  # UTC: 12:45 = 8:45am EDT (pre-open), 19:15 = 3:15pm EDT (near close).
+  schedule:
+    - cron: '45 12 * * 1-5'
+    - cron: '15 19 * * 1-5'
+  workflow_dispatch: {}   # manual "Run workflow" button (testing)
 
 jobs:
   brief:
