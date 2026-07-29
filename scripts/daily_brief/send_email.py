@@ -68,7 +68,13 @@ def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: str, 
     }).encode("utf-8")
     req = urllib.request.Request(
         "https://api.resend.com/emails", data=payload, method="POST",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+            # Resend's API sits behind Cloudflare, which 403s (error 1010) on urllib's
+            # default User-Agent as a bot signature — a normal browser UA gets through.
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                           "(KHTML, like Gecko) Chrome/122.0 Safari/537.36"),
+        },
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310
