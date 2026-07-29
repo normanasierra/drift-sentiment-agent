@@ -26,7 +26,8 @@ API = "https://api.render.com/v1"
 # Everything the cloud brief needs to generate + deliver, straight from your .env.
 CREDS = [
     "CLAUDE_CODE_OAUTH_TOKEN",   # the LLM token generate_brief.py uses
-    "GMAIL_USER", "GMAIL_APP_PASSWORD", "BRIEF_EMAIL_TO",   # email
+    "GMAIL_USER", "GMAIL_APP_PASSWORD", "BRIEF_EMAIL_TO",   # email (local SMTP)
+    "RESEND_API_KEY", "RESEND_FROM",                        # email (cloud, HTTPS)
     "CALLMEBOT_PHONE", "CALLMEBOT_APIKEY",                  # WhatsApp
 ]
 

@@ -55,7 +55,44 @@ def _config() -> tuple[str, str, str]:
     return user, password, to
 
 
+def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: str, sender: str) -> None:
+    """Send via Resend's HTTPS API — used in the cloud (Render), where outbound SMTP is
+    blocked. Stdlib only (urllib), like send_whatsapp.py."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    payload = json.dumps({
+        "from": sender, "to": [to], "subject": subject,
+        ("html" if html else "text"): body,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails", data=payload, method="POST",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310
+            r.read()
+    except urllib.error.HTTPError as exc:
+        raise EmailError(f"Resend rechazó ({exc.code}): "
+                         f"{exc.read()[:200].decode('utf-8', 'replace')}") from exc
+    except urllib.error.URLError as exc:
+        raise EmailError(f"Resend: error de red — {exc}") from exc
+    print(f"Email sent to {to} via Resend ({'HTML' if html else 'plain'}).")
+
+
 def send_email(subject: str, body: str, *, html: bool = False) -> None:
+    # In the cloud (Render blocks outbound SMTP) send via Resend's HTTPS API when it's
+    # configured; locally keep using Gmail SMTP (works there, keeps your own From).
+    resend_key = os.getenv("RESEND_API_KEY")
+    if resend_key and os.getenv("RENDER"):
+        to = os.getenv("BRIEF_EMAIL_TO") or os.getenv("GMAIL_USER")
+        if not to:
+            raise EmailError("BRIEF_EMAIL_TO / GMAIL_USER no está seteado.")
+        sender = os.getenv("RESEND_FROM", "Brief de Mercado <onboarding@resend.dev>")
+        _send_resend(subject, body, html=html, api_key=resend_key, to=to, sender=sender)
+        return
+
     user, password, to = _config()
 
     msg = EmailMessage()
