@@ -743,6 +743,10 @@ def api_thinkscript(ticker: str = ""):
 
 # Report scripts a cloud trigger may run (relative to the repo root).
 _TASK_JOBS = {
+    # The daily market brief (generate via the LLM + web search, then email + WhatsApp),
+    # run here in the cloud so delivery survives the PC being off. run_brief_local reads
+    # its config from the environment (Render sets it) and self-skips closed market days.
+    "brief": ["daily_brief/run_brief_local.py"],
     "morning": ["breakeven_report.py", "gamma_levels_report.py"],
     "breakeven": ["breakeven_report.py"],
     "gamma": ["gamma_levels_report.py"],
