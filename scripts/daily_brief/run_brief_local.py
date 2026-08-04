@@ -70,16 +70,17 @@ def main() -> None:
             log(f"aviso: no pude checar el calendario ({exc}); sigo igual.")
 
     # Post-wake network race: right after the PC wakes for the scheduled task, the FIRST
-    # Schwab HTTPS call can fail even though the LLM/web calls succeed moments later —
-    # which silently drops the portfolio + break-even table from the brief. Warm up
-    # (retry ~60s) the Schwab token first so its access token is cached and ready.
+    # Schwab HTTPS call can lose the race with the network coming up — which silently drops
+    # the portfolio + break-even table from the brief (it did on 2026-08-04). raw_positions()
+    # now retries with backoff internally; we ALSO prime the REAL path here (not just the
+    # token) so positions are proven reachable before we spend ~4 min generating the brief.
     try:
         import time as _time
         from data_sources import schwab as _schwab
-        for _ in range(6):
-            if _schwab._access_token():
+        for _ in range(4):
+            if _schwab.raw_positions():
                 break
-            _time.sleep(10)
+            _time.sleep(8)
     except Exception:  # noqa: BLE001
         pass
 

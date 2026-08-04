@@ -82,35 +82,56 @@ def _access_token() -> str | None:
     return os.getenv("SCHWAB_ACCESS_TOKEN")
 
 
+def raw_positions(retries: int = 4) -> list[dict]:
+    """Raw Schwab position dicts across every account (READ-ONLY), with retry + backoff.
+
+    The morning task wakes the PC from sleep, and the FIRST Schwab HTTPS call can lose the
+    race with the network coming up (a timeout / connection reset) — or Schwab returns a
+    transient 5xx. A single failed call used to return ``[]``, silently dropping the whole
+    portfolio and its break-even table from the brief. Retrying a few times fixes that.
+    Returns ``[]`` if unauthorized or truly unreachable. A 401 (the ~7-day refresh token
+    expired) is NOT retried — retrying can't fix it; ``needs_reauth()`` nags for a login.
+
+    The single source of truth for "fetch my positions": ``positions()``,
+    ``schwab_breakeven.positions_breakeven()`` and ``position_underlyings()`` all route
+    through here, so the resilience lives in one place."""
+    for attempt in range(retries):
+        token = _access_token()
+        if token:
+            try:
+                resp = requests.get(
+                    f"{BASE}/accounts",
+                    params={"fields": "positions"},
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=25,
+                )
+                if resp.status_code == 200:
+                    raw: list[dict] = []
+                    for acct in resp.json():
+                        raw.extend(acct.get("securitiesAccount", {}).get("positions", []))
+                    return raw
+                if resp.status_code == 401:
+                    return []  # expired refresh token — a retry won't help
+            except Exception:  # noqa: BLE001 — transient blip; back off and retry
+                pass
+        if attempt < retries - 1:
+            time.sleep(1.5 * (attempt + 1))  # 1.5s, 3s, 4.5s
+    return []
+
+
 def positions() -> list[dict]:
     """Open positions across accounts (READ-ONLY), or [] if not authorized/unreachable."""
-    token = _access_token()
-    if not token:
-        return []
-    try:
-        resp = requests.get(
-            f"{BASE}/accounts",
-            params={"fields": "positions"},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=20,
-        )
-        if resp.status_code != 200:
-            return []
-        out: list[dict] = []
-        for acct in resp.json():
-            sec = acct.get("securitiesAccount", {})
-            for p in sec.get("positions", []):
-                instr = p.get("instrument", {})
-                out.append({
-                    "symbol": instr.get("symbol"),
-                    "type": instr.get("assetType"),
-                    "qty": p.get("longQuantity", 0) - p.get("shortQuantity", 0),
-                    "market_value": p.get("marketValue"),
-                    "pnl_open": p.get("longOpenProfitLoss"),
-                })
-        return out
-    except Exception:  # noqa: BLE001
-        return []
+    out: list[dict] = []
+    for p in raw_positions():
+        instr = p.get("instrument", {})
+        out.append({
+            "symbol": instr.get("symbol"),
+            "type": instr.get("assetType"),
+            "qty": p.get("longQuantity", 0) - p.get("shortQuantity", 0),
+            "market_value": p.get("marketValue"),
+            "pnl_open": p.get("longOpenProfitLoss"),
+        })
+    return out
 
 
 def needs_reauth() -> bool:

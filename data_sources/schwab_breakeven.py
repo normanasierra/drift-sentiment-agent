@@ -110,22 +110,8 @@ def _forward_be(spot, strike, dte, is_call, mark, premium, days_forward=30):
 def positions_breakeven() -> list[dict]:
     """Break-even detail for each Schwab option position, sorted by P&L (worst last).
     Empty list if Schwab isn't connected/reachable — never raises."""
-    try:
-        import requests
-
-        from data_sources import schwab
-        tok = schwab._access_token()
-        if not tok:
-            return []
-        r = requests.get(f"{schwab.BASE}/accounts", params={"fields": "positions"},
-                         headers={"Authorization": f"Bearer {tok}"}, timeout=25)
-        if r.status_code != 200:
-            return []
-        raw = []
-        for acct in r.json():
-            raw.extend(acct.get("securitiesAccount", {}).get("positions", []))
-    except Exception:  # noqa: BLE001
-        return []
+    from data_sources import schwab
+    raw = schwab.raw_positions()  # retry/backoff lives there — survives the post-wake blip
 
     rows, unders = [], set()
     for p in raw:
@@ -194,34 +180,24 @@ def position_underlyings() -> list[str]:
     equity/ETF/index symbols), cleaned to engine/chart tickers. Empty list if Schwab
     isn't connected. READ-ONLY, never raises — feeds the pre-market gamma-walls job."""
     try:
-        import requests
-
         from data_sources import schwab
-        tok = schwab._access_token()
-        if not tok:
-            return []
-        r = requests.get(f"{schwab.BASE}/accounts", params={"fields": "positions"},
-                         headers={"Authorization": f"Bearer {tok}"}, timeout=25)
-        if r.status_code != 200:
-            return []
         syms: set[str] = set()
-        for acct in r.json():
-            for p in acct.get("securitiesAccount", {}).get("positions", []):
-                ins = p.get("instrument") or {}
-                atype = (ins.get("assetType") or "").upper()
-                if atype == "OPTION":
-                    u = ins.get("underlyingSymbol") or ""
-                    if not u:
-                        parsed = _parse_occ(ins.get("symbol") or "")
-                        u = parsed[0] if parsed else ""
-                elif atype in ("EQUITY", "ETF", "INDEX", "COLLECTIVE_INVESTMENT",
-                               "MUTUAL_FUND"):
-                    u = ins.get("symbol") or ""
-                else:
-                    continue
-                u = _clean_root(u)
-                if u:
-                    syms.add(u)
+        for p in schwab.raw_positions():  # retry/backoff lives there
+            ins = p.get("instrument") or {}
+            atype = (ins.get("assetType") or "").upper()
+            if atype == "OPTION":
+                u = ins.get("underlyingSymbol") or ""
+                if not u:
+                    parsed = _parse_occ(ins.get("symbol") or "")
+                    u = parsed[0] if parsed else ""
+            elif atype in ("EQUITY", "ETF", "INDEX", "COLLECTIVE_INVESTMENT",
+                           "MUTUAL_FUND"):
+                u = ins.get("symbol") or ""
+            else:
+                continue
+            u = _clean_root(u)
+            if u:
+                syms.add(u)
         return sorted(syms)
     except Exception:  # noqa: BLE001
         return []
