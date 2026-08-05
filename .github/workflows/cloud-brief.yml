@@ -1,14 +1,20 @@
 name: Cloud brief (Render trigger)
 
-# TRIAL (2026-07-29): triggers the FULL brief on Render — fresh Schwab => break-even
-# table, real-time data, Resend email (Cloudflare-safe) + WhatsApp — via /tasks/run.
-# We're testing whether GitHub's SCHEDULED cron fires on time. GitHub crons are known
-# to run late (that was the ~11am duplicate). If this keeps arriving late, we drop it
-# and keep the punctual LOCAL brief. Uses the TASKS_KEY repo secret.
+# Day-to-day we run LOCAL-only: the PC wakes at 8:45am, punctual, with the break-even
+# table. GitHub's scheduled cron runs ~2.5h LATE (confirmed 08-03 11:31, 08-04 11:10 AST),
+# so we do NOT want it duplicating the local brief normally.
+#
+# EXCEPTION — Norman travels 2026-08-14..2026-08-23 with the PC OFF, so the cloud is the
+# ONLY brief those days. This scheduled run SELF-GATES to that date window: outside it, it
+# skips (local handles it); inside it, it fires the full Render brief. A late (~11am) brief
+# on travel days beats no brief. workflow_dispatch always runs (manual / on-demand test).
+#
+# NOTE: the cloud brief's break-even table needs a live Schwab token (~7-day expiry). Re-auth
+# on the PC the morning of 08-14 before shutting down so a fresh token syncs to Render.
 on:
   schedule:
-    - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT (pre-open). GitHub may delay this.
-  workflow_dispatch: {}       # manual "Run workflow" button
+    - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT weekdays (GitHub delays it to ~11am)
+  workflow_dispatch: {}        # manual "Run workflow" button — always runs
 
 concurrency:
   group: cloud-brief
@@ -19,15 +25,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Trigger the Render cloud brief
+      - name: Trigger the Render cloud brief (scheduled only during the travel window)
+        shell: bash
         env:
           TASKS_KEY: ${{ secrets.TASKS_KEY }}
+          EVENT: ${{ github.event_name }}
         run: |
           if [ -z "$TASKS_KEY" ]; then
             echo "TASKS_KEY repo secret is not set." >&2
             exit 1
           fi
-          echo "Firing cloud brief at $(date -u '+%Y-%m-%d %H:%M UTC')"
+          TODAY=$(date -u +%Y-%m-%d)
+          WIN_START=2026-08-14
+          WIN_END=2026-08-23
+          # Scheduled runs fire ONLY inside the travel window; manual dispatch always runs.
+          if [ "$EVENT" = "schedule" ]; then
+            if [[ "$TODAY" < "$WIN_START" || "$TODAY" > "$WIN_END" ]]; then
+              echo "Today $TODAY is outside the travel window ($WIN_START..$WIN_END) — skipping; the local brief handles it."
+              exit 0
+            fi
+          fi
+          echo "Firing cloud brief at $(date -u '+%Y-%m-%d %H:%M UTC') (today=$TODAY, event=$EVENT)"
           curl -fsS --max-time 120 --retry 5 --retry-all-errors --retry-delay 20 \
             "https://drift-sentiment-web.onrender.com/tasks/run?job=brief&key=${TASKS_KEY}"
           echo ""
