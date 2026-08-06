@@ -311,9 +311,14 @@
     if (!rows.length) return;
     const m = (x, dp = 2) => (x == null ? 'n/d' : '$' + fmt(x, dp));
     const pc = (x) => (x == null ? 'n/d' : (x >= 0 ? '+' : '') + fmt(x, 1) + '%');
+    const BE = 'bg-sky-100 dark:bg-sky-900/30';  // BE-$ columns shaded blue
     const body = rows.map((r) => {
       const neg = (r.pnl || 0) < 0, pnlCls = neg ? 'text-rose-500' : 'text-emerald-500';
-      return `<tr class="border-t border-slate-100 dark:border-slate-800 ${neg ? '' : 'bg-emerald-50/60 dark:bg-emerald-950/20'}">
+      const big = Math.abs(r.pnl || 0) >= 10000;  // rows over $10k highlighted yellow
+      const rowBg = big
+        ? 'bg-amber-100 dark:bg-amber-900/30 border-l-4 border-l-amber-400'
+        : (neg ? '' : 'bg-emerald-50/60 dark:bg-emerald-950/20');
+      return `<tr class="border-t border-slate-100 dark:border-slate-800 ${rowBg}">
         <td class="px-2 py-1 font-semibold text-left">${esc(r.under)}</td>
         <td class="px-2 py-1 text-left whitespace-nowrap">${fmt(r.strike, 0)}${esc(r.cp[0])} ${esc(r.exp || '')}</td>
         <td class="px-2 py-1 text-right">${r.dte ?? '—'}</td>
@@ -322,11 +327,11 @@
         <td class="px-2 py-1 text-right">${m(r.mark)}</td>
         <td class="px-2 py-1 text-right font-semibold ${pnlCls}">${m(r.pnl, 0)}</td>
         <td class="px-2 py-1 text-right ${pnlCls}">${r.pnl_pct == null ? 'n/d' : (r.pnl_pct >= 0 ? '+' : '') + Math.round(r.pnl_pct) + '%'}</td>
-        <td class="px-2 py-1 text-right font-medium">${m(r.be_today)}</td>
+        <td class="px-2 py-1 text-right font-medium ${BE}">${m(r.be_today)}</td>
         <td class="px-2 py-1 text-right text-slate-400">${pc(r.pct_to_be_today)}</td>
-        <td class="px-2 py-1 text-right font-medium">${m(r.be_month)}</td>
+        <td class="px-2 py-1 text-right font-medium ${BE}">${m(r.be_month)}</td>
         <td class="px-2 py-1 text-right text-slate-400">${pc(r.pct_to_be_month)}</td>
-        <td class="px-2 py-1 text-right">${m(r.be_expiration)}</td>
+        <td class="px-2 py-1 text-right ${BE}">${m(r.be_expiration)}</td>
         <td class="px-2 py-1 text-right text-slate-400">${pc(r.pct_to_be_exp)}</td>
       </tr>`;
     }).join('');
@@ -335,11 +340,11 @@
       <h2 class="text-lg font-bold mb-1">🎯 Break-even por posición</h2>
       <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">
         Costo ${fmtBig(d.total_cost)} · P&L <span class="${d.total_pnl < 0 ? 'text-rose-500' : 'text-emerald-500'} font-semibold">${fmtBig(d.total_pnl)}</span> · en ganancia ${d.in_profit}/${d.count}.
-        <b>BE-hoy</b> = precio del subyacente HOY para valer tu costo (Black-Scholes). <b>BE-mes</b> = precio a ~1 mes (curva Black-Scholes). <b>BE-venc</b> = strike + prima. Educativo, no es asesoría.</p>
+        <b>BE-hoy</b> = precio del subyacente HOY para valer tu costo (Black-Scholes). <b>BE-mes</b> = precio a ~1 mes (curva Black-Scholes). <b>BE-venc</b> = strike + prima. Columnas BE-$ en azul; filas con |P&L| ≥ $10k en amarillo. Educativo, no es asesoría.</p>
       <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
         <table class="w-full text-xs">
           <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500"><tr>${heads.map((h, i) =>
-            `<th class="px-2 py-1.5 ${i < 2 ? 'text-left' : 'text-right'} font-semibold whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
+            `<th class="px-2 py-1.5 ${i < 2 ? 'text-left' : 'text-right'} ${[8, 10, 12].includes(i) ? 'bg-sky-100 dark:bg-sky-900/30' : ''} font-semibold whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
           <tbody>${body}</tbody>
         </table>
       </div>`;
