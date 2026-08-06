@@ -247,7 +247,7 @@ def report_fragment(rows: list[dict] | None = None) -> str:
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     BE_BG = "background:#dbeafe"    # BE-$ columns (BE-hoy/mes/venc) shaded blue
-    BIG_BG = "background:#fef9c3"   # rows with |P&L| >= $20k highlighted yellow
+    BIG_BG = "background:#fef9c3"   # rows with |P&L| >= $10k highlighted yellow
     BE_COLS = (5, 7, 9)            # column indexes of BE-hoy, BE-mes, BE-venc
     heads = ("Subyac.", "Opción", "DTE", "P&amp;L $", "P&amp;L %", "BE-hoy", "% hoy",
              "BE-mes", "% mes", "BE-venc", "% venc", "Spot")
@@ -257,7 +257,7 @@ def report_fragment(rows: list[dict] | None = None) -> str:
         f"<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
         f"{len(rows)} opciones · P&amp;L ${tot_pnl:,.0f} · en ganancia {green}/{len(rows)}. "
         "<b>BE-hoy</b> = precio HOY (Black-Scholes) · <b>BE-mes</b> = ~30 días · "
-        "<b>BE-venc</b> = strike ± prima. Columnas BE-$ en azul · filas con |P&amp;L| ≥ $20k "
+        "<b>BE-venc</b> = strike ± prima. Columnas BE-$ en azul · filas con |P&amp;L| ≥ $10k "
         "en amarillo. Educativo, NO es asesoría.</p>",
         "<table style='border-collapse:collapse'><thead><tr>"
         + "".join(f"<th style='{th + (';' + BE_BG if i in BE_COLS else '')}'>{h}</th>"
@@ -266,7 +266,7 @@ def report_fragment(rows: list[dict] | None = None) -> str:
     for d in rows:
         opc = f"{d['strike']:g}{d['cp'][0]} {d.get('exp') or ''}" if d.get("strike") else "?"
         pnl = d.get("pnl") or 0
-        big = abs(pnl) >= 20_000
+        big = abs(pnl) >= 10_000
         pcol = "#15803d" if pnl >= 0 else "#b91c1c"
         cells = [
             (tdl, d.get("under", "")), (tdl, opc), (td, d.get("dte", "")),
