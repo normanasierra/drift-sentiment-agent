@@ -1,14 +1,15 @@
 #!/bin/bash
 # ============================================================
-#  Schwab token AUTO-SYNC for the MAC — install once (READ-ONLY).
+#  Mac AUTO-SYNC (code + Schwab token) — install once (READ-ONLY).
 # ============================================================
-# Installs a launchd agent that pulls the freshest Schwab token from Render every hour
-# and at login, so the Mac stays in lockstep with the PC automatically — no more manual
-# pulls after you re-auth on the PC.
+# Installs a launchd agent that runs scripts/mac_autosync.sh every hour and at login, so
+# the Mac stays 100% current automatically — no more manual steps:
+#   1) git pull --ff-only   (latest CODE; never prompts, so it can't hang)
+#   2) render_pull_token.py (freshest Schwab TOKEN from Render)
 #
-# Why this script (render_pull_token.py): it loads .env itself via an ABSOLUTE path, and
-# only needs RENDER_API_KEY / RENDER_SERVICE_ID (not the Schwab app secret), so it runs
-# fine under launchd's minimal environment. It just downloads the token Render already has.
+# render_pull_token.py loads .env via an ABSOLUTE path and needs only RENDER_API_KEY /
+# RENDER_SERVICE_ID (not the Schwab app secret), so it runs fine under launchd's minimal
+# environment. It just downloads the token Render already has.
 #
 # Double-click ONCE in Finder (first time: right-click -> Open to bypass Gatekeeper).
 # To remove later: launchctl unload ~/Library/LaunchAgents/com.wakanda.schwabsync.plist
@@ -35,8 +36,8 @@ cat > "$PLIST" <<PLISTEOF
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$PY</string>
-    <string>$REPO/scripts/render_pull_token.py</string>
+    <string>/bin/bash</string>
+    <string>$REPO/scripts/mac_autosync.sh</string>
   </array>
   <key>WorkingDirectory</key><string>$REPO</string>
   <key>StartInterval</key><integer>3600</integer>
@@ -49,7 +50,7 @@ PLISTEOF
 
 launchctl unload "$PLIST" 2>/dev/null
 if launchctl load -w "$PLIST"; then
-  echo "OK — la Mac jalará el token de Schwab CADA HORA y al iniciar sesión."
+  echo "OK — la Mac jalará CÓDIGO + TOKEN de Schwab CADA HORA y al iniciar sesión."
 else
   echo "Error al cargar el agente launchd. Revisa el log."
 fi
