@@ -247,7 +247,7 @@ def report_fragment(rows: list[dict] | None = None) -> str:
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     BE_BG = "background:#dbeafe"    # BE-$ columns (BE-hoy/mes/venc) shaded blue
-    BIG_BG = "background:#fef9c3"   # rows with |P&L| >= $10k highlighted yellow
+    BIG_BG = "background:#fde047"   # rows with |P&L| >= $10k highlighted vivid yellow
     BE_COLS = (5, 7, 9)            # column indexes of BE-hoy, BE-mes, BE-venc
     heads = ("Subyac.", "Opción", "DTE", "P&amp;L $", "P&amp;L %", "BE-hoy", "% hoy",
              "BE-mes", "% mes", "BE-venc", "% venc", "Spot")
