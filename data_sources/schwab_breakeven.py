@@ -214,38 +214,23 @@ def report_html(rows: list[dict] | None = None) -> str:
     tot_mv = sum(r.get("market_value") or 0 for r in rows)
     tot_pnl = sum(r.get("pnl") or 0 for r in rows)
     green = sum(1 for r in rows if (r.get("pnl") or 0) >= 0)
-    head = ("<!doctype html><meta charset='utf-8'><style>"
-            "body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:18px;color:#0f172a}"
-            "h1{font-size:19px;margin:0 0 2px}.sub{color:#334155;font-size:13px}"
-            ".dis{background:#fef9c3;border:1px solid #fde047;padding:7px 11px;border-radius:8px;font-size:12.5px}"
-            "table{border-collapse:collapse;width:100%;font-size:12px;margin-top:10px}"
-            "th,td{border:1px solid #e2e8f0;padding:4px 7px;text-align:right}th{background:#f1f5f9}"
-            "td:first-child,td:nth-child(2){text-align:left}"
-            "tr.neg td.pnl{color:#b91c1c;font-weight:600}tr.pos td.pnl{color:#15803d;font-weight:600}"
-            "tr.pos{background:#f0fdf4}</style>")
-    body = [head,
-            "<h1>Break-even por posición — Schwab</h1>",
-            f"<p class='sub'>{len(rows)} opciones · Costo ${tot_cost:,.0f} · Valor ${tot_mv:,.0f} · "
-            f"<b>P&amp;L ${tot_pnl:,.0f}</b> · en ganancia {green}/{len(rows)} · {date.today().isoformat()}</p>",
-            "<p class='dis'>Educativo — <b>NO es asesoría financiera</b>. Es tu matemática de break-even "
-            "(tu costo), como la pestaña Analyze de thinkorswim. No es recomendación de vender ni mantener.</p>",
-            "<table><thead><tr><th>Subyac.</th><th>Opción</th><th>DTE</th><th>Qty</th><th>Prima</th>"
-            "<th>Mark</th><th>P&amp;L $</th><th>P&amp;L %</th><th>BE-hoy</th><th>% a hoy</th>"
-            "<th>BE-mes</th><th>% a mes</th>"
-            "<th>BE-venc</th><th>Spot</th><th>% a venc</th></tr></thead><tbody>"]
-    for d in rows:
-        cls = "pos" if (d.get("pnl") or 0) >= 0 else "neg"
-        opc = f"{d['strike']:g} {d['cp'][0]} {d['exp']}" if d.get("strike") else "?"
-        body.append(
-            f"<tr class='{cls}'><td>{d['under']}</td><td>{opc}</td><td>{d['dte']}</td>"
-            f"<td>{d['qty']:g}</td><td>{_c(d['premium'])}</td><td>{_c(d['mark'])}</td>"
-            f"<td class='pnl'>${round(d['pnl']):,}</td><td>{_c(d['pnl_pct'],'%+.0f%%')}</td>"
-            f"<td>{_c(d['be_today'])}</td><td>{_c(d['pct_to_be_today'],'%+.1f%%')}</td>"
-            f"<td>{_c(d['be_month'])}</td><td>{_c(d['pct_to_be_month'],'%+.1f%%')}</td>"
-            f"<td>{_c(d['be_expiration'])}</td><td>{_c(d['spot'])}</td>"
-            f"<td>{_c(d['pct_to_be_exp'],'%+.1f%%')}</td></tr>")
-    body.append("</tbody></table>")
-    return "".join(body)
+    frag = report_fragment(rows)
+    if not frag:
+        return ("<div style='font:14px -apple-system,Segoe UI,Arial,sans-serif;padding:12px'>"
+                "Schwab no está conectado — sin posiciones para el break-even.</div>")
+    # Inline styles only: Gmail strips <style> blocks, which used to leave the table
+    # unstyled (it looked like raw text). report_fragment is fully inline, so wrap it.
+    return (
+        "<div style='font:14px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;padding:12px'>"
+        "<h1 style='font-size:19px;margin:0 0 6px'>Break-even por posición — Schwab</h1>"
+        f"<p style='font-size:13px;color:#334155;margin:0 0 4px'>Costo ${tot_cost:,.0f} · "
+        f"Valor ${tot_mv:,.0f} · <b>P&amp;L ${tot_pnl:,.0f}</b> · en ganancia {green}/{len(rows)} · "
+        f"{date.today().isoformat()}</p>"
+        + frag +
+        "<p style='background:#fef9c3;border:1px solid #fde047;padding:7px 11px;border-radius:8px;"
+        "font-size:12.5px;margin-top:12px'>Educativo — <b>NO es asesoría financiera</b>. Es tu "
+        "matemática de break-even (tu costo), como la pestaña Analyze de thinkorswim. No es "
+        "recomendación de vender ni mantener.</p></div>")
 
 
 def report_fragment(rows: list[dict] | None = None) -> str:
@@ -261,6 +246,9 @@ def report_fragment(rows: list[dict] | None = None) -> str:
           "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
+    BE_BG = "background:#dbeafe"    # BE-$ columns (BE-hoy/mes/venc) shaded blue
+    BIG_BG = "background:#fef9c3"   # rows with |P&L| >= $20k highlighted yellow
+    BE_COLS = (5, 7, 9)            # column indexes of BE-hoy, BE-mes, BE-venc
     heads = ("Subyac.", "Opción", "DTE", "P&amp;L $", "P&amp;L %", "BE-hoy", "% hoy",
              "BE-mes", "% mes", "BE-venc", "% venc", "Spot")
     out = [
@@ -269,13 +257,16 @@ def report_fragment(rows: list[dict] | None = None) -> str:
         f"<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
         f"{len(rows)} opciones · P&amp;L ${tot_pnl:,.0f} · en ganancia {green}/{len(rows)}. "
         "<b>BE-hoy</b> = precio HOY (Black-Scholes) · <b>BE-mes</b> = ~30 días · "
-        "<b>BE-venc</b> = strike ± prima. Educativo, NO es asesoría.</p>",
+        "<b>BE-venc</b> = strike ± prima. Columnas BE-$ en azul · filas con |P&amp;L| ≥ $20k "
+        "en amarillo. Educativo, NO es asesoría.</p>",
         "<table style='border-collapse:collapse'><thead><tr>"
-        + "".join(f"<th style='{th}'>{h}</th>" for h in heads) + "</tr></thead><tbody>",
+        + "".join(f"<th style='{th + (';' + BE_BG if i in BE_COLS else '')}'>{h}</th>"
+                  for i, h in enumerate(heads)) + "</tr></thead><tbody>",
     ]
     for d in rows:
         opc = f"{d['strike']:g}{d['cp'][0]} {d.get('exp') or ''}" if d.get("strike") else "?"
         pnl = d.get("pnl") or 0
+        big = abs(pnl) >= 20_000
         pcol = "#15803d" if pnl >= 0 else "#b91c1c"
         cells = [
             (tdl, d.get("under", "")), (tdl, opc), (td, d.get("dte", "")),
@@ -286,7 +277,16 @@ def report_fragment(rows: list[dict] | None = None) -> str:
             (td, _c(d.get("be_expiration"))), (td, _c(d.get("pct_to_be_exp"), "%+.1f%%")),
             (td, _c(d.get("spot"))),
         ]
-        out.append("<tr>" + "".join(f"<td style='{s}'>{v}</td>" for s, v in cells) + "</tr>")
+        tds = []
+        for i, (s, v) in enumerate(cells):
+            if i in BE_COLS:               # BE-$ column shading wins over the row highlight
+                s = s + ";" + BE_BG
+            elif big:
+                s = s + ";" + BIG_BG
+            if i == 0 and big:             # yellow bar to anchor a >$20k row
+                s = s + ";border-left:4px solid #f59e0b"
+            tds.append(f"<td style='{s}'>{v}</td>")
+        out.append("<tr>" + "".join(tds) + "</tr>")
     out.append("</tbody></table>")
     return "".join(out)
 
