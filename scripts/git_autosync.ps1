@@ -14,4 +14,13 @@ Add-Content $log ("[{0}] === autosync ===" -f (Get-Date -Format 'yyyy-MM-dd HH:m
 $q = '"'
 & cmd /c ("$q$git$q pull --rebase --autostash >> $q$log$q 2>&1")
 & cmd /c ("$q$git$q push >> $q$log$q 2>&1")
+
+# Keep this machine's Schwab token fresh: pull whatever the master last pushed to
+# Render. Best-effort — the script prints its own status ("bajado" / "ya al día")
+# and always exits 0, so a network hiccup never breaks the sync.
+$py = Join-Path $repo '.venv\Scripts\python.exe'
+if (Test-Path $py) {
+  & cmd /c ("$q$py$q scripts\render_pull_token.py >> $q$log$q 2>&1")
+}
+
 Add-Content $log "[done]" -Encoding utf8
