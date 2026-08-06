@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -109,6 +110,11 @@ def pull(*, quiet: bool = False) -> bool:
     data["refresh_token"] = remote
     data.pop("access_token", None)
     data["access_expires_at"] = 0
+    # Stamp the pull time as this machine's re-auth reference. A puller can't know
+    # when the master actually logged in, but a freshly-pulled token is ~new, so
+    # "now" keeps reauth_due_soon() honest here (no false "expiring" alarm right
+    # after a pull). needs_reauth() still tests the live token as the real safety net.
+    data["reauth_at"] = time.time()
     try:
         TOKENS.parent.mkdir(exist_ok=True)
         TOKENS.write_text(json.dumps(data, indent=2), encoding="utf-8")
