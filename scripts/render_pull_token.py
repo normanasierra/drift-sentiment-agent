@@ -122,4 +122,8 @@ def pull(*, quiet: bool = False) -> bool:
 
 
 if __name__ == "__main__":
-    sys.exit(0 if pull() else 1)
+    # Best-effort sync helper: "wrote a fresh token" and "already up to date" are
+    # BOTH success. Only a hard crash is a failure — so a benign no-op run (nothing
+    # new on Render) never looks like an error to cron / auto_sync.sh.
+    pull()
+    sys.exit(0)

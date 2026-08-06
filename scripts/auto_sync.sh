@@ -14,11 +14,11 @@ git pull --rebase --autostash -q 2>/dev/null
 git push -q 2>/dev/null
 
 # Keep this machine's Schwab token fresh: pull whatever the master (PC) last
-# pushed to Render. Best-effort — never let a network hiccup break the sync.
+# pushed to Render. Best-effort — the script prints its own status ("bajado" /
+# "ya está al día") and never fails a run, so a network hiccup won't break sync.
 if [ -x .venv/bin/python ]; then
-  .venv/bin/python scripts/render_pull_token.py >/dev/null 2>&1 \
-    && echo "$(date '+%Y-%m-%d %H:%M') schwab token pulled from cloud" \
-    || echo "$(date '+%Y-%m-%d %H:%M') schwab token pull skipped"
+  printf '%s schwab: ' "$(date '+%Y-%m-%d %H:%M')"
+  .venv/bin/python scripts/render_pull_token.py 2>/dev/null
 fi
 
 echo "$(date '+%Y-%m-%d %H:%M') auto-sync done -> $(git rev-parse --short HEAD)"
