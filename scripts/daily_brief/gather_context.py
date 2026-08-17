@@ -348,11 +348,23 @@ def _breakeven_block() -> str:
     return "\n".join(lines)
 
 
+def _support_bounce_block() -> str:
+    """Held underlyings resting near their Put Wall (support) with a bullish near-term
+    structure — bounce candidates. Same engine/levels as the portfolio page. Educational,
+    never a recommendation. '' if Schwab isn't connected or nothing qualifies."""
+    try:
+        from data_sources import holdings_screen
+        return holdings_screen.format_block()
+    except Exception:  # noqa: BLE001 — a heavy per-ticker screen never breaks the brief
+        return ""
+
+
 def gather() -> str:
     """Return a compact REAL-DATA block for the prompt, or '' if nothing loaded."""
     blocks = [
         _indices_block(), _bonds_block(), _world_block(), _etfs_block(),
         _watchlist_block(), _movers_block(), _portfolio_block(), _breakeven_block(),
+        _support_bounce_block(),
         _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
