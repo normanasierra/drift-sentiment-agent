@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import re
 import ssl
 import urllib.error
 import urllib.parse
@@ -84,11 +85,16 @@ def send_whatsapp(text: str, *, timeout: int = 30) -> None:
     except urllib.error.URLError as exc:
         raise WhatsAppError(f"CallMeBot request failed: {exc}") from exc
 
-    # CallMeBot returns 200 with an HTML body; surface it on failure.
-    if status != 200 or "ERROR" in body.upper():
-        raise WhatsAppError(
-            f"CallMeBot rejected the message (HTTP {status}): {body[:200]}"
-        )
+    # CallMeBot returns 200 with an HTML body even when it did NOT deliver (quota
+    # exhausted, bad key, deactivated number). Check the body for failure phrases —
+    # not just "ERROR" — so we never report a phantom success.
+    low = body.lower()
+    fail_markers = ("error", "message not sent", "not sent", "messages left: 0",
+                    "0 messages left", "please subscribe", "apikey not valid",
+                    "you need to activate")
+    if status != 200 or any(m in low for m in fail_markers):
+        snippet = " ".join(re.sub(r"<[^>]+>", " ", body).split())[:200]
+        raise WhatsAppError(f"CallMeBot did NOT send (HTTP {status}): {snippet}")
 
     print("WhatsApp message sent.")
 
