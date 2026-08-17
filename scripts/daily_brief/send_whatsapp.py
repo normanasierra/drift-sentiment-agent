@@ -22,9 +22,21 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """A verified TLS context using certifi's CA bundle when present. macOS Python
+    often lacks system CAs (SSL: CERTIFICATE_VERIFY_FAILED); certifi ships with
+    requests, so this makes HTTPS work without a manual 'Install Certificates' step."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001 — fall back to the system default context
+        return ssl.create_default_context()
 
 # .env is optional: locally it holds the secrets; in the cloud routine the same
 # vars are set directly in the environment, so python-dotenv may be absent.
@@ -66,7 +78,7 @@ def send_whatsapp(text: str, *, timeout: int = 30) -> None:
         {"phone": phone, "text": text, "apikey": apikey}
     )
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
+        with urllib.request.urlopen(url, timeout=timeout, context=_ssl_context()) as resp:  # noqa: S310
             status = resp.status
             body = resp.read().decode("utf-8", "replace")
     except urllib.error.URLError as exc:
