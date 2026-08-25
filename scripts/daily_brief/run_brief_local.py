@@ -139,9 +139,13 @@ def main() -> None:
     re_ = run("send_email.py", "--subject", f"Brief de Mercado - {date_es}",
               "--body-file", str(EMAIL), "--html")
     log(f"email rc={re_.returncode} {(re_.stdout or re_.stderr).strip()[:200]}")
-    log("whatsapp...")
-    rw = run("send_whatsapp.py", "--text-file", str(WA))
-    log(f"whatsapp rc={rw.returncode} {(rw.stdout or rw.stderr).strip()[:200]}")
+    log("mensajería móvil...")
+    if os.getenv("TELEGRAM_BOT_TOKEN"):  # prefer Telegram (reliable, no quota) when set
+        rw = run("send_telegram.py", "--text-file", str(WA))
+        log(f"telegram rc={rw.returncode} {(rw.stdout or rw.stderr).strip()[:200]}")
+    else:
+        rw = run("send_whatsapp.py", "--text-file", str(WA))
+        log(f"whatsapp rc={rw.returncode} {(rw.stdout or rw.stderr).strip()[:200]}")
 
     log("===== run finished =====")
     sys.exit(0 if re_.returncode == 0 and rw.returncode == 0 else 1)
