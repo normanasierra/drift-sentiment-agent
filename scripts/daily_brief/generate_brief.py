@@ -121,6 +121,22 @@ def _real_data() -> str:
         return ""
 
 
+def _close_html(html: str) -> str:
+    """Repair truncated LLM HTML so a half-written tag can't turn the rest of the email
+    (the appended break-even table) into raw text: drop any dangling '<...' with no
+    closing '>', then balance open table containers (inner-to-outer)."""
+    if not html:
+        return html
+    lt, gt = html.rfind("<"), html.rfind(">")
+    if lt > gt:                      # ends mid-tag, e.g. '<td style="text'
+        html = html[:lt].rstrip()
+    for tag in ("td", "tr", "table"):
+        n = len(re.findall(rf"<{tag}[\s>]", html, re.I)) - len(re.findall(rf"</{tag}>", html, re.I))
+        if n > 0:
+            html += f"</{tag}>" * n
+    return html
+
+
 def generate() -> None:
     local = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=4)
     today = local.strftime("%Y-%m-%d")
@@ -136,7 +152,7 @@ def generate() -> None:
     )
     body = json.dumps({
         "model": MODEL,
-        "max_tokens": 8000,
+        "max_tokens": 16000,
         "messages": [{"role": "user", "content": prompt}],
         "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 18}],
     }).encode("utf-8")
@@ -176,7 +192,7 @@ def generate() -> None:
         text = "".join(
             b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
         )
-        email = _extract_email(text)
+        email = _close_html(_extract_email(text))
         wa = _extract_wa(text, email)
         if email and _between(text, WA_START, WA_END):
             break  # clean run; otherwise loop tries again but we can still send below
