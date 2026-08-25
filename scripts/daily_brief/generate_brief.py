@@ -199,18 +199,31 @@ def generate() -> None:
     if not email:
         sys.exit("Could not extract brief email after 3 tries.\n--- raw ---\n" + text[:1500])
 
-    # ALWAYS append the real portfolio break-even table (Norman wants the portfolio +
-    # break-evens IN the same report, guaranteed — not left to the LLM). Best-effort;
-    # inline-styled so it can't restyle the brief. Omitted if Schwab isn't connected.
+    # Portfolio break-even table (with P&L) — Norman wants it at the TOP of every report,
+    # guaranteed (not left to the LLM). Inline-styled + best-effort so the brief still
+    # sends if a source is down.
     try:
         if str(REPO) not in sys.path:
             sys.path.insert(0, str(REPO))
         from data_sources import schwab_breakeven
         be_table = schwab_breakeven.report_fragment()
-        if be_table:
-            email += ("\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
-                      + be_table)
+        if be_table:  # PREPEND so the P&L / break-even table sits at the top of the report
+            email = (be_table
+                     + "\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
+                     + email)
     except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
+        pass
+
+    # RSI overbought / oversold screen (filtered to high volume + OI) — appended at the
+    # bottom, plus a compact line on the WhatsApp/Telegram key points. Data, not advice.
+    try:
+        import rsi_screen
+        rsi_html, rsi_wa = rsi_screen.build()
+        if rsi_html:
+            email += rsi_html
+        if rsi_wa:
+            wa = (wa.rstrip() + "\n\n" + rsi_wa) if wa else rsi_wa
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
 
     OUT_DIR.mkdir(exist_ok=True)
