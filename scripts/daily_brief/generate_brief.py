@@ -216,6 +216,15 @@ def generate() -> None:
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:
+        import wall_magneto_screen
+        wm_html, wm_tg = wall_magneto_screen.build()
+        if wm_html:
+            top.append(wm_html)
+        if wm_tg:
+            wa = (wa.rstrip() + "\n\n" + wm_tg) if wa else wm_tg
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
+        pass
+    try:
         from data_sources import schwab_breakeven
         be_table = schwab_breakeven.report_fragment()
         if be_table:
