@@ -126,7 +126,6 @@ def build() -> tuple[str, str]:
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in
                     ("Ticker", "RSI", "Precio", "Volumen", "OI"))
     parts = [
-        "<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>",
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
         "margin:20px 0 4px'>📉📈 Sobrevendidas / Sobrecompradas (alto volumen + OI)</h2>",
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"

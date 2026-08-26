@@ -199,32 +199,31 @@ def generate() -> None:
     if not email:
         sys.exit("Could not extract brief email after 3 tries.\n--- raw ---\n" + text[:1500])
 
-    # Portfolio break-even table (with P&L) — Norman wants it at the TOP of every report,
-    # guaranteed (not left to the LLM). Inline-styled + best-effort so the brief still
-    # sends if a source is down.
-    try:
-        if str(REPO) not in sys.path:
-            sys.path.insert(0, str(REPO))
-        from data_sources import schwab_breakeven
-        be_table = schwab_breakeven.report_fragment()
-        if be_table:  # PREPEND so the P&L / break-even table sits at the top of the report
-            email = (be_table
-                     + "\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
-                     + email)
-    except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
-        pass
-
-    # RSI overbought / oversold screen (filtered to high volume + OI) — appended at the
-    # bottom, plus a compact line on the WhatsApp/Telegram key points. Data, not advice.
+    # Top-of-report sections, in order: RSI overbought/oversold screen, then the portfolio
+    # break-even (P&L) table — both ABOVE the LLM brief (Norman wants them at the top).
+    # Inline-styled + best-effort so the brief still sends if a source is down. Data, not advice.
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    _hr = "\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
+    top: list[str] = []
     try:
         import rsi_screen
         rsi_html, rsi_wa = rsi_screen.build()
         if rsi_html:
-            email += rsi_html
+            top.append(rsi_html)
         if rsi_wa:
             wa = (wa.rstrip() + "\n\n" + rsi_wa) if wa else rsi_wa
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
+    try:
+        from data_sources import schwab_breakeven
+        be_table = schwab_breakeven.report_fragment()
+        if be_table:
+            top.append(be_table)
+    except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
+        pass
+    if top:
+        email = _hr.join(top) + _hr + email
 
     OUT_DIR.mkdir(exist_ok=True)
     EMAIL_FILE.write_text(email, encoding="utf-8")
