@@ -15,6 +15,7 @@ import imaplib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -73,15 +74,18 @@ def format_alert(subject: str, body: str, when: str | None = None) -> str:
 
 
 def whatsapp(text: str) -> None:
-    phone, key = os.getenv("CALLMEBOT_PHONE"), os.getenv("CALLMEBOT_APIKEY")
-    if not phone or not key:
-        return
-    url = "https://api.callmebot.com/whatsapp.php?" + urllib.parse.urlencode(
-        {"phone": phone, "text": text[:1000], "apikey": key})
-    try:
-        urllib.request.urlopen(url, timeout=25)
-    except Exception:  # noqa: BLE001
-        pass
+    """Deliver an OI/volume sweep alert via Telegram + email. (CallMeBot/WhatsApp retired —
+    it ran out of quota and dropped messages.) Best-effort: never raises so the watcher keeps
+    polling. The subprocesses inherit this process's env (load_env loaded .env)."""
+    d = Path(__file__).resolve().parent / "daily_brief"
+    for extra in ([],  # send_telegram.py reads the message from stdin
+                  ["--subject", f"⚡ Alerta OI/Volumen — {date.today().isoformat()}"]):
+        script = "send_email.py" if extra else "send_telegram.py"
+        try:
+            subprocess.run([sys.executable, str(d / script), *extra],
+                           input=text, text=True, cwd=str(d), timeout=30)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _load_seen() -> set[str]:
