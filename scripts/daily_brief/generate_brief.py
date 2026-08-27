@@ -225,6 +225,15 @@ def generate() -> None:
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:
+        import earnings_today
+        e_html, e_tg = earnings_today.build()
+        if e_html:
+            top.append(e_html)
+        if e_tg:
+            wa = (wa.rstrip() + "\n\n" + e_tg) if wa else e_tg
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
+        pass
+    try:
         from data_sources import schwab_breakeven
         be_table = schwab_breakeven.report_fragment()
         if be_table:
