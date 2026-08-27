@@ -242,9 +242,8 @@ def report_fragment(rows: list[dict] | None = None) -> str:
         return ""
     tot_pnl = sum(r.get("pnl") or 0 for r in rows)
     green = sum(1 for r in rows if (r.get("pnl") or 0) >= 0)
-    th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;"
-          "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
-    td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
+    th = "padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;font-weight:600"
+    td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right"
     tdl = td.replace("text-align:right", "text-align:left")
     BE_BG = "background:#dbeafe"    # BE-$ columns (BE-hoy/mes/venc) shaded blue
     BIG_BG = "background:#fde047"   # rows with |P&L| >= $10k highlighted vivid yellow
@@ -259,7 +258,7 @@ def report_fragment(rows: list[dict] | None = None) -> str:
         "<b>BE-hoy</b> = precio HOY (Black-Scholes) · <b>BE-mes</b> = ~30 días · "
         "<b>BE-venc</b> = strike ± prima. Columnas BE-$ en azul · filas con |P&amp;L| ≥ $10k "
         "en amarillo. Educativo, NO es asesoría.</p>",
-        "<table style='border-collapse:collapse'><thead><tr>"
+        "<table style='border-collapse:collapse;font:11px -apple-system,Segoe UI,Arial,sans-serif'><thead><tr>"
         + "".join(f"<th style='{th + (';' + BE_BG if i in BE_COLS else '')}'>{h}</th>"
                   for i, h in enumerate(heads)) + "</tr></thead><tbody>",
     ]
