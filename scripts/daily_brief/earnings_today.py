@@ -73,18 +73,19 @@ def build() -> tuple[str, str]:
                     ("Ticker", "Empresa", "Cuándo", "Cap", "EPS est."))
     rows = []
     for d in items:
+        bg = ";background:#fde047" if "después" in d["when"] else ""  # reporta AMC → amarillo
         rows.append(
-            f"<tr><td style='{tdl}'>{d['sym']}</td>"
-            f"<td style='{tdl}'>{d['name']}</td>"
-            f"<td style='{td}'>{d['when']}</td>"
-            f"<td style='{td}'>${d['cap'] / 1e9:.0f}B</td>"
-            f"<td style='{td}'>{d['eps']}</td></tr>")
+            f"<tr><td style='{tdl}{bg}'>{d['sym']}</td>"
+            f"<td style='{tdl}{bg}'>{d['name']}</td>"
+            f"<td style='{td}{bg}'>{d['when']}</td>"
+            f"<td style='{td}{bg}'>${d['cap'] / 1e9:.0f}B</td>"
+            f"<td style='{td}{bg}'>{d['eps']}</td></tr>")
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
         "margin:20px 0 4px'>📅 Earnings HOY</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
         f"Empresas grandes (cap ≥ ${MIN_CAP / 1e9:.0f}B) que reportan hoy · 🌅 antes de abrir · "
-        f"🌙 después del cierre. {len(items)} de {total} en total. Data factual, NO es asesoría.</p>"
+        f"🌙 después del cierre (en amarillo). {len(items)} de {total} en total. Data factual, NO es asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
     tg = "📅 Earnings HOY: " + ", ".join(f"{d['sym']}{_emoji(d['when'])}" for d in items[:12])
