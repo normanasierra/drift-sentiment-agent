@@ -222,6 +222,12 @@ def generate() -> None:
             top.append(wm_html)
         if wm_tg:
             wa = (wa.rstrip() + "\n\n" + wm_tg) if wa else wm_tg
+        # Short-DTE view (0/1/7/14 DTE) — reuses the chains build() already cached.
+        sd_html, sd_tg = wall_magneto_screen.build_short()
+        if sd_html:
+            top.append(sd_html)
+        if sd_tg:
+            wa = (wa.rstrip() + "\n\n" + sd_tg) if wa else sd_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:
