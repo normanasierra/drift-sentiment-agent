@@ -33,6 +33,43 @@ def _near(level, spot) -> bool:
     return level is not None and bool(spot) and abs(level - spot) / spot * 100 <= MAX_LEVEL_PCT
 
 
+def _gap(spot, cw, pw, mag):
+    """(gap_pct, nearest_wall, side) between the Magneto and its NEAREST near-term wall, or
+    None when the magneto/walls aren't plausible near-term levels. Shared by screen() and by
+    gap_for() (which the earnings tables use to ⭐-flag names with a big gap)."""
+    if not _near(mag, spot):                          # magneto must be a plausible magnet
+        return None
+    walls = [w for w in (cw, pw) if _near(w, spot)]   # walls within the near-term range
+    if not walls:
+        return None
+    nearest = min(walls, key=lambda w: abs(w - mag))
+    gap_pct = abs(nearest - mag) / spot * 100
+    side = "call" if (cw and nearest == cw) else "put"
+    return gap_pct, nearest, side
+
+
+_GAP_CACHE: dict = {}
+
+
+def gap_for(sym: str):
+    """The Magneto↔nearest-wall gap (% of spot) for one ticker, or None if it has no plausible
+    near-term level. Cached per process so other sections (e.g. the earnings tables, which
+    ⭐-flag big-gap names) can reuse it without refetching the chain. Best-effort."""
+    if sym in _GAP_CACHE:
+        return _GAP_CACHE[sym]
+    val = None
+    try:
+        r = _levels(sym)
+        if r:
+            g = _gap(r[0], r[1], r[2], r[3])
+            if g:
+                val = g[0]
+    except Exception:  # noqa: BLE001
+        val = None
+    _GAP_CACHE[sym] = val
+    return val
+
+
 def _levels(sym: str):
     """(spot, call_wall, put_wall, magneto, dte) for the nearest DTE bucket, or None."""
     try:
@@ -61,15 +98,12 @@ def screen() -> list[dict]:
         if not r:
             continue
         spot, cw, pw, mag, dte = r
-        if not _near(mag, spot):                          # magneto must be a plausible magnet
+        g = _gap(spot, cw, pw, mag)
+        _GAP_CACHE[s] = g[0] if g else None               # let gap_for() reuse this (no refetch)
+        if not g:
             continue
-        walls = [w for w in (cw, pw) if _near(w, spot)]   # walls within the near-term range
-        if not walls:
-            continue
-        nearest = min(walls, key=lambda w: abs(w - mag))
-        gap_pct = abs(nearest - mag) / spot * 100
+        gap_pct, nearest, side = g
         if gap_pct >= MIN_GAP_PCT:
-            side = "call" if (cw and nearest == cw) else "put"
             out.append({"sym": s, "spot": spot, "mag": mag, "wall": nearest,
                         "side": side, "gap": gap_pct, "dte": dte})
     out.sort(key=lambda d: -d["gap"])
