@@ -231,6 +231,14 @@ def generate() -> None:
             top.append(e_html)
         if e_tg:
             wa = (wa.rstrip() + "\n\n" + e_tg) if wa else e_tg
+        # Afternoon (3pm) run only: also preview who reports the NEXT trading day,
+        # so Norman gets the heads-up before markets close. local is UTC-4 (AST).
+        if local.hour >= 14:
+            t_html, t_tg = earnings_today.build_tomorrow()
+            if t_html:
+                top.append(t_html)
+            if t_tg:
+                wa = (wa.rstrip() + "\n\n" + t_tg) if wa else t_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:
