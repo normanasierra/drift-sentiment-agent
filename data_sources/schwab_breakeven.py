@@ -257,7 +257,7 @@ def report_fragment(rows: list[dict] | None = None) -> str:
         f"{len(rows)} opciones · P&amp;L ${tot_pnl:,.0f} · en ganancia {green}/{len(rows)}. "
         "<b>BE-hoy</b> = precio HOY (Black-Scholes) · <b>BE-mes</b> = ~30 días · "
         "<b>BE-venc</b> = strike ± prima. Columnas BE-$ en azul · filas con |P&amp;L| ≥ $10k "
-        "en amarillo. Educativo, NO es asesoría.</p>",
+        "en amarillo · ⭐ vence en ≤7 días. Educativo, NO es asesoría.</p>",
         "<table style='border-collapse:collapse;font:11px -apple-system,Segoe UI,Arial,sans-serif'><thead><tr>"
         + "".join(f"<th style='{th + (';' + BE_BG if i in BE_COLS else '')}'>{h}</th>"
                   for i, h in enumerate(heads)) + "</tr></thead><tbody>",
@@ -266,9 +266,11 @@ def report_fragment(rows: list[dict] | None = None) -> str:
         opc = f"{d['strike']:g}{d['cp'][0]} {d.get('exp') or ''}" if d.get("strike") else "?"
         pnl = d.get("pnl") or 0
         big = abs(pnl) >= 10_000
+        soon = d.get("dte") is not None and d["dte"] <= 7   # ⭐ vence en ≤7 días
+        under = ("⭐ " if soon else "") + (d.get("under") or "")
         pcol = "#15803d" if pnl >= 0 else "#b91c1c"
         cells = [
-            (tdl, d.get("under", "")), (tdl, opc), (td, d.get("dte", "")),
+            (tdl, under), (tdl, opc), (td, d.get("dte", "")),
             (f"{td};color:{pcol};font-weight:600", f"${pnl:,.0f}"),
             (f"{td};color:{pcol}", _c(d.get("pnl_pct"), "%+.0f%%")),
             (td, _c(d.get("be_today"))), (td, _c(d.get("pct_to_be_today"), "%+.1f%%")),
