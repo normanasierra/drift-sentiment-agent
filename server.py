@@ -741,12 +741,18 @@ def api_thinkscript(ticker: str = ""):
                     headers={"Content-Disposition": f'attachment; filename="{ticker}_walls_gamma.ts"'})
 
 
-# Report scripts a cloud trigger may run (relative to the repo root).
+# Report scripts a cloud trigger may run (relative to the repo root under scripts/).
+# Each entry is "<script> [args...]" — see _work() below, which splits on whitespace
+# so a job can pass flags. Plain names (no args) behave exactly as before.
 _TASK_JOBS = {
-    # The daily market brief (generate via the LLM + web search, then email + WhatsApp),
+    # The daily market brief (generate via the LLM + web search, then email + Telegram),
     # run here in the cloud so delivery survives the PC being off. run_brief_local reads
     # its config from the environment (Render sets it) and self-skips closed market days.
     "brief": ["daily_brief/run_brief_local.py"],
+    # Same brief, but --force skips the closed-market guard so it still delivers on a
+    # weekend/holiday. Used by the Sunday-night cloud schedule (the PC is powered OFF on
+    # weekends, so the local Windows task can't fire). Needs TELEGRAM_BOT_TOKEN in the env.
+    "brief_force": ["daily_brief/run_brief_local.py --force"],
     "morning": ["breakeven_report.py", "gamma_levels_report.py"],
     "breakeven": ["breakeven_report.py"],
     "gamma": ["gamma_levels_report.py"],
@@ -772,8 +778,12 @@ def api_tasks_run(job: str = "", key: str = ""):
 
     def _work():
         for name in scripts:
+            # Split "<script> [args...]" so a job entry can pass flags (e.g.
+            # run_brief_local.py --force). A plain name splits to one element, so
+            # parts[1:] is empty and the command is identical to the no-arg form.
+            parts = name.split()
             try:
-                subprocess.run([sys.executable, str(here / "scripts" / name)],
+                subprocess.run([sys.executable, str(here / "scripts" / parts[0]), *parts[1:]],
                                cwd=str(here), timeout=600)
             except Exception:  # noqa: BLE001
                 pass

@@ -42,6 +42,15 @@ services:
         sync: false
       - key: BRIEF_EMAIL_TO
         sync: false
+      # --- Mobile delivery: Telegram (reliable, no quota). run_brief_local prefers
+      #     Telegram whenever TELEGRAM_BOT_TOKEN is set; the cloud brief needs BOTH of
+      #     these to reach Norman's phone. TELEGRAM_CHAT_ID is his numeric chat id. ---
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      # --- CallMeBot/WhatsApp is RETIRED (quota died) — kept only as a dead fallback.
+      #     Leave these blank; Telegram above is the live mobile channel. ---
       - key: CALLMEBOT_PHONE
         sync: false
       - key: CALLMEBOT_APIKEY

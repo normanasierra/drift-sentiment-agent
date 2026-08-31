@@ -1,20 +1,48 @@
 name: Cloud brief (Render trigger)
 
-# Day-to-day we run LOCAL-only: the PC wakes at 8:45am, punctual, with the break-even
-# table. GitHub's scheduled cron runs ~2.5h LATE (confirmed 08-03 11:31, 08-04 11:10 AST),
-# so we do NOT want it duplicating the local brief normally.
+# =============================================================================
+# Reliable cloud delivery of the daily market brief when the PC can't fire the
+# local Windows task. Two independent schedules + a manual button:
 #
-# EXCEPTION — Norman travels 2026-08-14..2026-08-23 with the PC OFF, so the cloud is the
-# ONLY brief those days. This scheduled run SELF-GATES to that date window: outside it, it
-# skips (local handles it); inside it, it fires the full Render brief. A late (~11am) brief
-# on travel days beats no brief. workflow_dispatch always runs (manual / on-demand test).
+#   1. SUNDAY NIGHT (always)  cron '30 23 * * 0'  -> job=brief_force
+#      The PC is powered OFF on weekends, so the local task can't run (and
+#      WakeToRun can't wake a powered-off PC). This fires EVERY Sunday and is
+#      NOT gated by the travel window. --force skips the closed-market guard.
+#      Timing: target land = Sunday 22:00 AST (= Mon 02:00 UTC, AST=UTC-4, no DST).
+#      GitHub's scheduled cron runs ~2.5h LATE, so we schedule ~2.5h earlier at
+#      Sun 23:30 UTC. If it slips further, it lands in "la madrugada del lunes" —
+#      acceptable per Norman.
 #
-# NOTE: the cloud brief's break-even table needs a live Schwab token (~7-day expiry). Re-auth
-# on the PC the morning of 08-14 before shutting down so a fresh token syncs to Render.
+#   2. WEEKDAYS DURING TRAVEL  cron '45 12 * * 1-5'  -> job=brief
+#      When Norman travels the PC is off for days. This weekday run SELF-GATES to
+#      the travel window below: outside it, it skips (the local PC brief handles
+#      the day); inside it, it fires the cloud brief. GitHub delays it to ~11am AST
+#      (a late brief beats no brief on travel days).
+#
+#   3. MANUAL ("Run workflow")  workflow_dispatch  -> job=brief_force by default
+#      Always runs, regardless of day/window. Use it for the end-to-end test.
+#
+# >>> TRAVEL MODE: to arm/disarm, edit ONLY the two dates in WIN_START / WIN_END
+#     in the run step below (ISO YYYY-MM-DD, inclusive). Nothing else to touch. <<<
+#
+# NOTE: the brief's break-even table needs a LIVE Schwab token (~7-day expiry).
+# Re-auth on the PC before shutting it down for the weekend/trip so a fresh token
+# syncs to Render (scripts/render_push_token.py). Delivery to mobile goes via
+# Telegram (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID must be set in Render's env).
+# =============================================================================
 on:
   schedule:
-    - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT weekdays (GitHub delays it to ~11am)
-  workflow_dispatch: {}        # manual "Run workflow" button — always runs
+    - cron: '30 23 * * 0'     # Sun 23:30 UTC -> lands ~Sun 22:00 AST after GitHub's lag (job=brief_force)
+    - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT weekdays; travel-window only (job=brief)
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Cloud job to trigger (brief_force = force-send regardless of day)"
+        default: brief_force
+        type: choice
+        options:
+          - brief_force
+          - brief
 
 concurrency:
   group: cloud-brief
@@ -25,28 +53,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Trigger the Render cloud brief (scheduled only during the travel window)
+      - name: Trigger the Render cloud brief
         shell: bash
         env:
           TASKS_KEY: ${{ secrets.TASKS_KEY }}
           EVENT: ${{ github.event_name }}
+          SCHED: ${{ github.event.schedule }}
+          DISPATCH_JOB: ${{ github.event.inputs.job }}
         run: |
           if [ -z "$TASKS_KEY" ]; then
             echo "TASKS_KEY repo secret is not set." >&2
             exit 1
           fi
-          TODAY=$(date -u +%Y-%m-%d)
+
+          # --- Travel window (weekday schedule only). EDIT THESE when Norman travels. ---
           WIN_START=2026-08-14
           WIN_END=2026-08-23
-          # Scheduled runs fire ONLY inside the travel window; manual dispatch always runs.
-          if [ "$EVENT" = "schedule" ]; then
+          # -----------------------------------------------------------------------------
+
+          TODAY=$(date -u +%Y-%m-%d)
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # Manual run: force-send by default so an end-to-end test works any day.
+            JOB="${DISPATCH_JOB:-brief_force}"
+          elif [ "$SCHED" = "30 23 * * 0" ]; then
+            # Sunday-night schedule: ALWAYS fire, force past the closed-market guard.
+            JOB="brief_force"
+          else
+            # Weekday schedule: fire ONLY inside the travel window; local PC handles it otherwise.
+            JOB="brief"
             if [[ "$TODAY" < "$WIN_START" || "$TODAY" > "$WIN_END" ]]; then
-              echo "Today $TODAY is outside the travel window ($WIN_START..$WIN_END) — skipping; the local brief handles it."
+              echo "Weekday $TODAY is outside the travel window ($WIN_START..$WIN_END) — skipping; the local PC brief handles it."
               exit 0
             fi
           fi
-          echo "Firing cloud brief at $(date -u '+%Y-%m-%d %H:%M UTC') (today=$TODAY, event=$EVENT)"
+
+          echo "Firing cloud job=$JOB at $(date -u '+%Y-%m-%d %H:%M UTC') (today=$TODAY, event=$EVENT, sched='$SCHED')"
           curl -fsS --max-time 120 --retry 5 --retry-all-errors --retry-delay 20 \
-            "https://drift-sentiment-web.onrender.com/tasks/run?job=brief&key=${TASKS_KEY}"
+            "https://drift-sentiment-web.onrender.com/tasks/run?job=${JOB}&key=${TASKS_KEY}"
           echo ""
-          echo "Triggered."
+          echo "Triggered job=$JOB."
