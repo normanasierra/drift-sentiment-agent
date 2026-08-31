@@ -240,6 +240,26 @@ def _newsletters_block() -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
+def _cramer_block() -> str:
+    """Jim Cramer / CNBC Investing Club emails, opened and flagged for the brief to summarize
+    WELL — Norman follows Cramer closely and asked for his notes in every report. '' if none."""
+    try:
+        from data_sources import email_inbox
+        items = email_inbox.cramer_notes(since_days=2)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not items:
+        return ""
+    lines = ["JIM CRAMER / CNBC INVESTING CLUB (ABRE y RESUME BIEN cada nota: su tesis, las "
+             "acciones que nombra y su postura comprar/vender/mantener — Norman lo sigue de cerca):"]
+    for it in items[:6]:
+        body = " ".join((it.get("body") or "").split())[:1600]
+        lines.append(f"  · [{it.get('when', '')}] {it.get('subject', '')}")
+        if body:
+            lines.append(f"    {body}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
 def _sweeps_block() -> str:
     """Today's MarketSnack sweeps, PARSED and RANKED by smart-money conviction
     (Najarian F.R.A.M.E.: vol/OI, lado, prima, DTE) so the brief can lead with
@@ -365,7 +385,7 @@ def gather() -> str:
         _indices_block(), _bonds_block(), _world_block(), _etfs_block(),
         _watchlist_block(), _movers_block(), _portfolio_block(), _breakeven_block(),
         _support_bounce_block(),
-        _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
+        _cramer_block(), _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
     if not body:

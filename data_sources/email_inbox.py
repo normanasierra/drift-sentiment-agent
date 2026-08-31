@@ -28,6 +28,16 @@ NEWSLETTER_SENDERS = [
     "cnbcpro", "cnbc.com", "wsj.com", "yahoofinance", "finance.yahoo",
 ]
 
+# Jim Cramer / CNBC Investing Club — a source Norman follows closely, so his emails get a
+# DEDICATED block (see cramer_notes) instead of competing for a slot in the general newsletter
+# cap. His mail arrives as "CNBC Investing Club <jim.cramer@response.cnbc.com>", "Jim Cramer
+# <cnbc@response.cnbc.com>" and "<cnbcinvestingclub@response.cnbc.com>" — so match both fragments
+# ("cramer" misses the cnbcinvestingclub@ address, which has no 'cramer' in name or address).
+CRAMER_SENDERS = ["cramer", "cnbcinvestingclub"]
+# Promo / admin Cramer mail (not market analysis) — skip so it doesn't take an analysis slot.
+_CRAMER_SKIP = ("upgrade your", "add cnbc pro", "morning meeting is today",
+                "reminder: the morning meeting", "welcome to", "your receipt")
+
 
 def _decode(value: str | None) -> str:
     if not value:
@@ -111,6 +121,83 @@ def recent_newsletters(*, since_days: int = 1, max_msgs: int = 8) -> list[dict]:
         M.logout()
     except Exception as exc:  # noqa: BLE001
         return [{"sender": "error", "subject": str(exc), "body": ""}]
+    return out
+
+
+def _readable_body(msg: email.message.Message) -> str:
+    """text/plain if present, else a de-HTML'd text/html — CNBC / Cramer mail is HTML-only,
+    so _plain_body alone returns nothing for it."""
+    plain = _plain_body(msg)
+    if plain.strip():
+        return plain
+    html = ""
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    for part in parts:
+        if part.get_content_type() == "text/html":
+            payload = part.get_payload(decode=True)
+            if payload:
+                html = payload.decode(part.get_content_charset() or "utf-8", "ignore")
+                break
+    if not html:
+        return ""
+    import re
+    html = re.sub(r"<(style|script)\b[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+
+
+def _declutter_cramer(text: str) -> str:
+    """Strip recurring CNBC/Cramer email boilerplate (nav + the standard trade-alert
+    disclaimer) so the summary budget goes to the actual thesis, not the fine print."""
+    import re
+    text = re.sub(r"As a subscriber to the CNBC Investing Club.*?before executing the trade\.",
+                  " ", text, flags=re.I | re.S)
+    text = re.sub(r"VIEW IN BROWSER|LATEST CRAMER NEWS[^|]*\|?|READ\s*M\s*ORE"
+                  r"|\(See here for a full list of the stocks in Jim Cramer.s Charitable Trust\.\)",
+                  " ", text, flags=re.I)
+    text = re.sub(r"^\s*\d{1,4}\s+", "", text)     # leading leaked tracking/width number
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def cramer_notes(*, since_days: int = 2, max_msgs: int = 6) -> list[dict]:
+    """Jim Cramer / CNBC Investing Club emails with their bodies OPENED (incl. HTML-only),
+    as {sender, subject, body, when} — a source Norman follows closely, given a dedicated
+    block so the brief summarizes it well. [] if none/unconfigured."""
+    user = os.getenv("IMAP_USER") or os.getenv("SMTP_USER") or os.getenv("GMAIL_USER")
+    pw = (os.getenv("IMAP_PASSWORD") or os.getenv("SMTP_PASSWORD")
+          or os.getenv("GMAIL_APP_PASSWORD"))
+    if not user or not pw:
+        return []
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=since_days)).strftime("%d-%b-%Y")
+    out: list[dict] = []
+    seen: set[str] = set()
+    try:
+        M = imaplib.IMAP4_SSL(IMAP_HOST)
+        M.login(user, pw)
+        M.select("INBOX", readonly=True)
+        for frag in CRAMER_SENDERS:
+            typ, data = M.search(None, "SINCE", since, "FROM", frag)
+            if typ != "OK":
+                continue
+            for num in (data[0].split() or [])[-max_msgs:]:
+                typ, msg_data = M.fetch(num, "(RFC822)")
+                if typ != "OK" or not msg_data or not msg_data[0]:
+                    continue
+                msg = email.message_from_bytes(msg_data[0][1])
+                subj = _decode(msg.get("Subject"))
+                mid = _decode(msg.get("Message-ID")) or subj
+                if mid in seen or any(w in subj.lower() for w in _CRAMER_SKIP):
+                    continue
+                seen.add(mid)
+                out.append({
+                    "sender": _decode(msg.get("From")),
+                    "subject": subj,
+                    "body": _declutter_cramer(_readable_body(msg))[:4500],
+                    "when": _email_when(msg),
+                })
+        M.logout()
+    except Exception:  # noqa: BLE001
+        return []
     return out
 
 
