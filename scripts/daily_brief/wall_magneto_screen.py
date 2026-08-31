@@ -1,6 +1,7 @@
-"""Screen: stocks with a LARGE gap between the Magneto and the NEAREST wall (call/put) in
-the near-term (~30 DTE) options chain — i.e. lots of "room to move" between the magnet and
-the wall. Factual data for the daily brief, NEVER a recommendation.
+"""Screen: stocks with a LARGE gap between the Magneto and the DOMINANT wall — the call/put
+wall with the greater open interest (the bigger wall, not the nearer one) — in the near-term
+(~30 DTE) options chain, i.e. lots of "room to move" between the magnet and that wall. Factual
+data for the daily brief, NEVER a recommendation.
 
 Heavy-ish (one option-chain fetch per name), so the universe is kept small. Best-effort:
 returns ('', '') on any failure so the brief always sends.
@@ -33,26 +34,30 @@ def _near(level, spot) -> bool:
     return level is not None and bool(spot) and abs(level - spot) / spot * 100 <= MAX_LEVEL_PCT
 
 
-def _gap(spot, cw, pw, mag):
-    """(gap_pct, nearest_wall, side) between the Magneto and its NEAREST near-term wall, or
-    None when the magneto/walls aren't plausible near-term levels. Shared by screen() and by
-    gap_for() (which the earnings tables use to ⭐-flag names with a big gap)."""
+def _gap(spot, call_wall, put_wall, mag):
+    """(gap_pct, wall_strike, side) from the Magneto to the DOMINANT wall — the call/put wall
+    with the greater open interest (the BIGGER wall), not the nearer one — as a % of spot.
+    ``call_wall``/``put_wall`` are (strike, open_interest) tuples or None. None when the Magneto
+    or both walls aren't plausible near-term levels. Shared by screen(), gap_for() (earnings ⭐)
+    and the short-DTE view, so all three measure the space to the same (bigger-OI) wall."""
     if not _near(mag, spot):                          # magneto must be a plausible magnet
         return None
-    walls = [w for w in (cw, pw) if _near(w, spot)]   # walls within the near-term range
-    if not walls:
+    cands = []                                        # plausible near-term walls, with their OI
+    for side, w in (("call", call_wall), ("put", put_wall)):
+        if w and w[0] is not None and _near(w[0], spot):
+            cands.append((side, w[0], w[1] or 0))
+    if not cands:
         return None
-    nearest = min(walls, key=lambda w: abs(w - mag))
-    gap_pct = abs(nearest - mag) / spot * 100
-    side = "call" if (cw and nearest == cw) else "put"
-    return gap_pct, nearest, side
+    side, wstrike, _oi = max(cands, key=lambda c: c[2])   # the wall with the greatest OI
+    gap_pct = abs(wstrike - mag) / spot * 100
+    return gap_pct, wstrike, side
 
 
 _GAP_CACHE: dict = {}
 
 
 def gap_for(sym: str):
-    """The Magneto↔nearest-wall gap (% of spot) for one ticker, or None if it has no plausible
+    """The Magneto↔dominant-wall gap (% of spot) for one ticker, or None if it has no plausible
     near-term level. Cached per process so other sections (e.g. the earnings tables, which
     ⭐-flag big-gap names) can reuse it without refetching the chain. Best-effort."""
     if sym in _GAP_CACHE:
@@ -91,7 +96,8 @@ def _chain(sym: str):
 
 
 def _levels(sym: str):
-    """(spot, call_wall, put_wall, magneto, dte) for the nearest DTE bucket, or None."""
+    """(spot, call_wall, put_wall, magneto, dte) for the nearest DTE bucket, or None. Each wall is
+    a (strike, open_interest) tuple (or None) so _gap can pick the greater-OI wall."""
     try:
         from drift_sentiment.report import build_report, report_payload
         ch = _chain(sym)
@@ -103,10 +109,11 @@ def _levels(sym: str):
         if not buckets:
             return None
         b = min(buckets, key=lambda x: x.get("actual_dte") or 9999)  # nearest expiration
-        cw = (b.get("call_wall") or {}).get("strike")
-        pw = (b.get("put_wall") or {}).get("strike")
+        cw, pw = b.get("call_wall") or {}, b.get("put_wall") or {}
+        cw_t = (cw.get("strike"), cw.get("open_interest")) if cw.get("strike") is not None else None
+        pw_t = (pw.get("strike"), pw.get("open_interest")) if pw.get("strike") is not None else None
         mag = (b.get("magneto") or {}).get("center")
-        return spot, cw, pw, mag, b.get("actual_dte")
+        return spot, cw_t, pw_t, mag, b.get("actual_dte")
     except Exception:  # noqa: BLE001
         return None
 
@@ -124,9 +131,9 @@ def screen() -> list[dict]:
         _GAP_CACHE[s] = g[0] if g else None               # let gap_for() reuse this (no refetch)
         if not g:
             continue
-        gap_pct, nearest, side = g
+        gap_pct, wall_strike, side = g
         if gap_pct >= MIN_GAP_PCT:
-            out.append({"sym": s, "spot": spot, "mag": mag, "wall": nearest,
+            out.append({"sym": s, "spot": spot, "mag": mag, "wall": wall_strike,
                         "side": side, "gap": gap_pct, "dte": dte})
     out.sort(key=lambda d: -d["gap"])
     return out
@@ -146,7 +153,7 @@ def build() -> tuple[str, str]:
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in
-                    ("Ticker", "Precio", "Magneto", "Muro cercano", "Espacio"))
+                    ("Ticker", "Precio", "Magneto", "Muro mayor OI", "Espacio"))
     rows = []
     for d in items:
         rows.append(
@@ -159,8 +166,8 @@ def build() -> tuple[str, str]:
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
         "margin:20px 0 4px'>🧲 Gran espacio Magneto ↔ Muro (~30 DTE)</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        f"Acciones donde el Magneto está a &ge; {MIN_GAP_PCT:.0f}% del muro más cercano "
-        "(mucho campo para moverse entre el imán y el muro). Data factual, NO es asesoría.</p>"
+        f"Acciones donde el Magneto está a &ge; {MIN_GAP_PCT:.0f}% del muro con MAYOR OI "
+        "(el muro más grande; mucho campo entre el imán y ese muro). Data factual, NO es asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
     tg = f"🧲 Espacio Magneto↔Muro (>{MIN_GAP_PCT:.0f}%): " + ", ".join(
@@ -198,7 +205,9 @@ def _short_gaps(spot, contracts, as_of):
         used.add(e)
         cs = by_exp[e]
         cw, pw, mg = call_wall(cs), put_wall(cs), magneto(cs)
-        g = _gap(spot, cw.strike if cw else None, pw.strike if pw else None,
+        g = _gap(spot,
+                 (cw.strike, cw.open_interest) if cw else None,
+                 (pw.strike, pw.open_interest) if pw else None,
                  mg[0] if mg else None)
         if g:
             out[tgt] = (g[0], (e - as_of).days, g[2])
@@ -261,7 +270,7 @@ def build_short() -> tuple[str, str]:
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
         "margin:20px 0 4px'>🧲 Espacio Magneto ↔ Muro — corto plazo (0/1/7/14 DTE)</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        f"Espacio (% del precio) entre el Magneto y el muro más cercano por vencimiento corto; "
+        f"Espacio (% del precio) entre el Magneto y el muro con MAYOR OI por vencimiento corto; "
         f"celdas ≥ {MIN_GAP_PCT:.0f}% resaltadas. Vencimiento listado más cercano a cada plazo · "
         "0 = el Magneto coincide con el muro (sin espacio) · — = sin vencimiento cercano. "
         "Data factual, NO es asesoría.</p>"
