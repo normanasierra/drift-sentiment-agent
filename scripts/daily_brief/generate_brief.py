@@ -228,6 +228,12 @@ def generate() -> None:
             top.append(sd_html)
         if sd_tg:
             wa = (wa.rstrip() + "\n\n" + sd_tg) if wa else sd_tg
+        # Bounce setup (spot pinned to a wall, bigger OI opposite) — reuses the cached chains.
+        bo_html, bo_tg = wall_magneto_screen.build_bounce()
+        if bo_html:
+            top.append(bo_html)
+        if bo_tg:
+            wa = (wa.rstrip() + "\n\n" + bo_tg) if wa else bo_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:

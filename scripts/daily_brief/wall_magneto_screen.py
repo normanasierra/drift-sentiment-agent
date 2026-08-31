@@ -282,6 +282,100 @@ def build_short() -> tuple[str, str]:
     return html, tg
 
 
+# ---- Bounce setup: SPOT pinned to one wall while the OPPOSITE wall holds more OI ----
+BOUNCE_NEAR_PCT = 4.0     # spot must sit within this % of the wall it's pinned to
+BOUNCE_OI_RATIO = 1.2     # the opposite wall must hold at least this multiple of the near wall's OI
+BOUNCE_MIN_OI = 500       # both walls must be real (enough OI) — high-volume names only
+BOUNCE_MIN_MOVE = 3.0     # the move to the opposite wall must be worth capturing
+BOUNCE_MAX_MOVE = 15.0    # ...but not an implausibly far target (e.g. an index's 30%-away put skew)
+
+
+def screen_bounce() -> list[dict]:
+    """High-volume names whose SPOT is pinned to one wall while the OPPOSITE wall holds more OI —
+    the setup that can bounce/reject toward the bigger (opposite) wall. Uses the ~30-DTE walls from
+    the cached chain (no extra network). Structural/factual — never a prediction."""
+    out: list[dict] = []
+    for s in UNIVERSE:
+        r = _levels(s)
+        if not r:
+            continue
+        spot, cw, pw, _mag, dte = r          # cw/pw = (strike, open_interest) or None
+        if not (spot and cw and pw and cw[0] is not None and pw[0] is not None):
+            continue
+        cw_s, cw_oi = cw[0], cw[1] or 0
+        pw_s, pw_oi = pw[0], pw[1] or 0
+        if cw_oi < BOUNCE_MIN_OI or pw_oi < BOUNCE_MIN_OI:
+            continue
+        if not (_near(cw_s, spot) and _near(pw_s, spot)):
+            continue
+        d_call = abs(cw_s - spot) / spot * 100
+        d_put = abs(pw_s - spot) / spot * 100
+        if d_put <= d_call:                  # pinned to the PUT wall (support) -> can bounce UP
+            near, opp, direction = ("put", pw_s, pw_oi, d_put), ("call", cw_s, cw_oi), "up"
+        else:                                # pinned to the CALL wall (resistance) -> can reject DOWN
+            near, opp, direction = ("call", cw_s, cw_oi, d_call), ("put", pw_s, pw_oi), "down"
+        if near[3] > BOUNCE_NEAR_PCT:        # must be genuinely pinned to a wall
+            continue
+        if opp[2] < near[2] * BOUNCE_OI_RATIO:  # opposite wall must hold meaningfully more OI
+            continue
+        move = abs(opp[1] - spot) / spot * 100
+        if not (BOUNCE_MIN_MOVE <= move <= BOUNCE_MAX_MOVE):  # a tradeable target, not far skew
+            continue
+        out.append({
+            "sym": s, "spot": spot, "dte": dte, "dir": direction,
+            "near_side": near[0], "near_s": near[1], "near_oi": near[2], "near_d": near[3],
+            "opp_side": opp[0], "opp_s": opp[1], "opp_oi": opp[2],
+            "move": move, "ratio": opp[2] / (near[2] or 1),
+        })
+    out.sort(key=lambda d: -d["move"])        # biggest potential move first
+    return out
+
+
+def build_bounce() -> tuple[str, str]:
+    """(email_html_fragment, telegram_line) for the bounce-setup screen. ('', '') if none / fail."""
+    try:
+        items = screen_bounce()[:12]
+    except Exception:  # noqa: BLE001
+        return "", ""
+    if not items:
+        return "", ""
+    th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;"
+          "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
+    thl = th.replace("text-align:right", "text-align:left")
+    td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
+    tdl = td.replace("text-align:right", "text-align:left")
+    heads = (f"<th style='{thl}'>Ticker</th><th style='{th}'>Precio</th>"
+             f"<th style='{thl}'>Pegado a</th><th style='{th}'>OI cerca</th>"
+             f"<th style='{thl}'>Objetivo opuesto</th><th style='{th}'>OI obj.</th>"
+             f"<th style='{th}'>Movida</th><th style='{th}'>OI obj./cerca</th>")
+    rows = []
+    for d in items:
+        arrow = "↑" if d["dir"] == "up" else "↓"
+        rows.append(
+            f"<tr><td style='{tdl}'>{d['sym']}</td>"
+            f"<td style='{td}'>${d['spot']:,.2f}</td>"
+            f"<td style='{tdl}'>{d['near_side']} ${d['near_s']:g} ({d['near_d']:.1f}%)</td>"
+            f"<td style='{td}'>{d['near_oi']:,}</td>"
+            f"<td style='{tdl}'>{d['opp_side']} ${d['opp_s']:g}</td>"
+            f"<td style='{td}'>{d['opp_oi']:,}</td>"
+            f"<td style='{td};font-weight:600;background:#dcfce7'>{arrow} {d['move']:.1f}%</td>"
+            f"<td style='{td};font-weight:600'>{d['ratio']:.1f}x</td></tr>")
+    html = (
+        "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
+        "margin:20px 0 4px'>🔁 Setup de rebote — precio en un muro, más OI en el opuesto</h2>"
+        "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
+        f"Nombres líquidos cuyo precio está pegado (≤{BOUNCE_NEAR_PCT:.0f}%) a un muro mientras el muro "
+        f"OPUESTO tiene más OI (≥{BOUNCE_OI_RATIO:.1f}×) — puede rebotar/rechazar hacia el muro dominante. "
+        f"Movida = espacio del precio al muro opuesto ({BOUNCE_MIN_MOVE:.0f}–{BOUNCE_MAX_MOVE:.0f}%; "
+        "↑ hacia el call, ↓ hacia el put). Data estructural, NO es asesoría ni predicción.</p>"
+        "<table style='border-collapse:collapse'><thead><tr>" + heads
+        + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
+    tg = "🔁 Rebote (OI mayor enfrente): " + ", ".join(
+        f"{d['sym']} {'↑' if d['dir'] == 'up' else '↓'}{d['move']:.0f}% ({d['ratio']:.1f}x)"
+        for d in items[:6])
+    return html, tg
+
+
 if __name__ == "__main__":
     h, t = build()
     print("TG:", t)
@@ -289,3 +383,6 @@ if __name__ == "__main__":
     hs, ts = build_short()
     print("SHORT TG:", ts)
     print("SHORT HTML chars:", len(hs))
+    hb, tb = build_bounce()
+    print("BOUNCE TG:", tb)
+    print("BOUNCE HTML chars:", len(hb))
