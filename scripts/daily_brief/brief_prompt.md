@@ -69,15 +69,15 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    ejecutivas). Resume en 2-4 viñetas con enfoque en impacto de mercado. Si no
    hay nada relevante hoy, dilo en una línea.
 
-5. **Tu portafolio — análisis de CADA acción** (educativo, NO recomendaciones):
+5. **Tu portafolio — lo que MÁS se movió hoy** (educativo, NO recomendaciones):
    usa los tickers del bloque DATOS REALES → **PORTAFOLIO** (son tus **posiciones
    reales de Schwab** cuando está conectado; si la línea dice "watchlist", usa esa
-   lista). Para **CADA acción** da, en su fila: el **% del día** (del bloque real),
-   una **lectura corta** (tendencia/momentum: ¿rompe, rebota, consolida, sobre/bajo
-   su media?), la **noticia o catalizador de HOY** si lo hay (búscalo en web /
-   newsletters), y un **nivel clave** o dato de contexto. Profundiza más en las que
-   más se mueven o tienen titulares, pero **no dejes NINGUNA sin al menos una línea**.
-   Nunca digas comprar/vender — solo el estado y el porqué.
+   lista). Enfócate en las **8-10 acciones que MÁS se movieron hoy** (NO hace falta
+   listar TODAS — la tabla de break-even de todas tus posiciones ya va aparte, arriba
+   del reporte). Para cada una da: el **% del día** (del bloque real), una **lectura
+   corta** (tendencia/momentum: ¿rompe, rebota, consolida, sobre/bajo su media?), la
+   **noticia o catalizador de HOY** si lo hay (búscalo en web / newsletters), y un
+   **nivel clave**. Nunca digas comprar/vender — solo el estado y el porqué.
 
 6. **Lo que sucederá HOY (agenda del día)** — sección CLAVE que Norman quiere.
    Busca y lista, con **HORA (ET / hora local)** cuando la haya, lo programado para
@@ -143,18 +143,16 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
 - **Trump hoy**: 2-4 viñetas de impacto de mercado (o "sin novedad relevante").
 - **Tu portafolio — análisis por acción** (educativo): usa tus **posiciones REALES**
   del bloque DATOS REALES → PORTAFOLIO. Una **tabla** `Ticker | Último | % Día | Lectura`
-  con **TODAS** tus acciones (columna Lectura = tendencia/momentum + la noticia o
+  con tus **8-10 acciones que MÁS se movieron hoy** (columna Lectura = tendencia/momentum + la noticia o
   catalizador de HOY si lo hay, o un nivel clave; **nunca** "compra/vende"). Ordena por
   mayor movimiento del día. Si el portafolio viene de la watchlist (Schwab sin conectar),
   dilo en una línea al inicio de la sección. Encabezado recordando que es educativo.
-- **Break-even + análisis por posición (opciones)** — va EN este mismo reporte (usa el
-  bloque DATOS REALES "BREAK-EVEN + ANÁLISIS POR POSICIÓN"; SOLO si aparece). Haz una
-  **tabla** con CADA opción: `Posición | DTE | Spot | P&L | BE-hoy (% a hoy) | BE-mes
-  (% a mes) | BE-venc (% a venc)`, y debajo 3-5 viñetas destacando las posiciones **más
-  cerca** y **más lejos** de su break-even y qué necesita el subyacente para llegar.
-  **BE-hoy** = precio HOY para valer tu costo (Black-Scholes); **BE-mes** = a ~30 días;
-  **BE-venc** = strike ± prima. Educativo, **nunca** "vende/mantén". Omite la sección si
-  el bloque no aparece (Schwab sin conectar).
+- **Break-even — lectura por posición (opciones)**: la **tabla** de break-even por posición
+  YA se incluye automáticamente ARRIBA de este reporte — **NO la reproduzcas ni vuelvas a
+  listar las posiciones una por una** (sería duplicado). Da SOLO **3-5 viñetas** destacando
+  las posiciones **más cerca** y **más lejos** de su break-even y qué necesita el subyacente
+  para llegar. Educativo, **nunca** "vende/mantén". Omite si no aparece el bloque
+  "BREAK-EVEN + ANÁLISIS POR POSICIÓN" (Schwab sin conectar).
 - **Agenda de HOY — lo que sucederá durante el día** (sección DESTACADA): datos
   económicos con **hora** y consenso, Fed, earnings (marca los del portafolio) y
   demás catalizadores, ordenados por hora / importancia.
