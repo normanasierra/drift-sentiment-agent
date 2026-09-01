@@ -259,6 +259,15 @@ def generate() -> None:
             top.append(be_table)
     except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
         pass
+    try:
+        import closed_trades  # recently closed positions + realized P&L (exact Schwab amounts)
+        ct_html, ct_tg = closed_trades.build()
+        if ct_html:
+            top.append(ct_html)
+        if ct_tg:
+            wa = (wa.rstrip() + "\n\n" + ct_tg) if wa else ct_tg
+    except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
+        pass
     if top:
         email = _hr.join(top) + _hr + email
 
