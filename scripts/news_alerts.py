@@ -4,7 +4,8 @@ during the day — near-instant (polled every ~10 min by a hidden scheduled task
 The raw Polygon feed is heavily polluted with PR / law-firm spam (GlobeNewswire
 "ROSEN … Encourages Investors" class-action ads); this drops that and keeps only
 headlines about Norman's tracked tickers OR macro market movers (Fed, CPI, tariffs,
-rates…). Deduped by article id (output/news_seen.json); the first run seeds a
+rates…) OR health/biotech INNOVATION (cancer cures, FDA breakthroughs, gene/cell
+therapy — tagged 🧬 SALUD). Deduped by article id (output/news_seen.json); the first run seeds a
 baseline silently so it never blasts the backlog.
 
   --hello   send a one-off "watcher live" confirmation to WhatsApp
@@ -54,6 +55,24 @@ BLOCK_PUB = re.compile(r"globenewswire", re.I)
 OFFTOPIC = re.compile(
     r"\bcrypto|\bbitcoin\b|\bbtc\b|ethereum|\beth\b|dogecoin|solana|\bxrp\b|litecoin|"
     r"\bnft\b|blockchain|\bweb3\b|memecoin|stablecoin|coinbase wallet", re.I)
+# Health/biotech INNOVATION Norman wants flagged — cancer cures & similar breakthroughs.
+# Order-independent: a DISEASE word AND a BREAKTHROUGH word anywhere in the title, OR a standalone
+# innovation term. JUNK still drops the securities-suit spam that floods biotech tickers.
+_HEALTH_DISEASE = re.compile(
+    r"\b(cancer|tumou?rs?|oncolog\w*|leukemi\w*|lymphoma|melanoma|carcinoma|"
+    r"alzheimer\w*|als|parkinson\w*)\b", re.I)
+_HEALTH_BREAK = re.compile(
+    r"\b(cure[sd]?|curing|breakthrough|remission|revers\w*|eliminat\w*|regress\w*|"
+    r"phase\s*(?:3|iii)|first-in-class|complete response|met\s+(?:its\s+)?(?:primary\s+)?endpoint)\b", re.I)
+_HEALTH_INNOV = re.compile(
+    r"\bfda\b.{0,35}\b(approv\w*|breakthrough therapy|priority review|fast[- ]track|clearance)\b"
+    r"|\bbreakthrough[- ]therapy\b|\bgene[- ]therap\w*|\bcell[- ]therap\w*|\bcar[- ]?t\b|"
+    r"\bcrispr\b|\bcure for\b|\bmedical breakthrough\b|\bfirst[- ]in[- ]class\b", re.I)
+
+
+def _is_health(title: str) -> bool:
+    return bool(_HEALTH_INNOV.search(title)) or (
+        bool(_HEALTH_DISEASE.search(title)) and bool(_HEALTH_BREAK.search(title)))
 
 
 def load_env() -> None:
@@ -109,7 +128,7 @@ def _relevant(a: dict) -> bool:
     if BLOCK_PUB.search(pub) or JUNK.search(title) or OFFTOPIC.search(title):
         return False
     tickers = {t.upper() for t in (a.get("tickers") or [])}
-    return bool(tickers & TRACKED) or bool(MACRO_KW.search(title))
+    return bool(tickers & TRACKED) or bool(MACRO_KW.search(title)) or _is_health(title)
 
 
 def _age_min(a: dict) -> float:
@@ -128,7 +147,8 @@ def _fmt(a: dict) -> str:
     pub = (a.get("publisher") or {}).get("name") or ""
     tks = ", ".join((a.get("tickers") or [])[:3])
     tag = f" [{tks}]" if tks else ""
-    return f"📰 {pub}{tag}\n{a.get('title', '')}\n{a.get('article_url', '')}"
+    icon = "🧬 SALUD ·" if _is_health(a.get("title") or "") else "📰"
+    return f"{icon} {pub}{tag}\n{a.get('title', '')}\n{a.get('article_url', '')}"
 
 
 def main() -> None:
