@@ -151,5 +151,38 @@ def main() -> None:
     sys.exit(0 if re_.returncode == 0 and rw.returncode == 0 else 1)
 
 
+def _maybe_sleep_back() -> None:
+    """After a wake-to-run task finishes, put the PC back to S3 sleep so it doesn't sit awake —
+    but ONLY when passed --sleep-back AND the user isn't here (idle >= 5 min), so it never
+    interrupts Norman mid-work (e.g. the 3pm run while he's trading). Sleeps via a DETACHED
+    powrprof call with hibernate=FALSE → S3, so the NEXT wake-to-run task can still wake it (an
+    S4/hibernate would kill the next wake). Best-effort; never fails the run."""
+    if "--sleep-back" not in sys.argv or "--dry" in sys.argv:
+        return
+    try:
+        import ctypes
+
+        class _LII(ctypes.Structure):
+            _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+        lii = _LII()
+        lii.cbSize = ctypes.sizeof(lii)
+        ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii))
+        idle_s = ((ctypes.windll.kernel32.GetTickCount() - lii.dwTime) & 0xFFFFFFFF) / 1000.0
+        if idle_s < 300:                    # user active in last 5 min → he's here, leave it on
+            log(f"no duermo la PC: usuario activo (idle {idle_s:.0f}s).")
+            return
+        log(f"usuario ausente (idle {idle_s:.0f}s) → durmiendo la PC de vuelta (S3).")
+        subprocess.Popen(  # detached, so the task completes cleanly instead of hanging in sleep
+            [PY, "-c", "import ctypes, time; time.sleep(3); "
+             "ctypes.windll.powrprof.SetSuspendState(False, False, False)"],
+            creationflags=0x00000008 | 0x08000000)  # DETACHED_PROCESS | CREATE_NO_WINDOW
+    except Exception as exc:  # noqa: BLE001 — sleep-back must never break the brief
+        log(f"aviso: no pude dormir la PC ({exc}).")
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        _maybe_sleep_back()
