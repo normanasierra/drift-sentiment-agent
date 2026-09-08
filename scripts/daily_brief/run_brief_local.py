@@ -84,26 +84,43 @@ def main() -> None:
     except Exception:  # noqa: BLE001
         pass
 
-    # Schwab token health: WhatsApp a re-auth reminder (once/day) when it expires,
-    # so his positions stop silently dropping out of the brief. Best-effort.
+    # Schwab token health: alert (once/day) via Telegram + email the DAY BEFORE the ~7-day
+    # refresh token expires (and again if it already expired), so his positions never
+    # silently drop out of the break-even table. Best-effort; never blocks the brief.
+    # (Was WhatsApp/CallMeBot — dead since the quota ran out — and only fired AFTER expiry,
+    # so Norman got no heads-up. Now: Telegram + email, a day early.)
     try:
         from data_sources import schwab
         marker = OUT / "schwab_reauth_reminded.txt"
         today = datetime.date.today().isoformat()
         done_today = marker.exists() and marker.read_text(encoding="utf-8").strip() == today
-        if not done_today and not dry and schwab.needs_reauth():
-            # Send via a UTF-8 file, not stdin: piping non-cp1252 chars through a Windows
-            # subprocess stdin raises 'charmap' UnicodeEncodeError (ASCII-only message here
-            # anyway, but the file path is the robust fix).
+        expired = schwab.needs_reauth()
+        try:
+            due_soon = schwab.reauth_due_soon(within_days=1.0)  # the day before expiry
+        except Exception:  # noqa: BLE001
+            due_soon = False
+        if not done_today and not dry and (expired or due_soon):
+            if expired:
+                msg = ("⚠️ Schwab: el token VENCIÓ (dura ~7 días). Dale doble-clic a "
+                       "schwab-login.cmd en la PC para renovarlo. Sin esto tu tabla de "
+                       "break-even (P&L del portafolio) NO sale en el brief.")
+            else:
+                msg = ("⏰ Schwab: tu token vence MAÑANA (dura ~7 días). Renuévalo HOY con "
+                       "doble-clic a schwab-login.cmd en la PC, así tu break-even no se "
+                       "cae del brief.")
             OUT.mkdir(exist_ok=True)
-            wa = OUT / "_wa_reauth.txt"
-            wa.write_text(
-                "Schwab: el token vencio (pasan ~7 dias). Doble-clic a schwab-login.cmd "
-                "para renovar. Asi tus posiciones vuelven al brief.", encoding="utf-8")
-            subprocess.run([PY, str(BRIEF / "send_whatsapp.py"), "--text-file", str(wa)],
-                           cwd=str(BRIEF))
-            marker.write_text(today, encoding="utf-8")
-            log("Schwab: token vencido — recordatorio enviado por WhatsApp.")
+            rf = OUT / "_reauth_msg.txt"  # file, not stdin (avoids Windows cp1252 issues)
+            rf.write_text(msg, encoding="utf-8")
+            sent = False
+            if os.getenv("TELEGRAM_BOT_TOKEN"):
+                sent = run("send_telegram.py", "--text-file", str(rf)).returncode == 0 or sent
+            sent = run("send_email.py", "--subject",
+                       "Schwab: renueva el token (vence pronto)",
+                       "--body-file", str(rf)).returncode == 0 or sent
+            if sent:  # mark done only if a channel delivered, else retry next run
+                marker.write_text(today, encoding="utf-8")
+            log(f"Schwab: aviso re-auth ({'vencido' if expired else 'vence mañana'}) "
+                f"→ telegram+email (ok={sent}).")
     except Exception as exc:  # noqa: BLE001 — never block the brief
         log(f"aviso: chequeo de Schwab falló ({exc}); sigo igual.")
 
