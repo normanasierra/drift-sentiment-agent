@@ -30,16 +30,44 @@ MAX_LEVEL_PCT = 35.0  # ignore magneto/walls beyond this % of spot — not a nea
 # --- Wall-glue setup (0-7 DTE): the ONLY magneto/wall report in the brief now (2026-09-08) ---
 GLUE_PCT = 2.0        # spot within this % of a wall = "pegada al muro"
 MIN_MAG_PCT = 5.0     # magneto at least this % (of spot) away from that wall
-MAX_GLUE_DTE = 7      # 0-7 DTE window
-MIN_MAGDIST_PCT = 8.0  # 2nd table: spot at least this % away from the Magneto (0-7 DTE)
-SHORT_BAND_PCT = 15.0  # 0-7 DTE: ignore strikes beyond this % of spot (deep-OTM hedges pollute
-#                        the walls/magneto — e.g. a QQQ $515 put wall 28% under a $714 spot)
+MIN_MAGDIST_PCT = 8.0  # 2nd table: spot at least this % away from the Magneto
+MAX_MAGNET_DTE = 14   # scan 0-14 DTE for the REAL magnet (strong magnets live at ~1-2 weeks, not 0DTE)
+MIN_STRENGTH = 0.20   # only trust a magnet this concentrated — below this the flow is noise
+SHORT_BAND_PCT = 15.0  # ignore strikes beyond this % of spot (deep-OTM hedges pollute the
+#                        walls/magneto — e.g. a QQQ $515 put wall 28% under a $714 spot)
 
 
 def _band(contracts, spot):
     """Contracts whose strike is within SHORT_BAND_PCT of spot — the near-term band, so a deep-OTM
-    hedge strike with huge OI can't hijack the 0-7 DTE walls/magneto."""
+    hedge strike with huge OI can't hijack the walls/magneto."""
     return [c for c in contracts if spot and abs(c.strike - spot) / spot * 100 <= SHORT_BAND_PCT]
+
+
+def _strong_magnet(contracts, spot, as_of):
+    """(strength, expiration, banded_contracts, magneto_strike) for the expiration in the 0-14 DTE
+    window whose Magneto is the MOST concentrated — the clustered OI that most acts like a real
+    magnet pulling the price (Norman: 'mientras más alto el volumen junto al imán, más jala'). None
+    if no expiration has a concentrated-enough magnet (only weak/noisy flow)."""
+    from collections import defaultdict
+
+    from drift_sentiment.magneto import magneto, magneto_strength
+    by_exp: dict = defaultdict(list)
+    for c in contracts:
+        d = (c.expiration - as_of).days
+        if 0 <= d <= MAX_MAGNET_DTE:
+            by_exp[c.expiration].append(c)
+    best = None  # (strength, exp, banded_contracts, magneto_strike)
+    for e, cs in by_exp.items():
+        b = _band(cs, spot)
+        mg = magneto(b)
+        if not mg or not _near(mg[0], spot):
+            continue
+        st = magneto_strength(b)
+        if best is None or st > best[0]:
+            best = (st, e, b, mg[0])
+    if not best or best[0] < MIN_STRENGTH:
+        return None
+    return best
 
 
 def _near(level, spot) -> bool:
@@ -391,45 +419,36 @@ def build_bounce() -> tuple[str, str]:
 
 
 def _glue(spot, contracts, as_of):
-    """Setup dict for a stock PINNED (<= GLUE_PCT) to its NEAREST wall when that wall is the WEAK
-    one — the opposite wall OR the Magneto holds more OI — and the price is NOT on the Magneto.
-    Room to move toward the bigger force. Nearest 0-7 DTE expiration. None if it doesn't qualify."""
-    from collections import defaultdict
-
-    from drift_sentiment.magneto import magneto
+    """Setup dict for a stock PINNED (<= GLUE_PCT) to its nearest wall when that wall is the WEAK
+    one — the opposite wall OR the (strong) Magneto holds more OI — and the price is NOT on the
+    Magneto. Levels come from the expiration with the STRONGEST magnet (0-14 DTE). None if it
+    doesn't qualify."""
     from drift_sentiment.walls import call_wall, put_wall
-    by_exp: dict = defaultdict(list)
-    for c in contracts:
-        d = (c.expiration - as_of).days
-        if 0 <= d <= MAX_GLUE_DTE:
-            by_exp[c.expiration].append(c)
-    if not by_exp:
+    sm = _strong_magnet(contracts, spot, as_of)   # strongest (real) magnet + its expiration
+    if not sm:
         return None
-    cs = _band(by_exp[min(by_exp, key=lambda x: (x - as_of).days)], spot)  # near-term band only
-    cw, pw, mg = call_wall(cs), put_wall(cs), magneto(cs)
-    if not (cw and pw and mg):
+    strength, e, cs, mag_s = sm
+    cw, pw = call_wall(cs), put_wall(cs)
+    if not (cw and pw):
         return None
     # nearest wall to the price (where it's pinned) vs the opposite wall
     call, put = ("call", cw.strike, cw.open_interest or 0), ("put", pw.strike, pw.open_interest or 0)
     near, opp = (call, put) if abs(cw.strike - spot) <= abs(pw.strike - spot) else (put, call)
     if abs(near[1] - spot) / spot * 100 > GLUE_PCT:      # must be pinned to the near wall
         return None
-    mag_s = mg[0]
-    if not _near(mag_s, spot):                           # implausible far-OTM magneto
+    if abs(mag_s - spot) / spot * 100 <= GLUE_PCT:       # must NOT be pinned to the magnet
         return None
-    if abs(mag_s - spot) / spot * 100 <= GLUE_PCT:       # must NOT be pinned to the magneto
-        return None
-    mag_oi = sum((c.open_interest or 0) for c in cs if c.strike == mag_s)  # OI at the magneto strike
+    mag_oi = sum((c.open_interest or 0) for c in cs if c.strike == mag_s)  # OI at the magnet strike
     if not (opp[2] > near[2] or mag_oi > near[2]):        # near wall must be the WEAKER one
         return None
-    # target = the bigger force by OI (opposite wall or the magneto)
+    # target = the bigger force by OI (opposite wall or the magnet)
     if mag_oi >= opp[2]:
         tgt, tstrike, toi = "imán", mag_s, mag_oi
     else:
         tgt, tstrike, toi = f"muro {opp[0]}", opp[1], opp[2]
     return {"side": near[0], "wall": near[1], "wall_oi": near[2], "tgt": tgt, "tgt_s": tstrike,
-            "tgt_oi": toi, "dist": abs(tstrike - spot) / spot * 100,
-            "dir": "↑" if tstrike > spot else "↓", "dte": (min(by_exp) - as_of).days, "spot": spot}
+            "tgt_oi": toi, "dist": abs(tstrike - spot) / spot * 100, "fuerza": strength,
+            "dir": "↑" if tstrike > spot else "↓", "dte": (e - as_of).days, "spot": spot}
 
 
 def screen_wallglue() -> list[dict]:
@@ -465,7 +484,7 @@ def build_wallglue() -> tuple[str, str]:
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in
-                    ("Ticker", "Precio", "Muro débil (pegado)", "Objetivo (+OI)", "Dist", "DTE"))
+                    ("Ticker", "Precio", "Muro débil (pegado)", "Objetivo (+OI)", "Dist", "Fuerza", "DTE"))
     rows = []
     for d in items:
         rows.append(
@@ -474,45 +493,34 @@ def build_wallglue() -> tuple[str, str]:
             f"<td style='{tdl}'>{d['side']} ${d['wall']:g} · OI {d['wall_oi']:,}</td>"
             f"<td style='{tdl}'>{d['tgt']} ${d['tgt_s']:g} · OI {d['tgt_oi']:,}</td>"
             f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} {d['dist']:.1f}%</td>"
+            f"<td style='{td}'>{d['fuerza']:.2f}</td>"
             f"<td style='{td}'>{d['dte']}d</td></tr>")
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
-        "margin:20px 0 4px'>🎯 Precio en muro débil — fuerza mayor enfrente (0-7 DTE)</h2>"
+        "margin:20px 0 4px'>🎯 Precio en muro débil — imán fuerte enfrente</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
         f"Precio pegado (≤{GLUE_PCT:.0f}%) al muro más cercano, pero ese muro es el DÉBIL: el muro "
-        "opuesto o el imán tiene MÁS OI, y el precio no está en el imán. Objetivo = la fuerza mayor "
-        "(hacia dónde hay espacio, ↑ arriba / ↓ abajo). Data factual, NO es asesoría.</p>"
+        "opuesto o el imán tiene MÁS OI, y el precio no está en el imán. Imán = la expiración con la "
+        f"concentración más fuerte (≥{MIN_STRENGTH:.2f}, hasta {MAX_MAGNET_DTE} DTE). Objetivo = la "
+        "fuerza mayor (↑ arriba / ↓ abajo). Data factual, NO es asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
-    tg = "🎯 Muro débil, fuerza enfrente (0-7d): " + ", ".join(
-        f"{d['sym']} →{d['tgt']} {d['dir']}{d['dist']:.0f}%" for d in items[:8])
+    tg = "🎯 Muro débil, imán fuerte enfrente: " + ", ".join(
+        f"{d['sym']} →{d['tgt']} {d['dir']}{d['dist']:.0f}%(f{d['fuerza']:.2f})" for d in items[:8])
     return html, tg
 
 
 def _magdist(spot, contracts, as_of):
-    """Setup dict if spot is >= MIN_MAGDIST_PCT away from the Magneto of the nearest 0-7 DTE
-    expiration (Magneto still a plausible near-term level). None otherwise."""
-    from collections import defaultdict
-
-    from drift_sentiment.magneto import magneto
-    by_exp: dict = defaultdict(list)
-    for c in contracts:
-        d = (c.expiration - as_of).days
-        if 0 <= d <= MAX_GLUE_DTE:
-            by_exp[c.expiration].append(c)
-    if not by_exp:
+    """Setup dict if spot is >= MIN_MAGDIST_PCT away from the STRONGEST magnet (0-14 DTE). None
+    otherwise."""
+    sm = _strong_magnet(contracts, spot, as_of)
+    if not sm:
         return None
-    e = min(by_exp, key=lambda x: (x - as_of).days)
-    mg = magneto(_band(by_exp[e], spot))
-    if not mg:
-        return None
-    mag = mg[0]
-    if not _near(mag, spot):
-        return None
+    strength, e, _cs, mag = sm
     dist = abs(spot - mag) / spot * 100
     if dist < MIN_MAGDIST_PCT:
         return None
-    return {"spot": spot, "mag": mag, "dist": dist,
+    return {"spot": spot, "mag": mag, "dist": dist, "fuerza": strength,
             "dir": "↑" if mag > spot else "↓", "dte": (e - as_of).days}
 
 
@@ -548,7 +556,7 @@ def build_magdist() -> tuple[str, str]:
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in
-                    ("Ticker", "Precio", "Imán", "Dist al imán", "DTE"))
+                    ("Ticker", "Precio", "Imán", "Dist al imán", "Fuerza", "DTE"))
     rows = []
     for d in items:
         rows.append(
@@ -556,17 +564,19 @@ def build_magdist() -> tuple[str, str]:
             f"<td style='{td}'>${d['spot']:,.2f}</td>"
             f"<td style='{td}'>${d['mag']:g}</td>"
             f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} {d['dist']:.1f}%</td>"
+            f"<td style='{td}'>{d['fuerza']:.2f}</td>"
             f"<td style='{td}'>{d['dte']}d</td></tr>")
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
-        "margin:20px 0 4px'>🧲 Lejos del imán — precio a ≥8% del Magneto (0-7 DTE)</h2>"
+        "margin:20px 0 4px'>🧲 Lejos del imán fuerte — precio a ≥8%</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        f"Acciones cuyo precio está a &ge; {MIN_MAGDIST_PCT:.0f}% del Magneto (↑ el imán está arriba, "
-        "↓ abajo). Data factual, NO es asesoría.</p>"
+        f"Acciones cuyo precio está a &ge; {MIN_MAGDIST_PCT:.0f}% del imán MÁS FUERTE (concentración "
+        f"≥{MIN_STRENGTH:.2f}, hasta {MAX_MAGNET_DTE} DTE; ↑ el imán está arriba, ↓ abajo). Data "
+        "factual, NO es asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
-    tg = "🧲 Lejos del imán (≥8%, 0-7d): " + ", ".join(
-        f"{d['sym']} {d['dir']}{d['dist']:.0f}%" for d in items[:8])
+    tg = "🧲 Lejos del imán fuerte (≥8%): " + ", ".join(
+        f"{d['sym']} {d['dir']}{d['dist']:.0f}%(f{d['fuerza']:.2f})" for d in items[:8])
     return html, tg
 
 
