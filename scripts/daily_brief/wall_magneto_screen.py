@@ -383,9 +383,9 @@ def build_bounce() -> tuple[str, str]:
 
 
 def _glue(spot, contracts, as_of):
-    """Setup dict if spot is GLUED (<= GLUE_PCT) to a call/put wall of the nearest 0-7 DTE
-    expiration AND the Magneto is >= MIN_MAG_PCT away from that wall (and still a plausible
-    near-term level). None otherwise. Runs walls + magneto on that expiration's contracts."""
+    """Setup dict for a stock PINNED (<= GLUE_PCT) to its NEAREST wall when that wall is the WEAK
+    one — the opposite wall OR the Magneto holds more OI — and the price is NOT on the Magneto.
+    Room to move toward the bigger force. Nearest 0-7 DTE expiration. None if it doesn't qualify."""
     from collections import defaultdict
 
     from drift_sentiment.magneto import magneto
@@ -397,22 +397,31 @@ def _glue(spot, contracts, as_of):
             by_exp[c.expiration].append(c)
     if not by_exp:
         return None
-    e = min(by_exp, key=lambda x: (x - as_of).days)   # nearest listed expiration in 0-7 DTE
-    cs = by_exp[e]
+    cs = by_exp[min(by_exp, key=lambda x: (x - as_of).days)]  # nearest expiration in 0-7 DTE
     cw, pw, mg = call_wall(cs), put_wall(cs), magneto(cs)
     if not (cw and pw and mg):
         return None
-    side, wstrike = min((("call", cw.strike), ("put", pw.strike)), key=lambda w: abs(w[1] - spot))
-    if abs(wstrike - spot) / spot * 100 > GLUE_PCT:   # price not pinned to a wall
+    # nearest wall to the price (where it's pinned) vs the opposite wall
+    call, put = ("call", cw.strike, cw.open_interest or 0), ("put", pw.strike, pw.open_interest or 0)
+    near, opp = (call, put) if abs(cw.strike - spot) <= abs(pw.strike - spot) else (put, call)
+    if abs(near[1] - spot) / spot * 100 > GLUE_PCT:      # must be pinned to the near wall
         return None
-    mag = mg[0]
-    if not _near(mag, spot):                          # implausible far-OTM magneto
+    mag_s = mg[0]
+    if not _near(mag_s, spot):                           # implausible far-OTM magneto
         return None
-    magp = abs(wstrike - mag) / spot * 100
-    if magp < MIN_MAG_PCT:                            # magneto too close to the wall -> no room
+    if abs(mag_s - spot) / spot * 100 <= GLUE_PCT:       # must NOT be pinned to the magneto
         return None
-    return {"side": side, "wall": wstrike, "mag": mag, "magp": magp,
-            "dir": "↑" if mag > wstrike else "↓", "dte": (e - as_of).days, "spot": spot}
+    mag_oi = sum((c.open_interest or 0) for c in cs if c.strike == mag_s)  # OI at the magneto strike
+    if not (opp[2] > near[2] or mag_oi > near[2]):        # near wall must be the WEAKER one
+        return None
+    # target = the bigger force by OI (opposite wall or the magneto)
+    if mag_oi >= opp[2]:
+        tgt, tstrike, toi = "imán", mag_s, mag_oi
+    else:
+        tgt, tstrike, toi = f"muro {opp[0]}", opp[1], opp[2]
+    return {"side": near[0], "wall": near[1], "wall_oi": near[2], "tgt": tgt, "tgt_s": tstrike,
+            "tgt_oi": toi, "dist": abs(tstrike - spot) / spot * 100,
+            "dir": "↑" if tstrike > spot else "↓", "dte": (min(by_exp) - as_of).days, "spot": spot}
 
 
 def screen_wallglue() -> list[dict]:
@@ -428,14 +437,14 @@ def screen_wallglue() -> list[dict]:
         if g:
             g["sym"] = s
             out.append(g)
-    out.sort(key=lambda d: -d["magp"])
+    out.sort(key=lambda d: -d["dist"])
     return out
 
 
 def build_wallglue() -> tuple[str, str]:
-    """(email_html_fragment, telegram_line): names whose price is pinned to a call/put wall with
-    the Magneto >= 5% away (0-7 DTE) — pinned at a barrier with room toward the magnet. ('', '')
-    if nothing qualifies / on failure, so the brief always sends."""
+    """(email_html_fragment, telegram_line): names pinned to their nearest wall when that wall is
+    the WEAK one — the opposite wall or the Magneto holds more OI — and the price is not on the
+    Magneto (0-7 DTE). ('', '') if nothing qualifies / on failure, so the brief always sends."""
     try:
         items = screen_wallglue()
     except Exception:  # noqa: BLE001
@@ -448,26 +457,27 @@ def build_wallglue() -> tuple[str, str]:
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in
-                    ("Ticker", "Precio", "Muro pegado", "Imán", "→ imán", "DTE"))
+                    ("Ticker", "Precio", "Muro débil (pegado)", "Objetivo (+OI)", "Dist", "DTE"))
     rows = []
     for d in items:
         rows.append(
             f"<tr><td style='{tdl}'>{d['sym']}</td>"
             f"<td style='{td}'>${d['spot']:,.2f}</td>"
-            f"<td style='{tdl}'>${d['wall']:g} {d['side']}</td>"
-            f"<td style='{td}'>${d['mag']:g}</td>"
-            f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} {d['magp']:.1f}%</td>"
+            f"<td style='{tdl}'>{d['side']} ${d['wall']:g} · OI {d['wall_oi']:,}</td>"
+            f"<td style='{tdl}'>{d['tgt']} ${d['tgt_s']:g} · OI {d['tgt_oi']:,}</td>"
+            f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} {d['dist']:.1f}%</td>"
             f"<td style='{td}'>{d['dte']}d</td></tr>")
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
-        "margin:20px 0 4px'>🎯 Pegadas al muro, imán a ≥5% (0-7 DTE)</h2>"
+        "margin:20px 0 4px'>🎯 Precio en muro débil — fuerza mayor enfrente (0-7 DTE)</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        f"Precio pegado (≤{GLUE_PCT:.0f}%) a un muro (call/put) con el Magneto a &ge; {MIN_MAG_PCT:.0f}% "
-        "— espacio para moverse hacia el imán (↑ arriba / ↓ abajo). Data factual, NO es asesoría.</p>"
+        f"Precio pegado (≤{GLUE_PCT:.0f}%) al muro más cercano, pero ese muro es el DÉBIL: el muro "
+        "opuesto o el imán tiene MÁS OI, y el precio no está en el imán. Objetivo = la fuerza mayor "
+        "(hacia dónde hay espacio, ↑ arriba / ↓ abajo). Data factual, NO es asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
-    tg = "🎯 En muro, imán ≥5% (0-7d): " + ", ".join(
-        f"{d['sym']} {d['side'][0]} {d['dir']}{d['magp']:.0f}%" for d in items[:8])
+    tg = "🎯 Muro débil, fuerza enfrente (0-7d): " + ", ".join(
+        f"{d['sym']} →{d['tgt']} {d['dir']}{d['dist']:.0f}%" for d in items[:8])
     return html, tg
 
 
