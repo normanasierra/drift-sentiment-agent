@@ -58,6 +58,7 @@ def fresh(f: Path) -> bool:
 def main() -> None:
     dry = "--dry" in sys.argv
     load_env()
+    _stay_awake()  # keep the PC awake through generation (idle-sleep killed the 3pm run 2026-09-09)
 
     # Skip days the US market is closed (weekends + NYSE holidays), unless --force.
     if "--force" not in sys.argv:
@@ -168,6 +169,21 @@ def main() -> None:
     sys.exit(0 if re_.returncode == 0 and rw.returncode == 0 else 1)
 
 
+def _stay_awake(on: bool = True) -> None:
+    """Block Windows' idle-sleep WHILE the brief generates. A scheduled 3pm run was killed mid-
+    generation on 2026-09-09 when the PC's idle-sleep fired while Norman was away (task ended with a
+    termination code, no email sent). ES_CONTINUOUS keeps the request alive until we clear it (or the
+    process exits); we clear it in the `finally` before the optional sleep-back. Best-effort."""
+    try:
+        import ctypes
+        es_continuous = 0x80000000
+        es_system_required = 0x00000001
+        ctypes.windll.kernel32.SetThreadExecutionState(
+            (es_continuous | es_system_required) if on else es_continuous)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _maybe_sleep_back() -> None:
     """After a wake-to-run task finishes, put the PC back to S3 sleep so it doesn't sit awake —
     but ONLY when passed --sleep-back AND the user isn't here (idle >= 5 min), so it never
@@ -202,4 +218,5 @@ if __name__ == "__main__":
     try:
         main()
     finally:
+        _stay_awake(False)   # release the keep-awake before deciding whether to sleep back
         _maybe_sleep_back()
