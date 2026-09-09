@@ -31,6 +31,7 @@ MAX_LEVEL_PCT = 35.0  # ignore magneto/walls beyond this % of spot — not a nea
 GLUE_PCT = 2.0        # spot within this % of a wall = "pegada al muro"
 MIN_MAG_PCT = 5.0     # magneto at least this % (of spot) away from that wall
 MAX_GLUE_DTE = 7      # 0-7 DTE window
+MIN_MAGDIST_PCT = 8.0  # 2nd table: spot at least this % away from the Magneto (0-7 DTE)
 
 
 def _near(level, spot) -> bool:
@@ -470,7 +471,89 @@ def build_wallglue() -> tuple[str, str]:
     return html, tg
 
 
+def _magdist(spot, contracts, as_of):
+    """Setup dict if spot is >= MIN_MAGDIST_PCT away from the Magneto of the nearest 0-7 DTE
+    expiration (Magneto still a plausible near-term level). None otherwise."""
+    from collections import defaultdict
+
+    from drift_sentiment.magneto import magneto
+    by_exp: dict = defaultdict(list)
+    for c in contracts:
+        d = (c.expiration - as_of).days
+        if 0 <= d <= MAX_GLUE_DTE:
+            by_exp[c.expiration].append(c)
+    if not by_exp:
+        return None
+    e = min(by_exp, key=lambda x: (x - as_of).days)
+    mg = magneto(by_exp[e])
+    if not mg:
+        return None
+    mag = mg[0]
+    if not _near(mag, spot):
+        return None
+    dist = abs(spot - mag) / spot * 100
+    if dist < MIN_MAGDIST_PCT:
+        return None
+    return {"spot": spot, "mag": mag, "dist": dist,
+            "dir": "↑" if mag > spot else "↓", "dte": (e - as_of).days}
+
+
+def screen_magdist() -> list[dict]:
+    """Universe names whose price is >= 8% from the Magneto, 0-7 DTE, farthest first."""
+    import time
+    out: list[dict] = []
+    for s in UNIVERSE:
+        ch = _chain(s)
+        time.sleep(0.02)
+        if not ch:
+            continue
+        g = _magdist(ch[0], ch[1], date.today())
+        if g:
+            g["sym"] = s
+            out.append(g)
+    out.sort(key=lambda d: -d["dist"])
+    return out
+
+
+def build_magdist() -> tuple[str, str]:
+    """(email_html_fragment, telegram_line): names whose price sits >= 8% from the Magneto,
+    0-7 DTE (↑ magnet above / ↓ below). ('', '') if nothing qualifies / on failure."""
+    try:
+        items = screen_magdist()
+    except Exception:  # noqa: BLE001
+        return "", ""
+    if not items:
+        return "", ""
+
+    th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;"
+          "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
+    td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
+    tdl = td.replace("text-align:right", "text-align:left")
+    heads = "".join(f"<th style='{th}'>{h}</th>" for h in
+                    ("Ticker", "Precio", "Imán", "Dist al imán", "DTE"))
+    rows = []
+    for d in items:
+        rows.append(
+            f"<tr><td style='{tdl}'>{d['sym']}</td>"
+            f"<td style='{td}'>${d['spot']:,.2f}</td>"
+            f"<td style='{td}'>${d['mag']:g}</td>"
+            f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} {d['dist']:.1f}%</td>"
+            f"<td style='{td}'>{d['dte']}d</td></tr>")
+    html = (
+        "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
+        "margin:20px 0 4px'>🧲 Lejos del imán — precio a ≥8% del Magneto (0-7 DTE)</h2>"
+        "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
+        f"Acciones cuyo precio está a &ge; {MIN_MAGDIST_PCT:.0f}% del Magneto (↑ el imán está arriba, "
+        "↓ abajo). Data factual, NO es asesoría.</p>"
+        "<table style='border-collapse:collapse'><thead><tr>" + heads
+        + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
+    tg = "🧲 Lejos del imán (≥8%, 0-7d): " + ", ".join(
+        f"{d['sym']} {d['dir']}{d['dist']:.0f}%" for d in items[:8])
+    return html, tg
+
+
 if __name__ == "__main__":
-    h, t = build_wallglue()
-    print("WALLGLUE TG:", t)
-    print("WALLGLUE HTML chars:", len(h))
+    for name, fn in (("WALLGLUE", build_wallglue), ("MAGDIST", build_magdist)):
+        h, t = fn()
+        print(f"{name} TG:", t)
+        print(f"{name} HTML chars:", len(h))

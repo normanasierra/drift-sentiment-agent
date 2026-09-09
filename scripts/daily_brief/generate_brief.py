@@ -224,6 +224,12 @@ def generate() -> None:
             top.append(wg_html)
         if wg_tg:
             wa = (wa.rstrip() + "\n\n" + wg_tg) if wa else wg_tg
+        # 2nd table: names whose price sits >= 8% from the Magneto (0-7 DTE). Reuses cached chains.
+        md_html, md_tg = wall_magneto_screen.build_magdist()
+        if md_html:
+            top.append(md_html)
+        if md_tg:
+            wa = (wa.rstrip() + "\n\n" + md_tg) if wa else md_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:
