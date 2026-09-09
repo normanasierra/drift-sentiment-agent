@@ -267,6 +267,15 @@ def generate() -> None:
     if top:
         email = _hr.join(top) + _hr + email
 
+    # Hard size cap so Gmail never clips (>102,400 bytes shows "[Message clipped]"). The structured
+    # tables (top: P&L/BE, screens, earnings) come first and are always kept intact; if the total
+    # is too big, trim the LLM narrative's TAIL (the bottom) to fit, tag-safe via _close_html.
+    CLIP_SAFE = 100_000
+    if len(email.encode("utf-8")) > CLIP_SAFE:
+        email = _close_html(email.encode("utf-8")[:CLIP_SAFE].decode("utf-8", "ignore")) + (
+            "<p style='font:11px -apple-system,Segoe UI,Arial,sans-serif;color:#94a3b8;"
+            "margin:8px 0'>…(análisis recortado para no pasar el límite de Gmail)</p>")
+
     OUT_DIR.mkdir(exist_ok=True)
     EMAIL_FILE.write_text(email, encoding="utf-8")
     WA_FILE.write_text(wa, encoding="utf-8")
