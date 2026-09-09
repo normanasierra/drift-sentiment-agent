@@ -242,7 +242,7 @@ def report_fragment(rows: list[dict] | None = None) -> str:
         return ""
     tot_pnl = sum(r.get("pnl") or 0 for r in rows)
     green = sum(1 for r in rows if (r.get("pnl") or 0) >= 0)
-    th = "padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;font-weight:600"
+    th = "padding:4px 7px;border:1px solid #e2e8f0;background:#c7d2fe;color:#0f172a;text-align:right;font-weight:700"
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right"
     tdl = td.replace("text-align:right", "text-align:left")
     BE_BG = "background:#dbeafe"    # BE-$ columns (BE-hoy/mes/venc) shaded blue

@@ -99,8 +99,8 @@ def _fmt_vol(v: float) -> str:
 
 
 def _table(items: list[dict], tint: str) -> str:
-    th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;"
-          "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
+    th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#c7d2fe;color:#0f172a;text-align:right;"
+          "font:700 11px -apple-system,Segoe UI,Arial,sans-serif")
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in ("Ticker", "RSI", "Precio", "Volumen"))

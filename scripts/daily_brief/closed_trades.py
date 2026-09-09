@@ -75,7 +75,7 @@ def build(lookback_days: int = 180, recent_days: int = 5) -> tuple[str, str]:
     GREEN, RED = "#0E8F5E", "#C4362F"
     # Font lives on the <table> (inherited by th/td) so cell styles stay short — this keeps
     # the fragment ~6KB and safely under Gmail's clip limit. Same look as the other sections.
-    th = "padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;font-weight:600"
+    th = "padding:4px 7px;border:1px solid #e2e8f0;background:#c7d2fe;color:#0f172a;text-align:right;font-weight:700"
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right"
     tdl = td.replace("text-align:right", "text-align:left")
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in
