@@ -43,13 +43,13 @@ def main() -> None:
     import rsi_screen
     import wall_magneto_screen
     _, rsi = rsi_screen.build()
-    _, wm = wall_magneto_screen.build()
+    _, wm = wall_magneto_screen.build_wallglue()
 
     now = datetime.datetime.now().strftime("%H:%M")
     parts = [
         f"📊 Screens {now} — data, no asesoría",
-        rsi or "📉📈 RSI: nada extremo con alto vol+OI ahora.",
-        wm or "🧲 Wall↔Magneto: sin acciones con gran espacio ahora.",
+        rsi or "📉📈 RSI: nada extremo ahora.",
+        wm or "🎯 Sin acciones pegadas al muro con imán ≥5% ahora.",
     ]
     msg = "\n\n".join(parts)
 

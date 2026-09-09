@@ -135,8 +135,8 @@ def do_rsi(_=None) -> str:
 
 def do_espacio(_=None) -> str:
     import wall_magneto_screen
-    _, line = wall_magneto_screen.build()
-    return line or "🧲 Sin acciones con gran espacio magneto↔muro ahora."
+    _, line = wall_magneto_screen.build_wallglue()
+    return line or "🎯 Sin acciones pegadas al muro con imán ≥5% ahora."
 
 
 def do_movers(_=None) -> str:

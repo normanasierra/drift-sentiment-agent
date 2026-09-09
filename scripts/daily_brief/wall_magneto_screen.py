@@ -24,8 +24,13 @@ UNIVERSE = [
     "SPY", "QQQ",
 ]
 
-MIN_GAP_PCT = 8.0     # "gran espacio": magneto at least this far (% of spot) from nearest wall
+MIN_GAP_PCT = 8.0     # earnings ⭐: magneto at least this far (% of spot) from the dominant wall
 MAX_LEVEL_PCT = 35.0  # ignore magneto/walls beyond this % of spot — not a near-term level
+
+# --- Wall-glue setup (0-7 DTE): the ONLY magneto/wall report in the brief now (2026-09-08) ---
+GLUE_PCT = 2.0        # spot within this % of a wall = "pegada al muro"
+MIN_MAG_PCT = 5.0     # magneto at least this % (of spot) away from that wall
+MAX_GLUE_DTE = 7      # 0-7 DTE window
 
 
 def _near(level, spot) -> bool:
@@ -376,13 +381,96 @@ def build_bounce() -> tuple[str, str]:
     return html, tg
 
 
+def _glue(spot, contracts, as_of):
+    """Setup dict if spot is GLUED (<= GLUE_PCT) to a call/put wall of the nearest 0-7 DTE
+    expiration AND the Magneto is >= MIN_MAG_PCT away from that wall (and still a plausible
+    near-term level). None otherwise. Runs walls + magneto on that expiration's contracts."""
+    from collections import defaultdict
+
+    from drift_sentiment.magneto import magneto
+    from drift_sentiment.walls import call_wall, put_wall
+    by_exp: dict = defaultdict(list)
+    for c in contracts:
+        d = (c.expiration - as_of).days
+        if 0 <= d <= MAX_GLUE_DTE:
+            by_exp[c.expiration].append(c)
+    if not by_exp:
+        return None
+    e = min(by_exp, key=lambda x: (x - as_of).days)   # nearest listed expiration in 0-7 DTE
+    cs = by_exp[e]
+    cw, pw, mg = call_wall(cs), put_wall(cs), magneto(cs)
+    if not (cw and pw and mg):
+        return None
+    side, wstrike = min((("call", cw.strike), ("put", pw.strike)), key=lambda w: abs(w[1] - spot))
+    if abs(wstrike - spot) / spot * 100 > GLUE_PCT:   # price not pinned to a wall
+        return None
+    mag = mg[0]
+    if not _near(mag, spot):                          # implausible far-OTM magneto
+        return None
+    magp = abs(wstrike - mag) / spot * 100
+    if magp < MIN_MAG_PCT:                            # magneto too close to the wall -> no room
+        return None
+    return {"side": side, "wall": wstrike, "mag": mag, "magp": magp,
+            "dir": "↑" if mag > wstrike else "↓", "dte": (e - as_of).days, "spot": spot}
+
+
+def screen_wallglue() -> list[dict]:
+    """Universe names pinned to a wall with the Magneto >= 5% away, 0-7 DTE, biggest room first."""
+    import time
+    out: list[dict] = []
+    for s in UNIVERSE:
+        ch = _chain(s)
+        time.sleep(0.02)
+        if not ch:
+            continue
+        g = _glue(ch[0], ch[1], date.today())
+        if g:
+            g["sym"] = s
+            out.append(g)
+    out.sort(key=lambda d: -d["magp"])
+    return out
+
+
+def build_wallglue() -> tuple[str, str]:
+    """(email_html_fragment, telegram_line): names whose price is pinned to a call/put wall with
+    the Magneto >= 5% away (0-7 DTE) — pinned at a barrier with room toward the magnet. ('', '')
+    if nothing qualifies / on failure, so the brief always sends."""
+    try:
+        items = screen_wallglue()
+    except Exception:  # noqa: BLE001
+        return "", ""
+    if not items:
+        return "", ""
+
+    th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;"
+          "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
+    td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
+    tdl = td.replace("text-align:right", "text-align:left")
+    heads = "".join(f"<th style='{th}'>{h}</th>" for h in
+                    ("Ticker", "Precio", "Muro pegado", "Imán", "→ imán", "DTE"))
+    rows = []
+    for d in items:
+        rows.append(
+            f"<tr><td style='{tdl}'>{d['sym']}</td>"
+            f"<td style='{td}'>${d['spot']:,.2f}</td>"
+            f"<td style='{tdl}'>${d['wall']:g} {d['side']}</td>"
+            f"<td style='{td}'>${d['mag']:g}</td>"
+            f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} {d['magp']:.1f}%</td>"
+            f"<td style='{td}'>{d['dte']}d</td></tr>")
+    html = (
+        "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
+        "margin:20px 0 4px'>🎯 Pegadas al muro, imán a ≥5% (0-7 DTE)</h2>"
+        "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
+        f"Precio pegado (≤{GLUE_PCT:.0f}%) a un muro (call/put) con el Magneto a &ge; {MIN_MAG_PCT:.0f}% "
+        "— espacio para moverse hacia el imán (↑ arriba / ↓ abajo). Data factual, NO es asesoría.</p>"
+        "<table style='border-collapse:collapse'><thead><tr>" + heads
+        + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
+    tg = "🎯 En muro, imán ≥5% (0-7d): " + ", ".join(
+        f"{d['sym']} {d['side'][0]} {d['dir']}{d['magp']:.0f}%" for d in items[:8])
+    return html, tg
+
+
 if __name__ == "__main__":
-    h, t = build()
-    print("TG:", t)
-    print("HTML chars:", len(h))
-    hs, ts = build_short()
-    print("SHORT TG:", ts)
-    print("SHORT HTML chars:", len(hs))
-    hb, tb = build_bounce()
-    print("BOUNCE TG:", tb)
-    print("BOUNCE HTML chars:", len(hb))
+    h, t = build_wallglue()
+    print("WALLGLUE TG:", t)
+    print("WALLGLUE HTML chars:", len(h))

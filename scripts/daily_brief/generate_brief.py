@@ -217,23 +217,13 @@ def generate() -> None:
         pass
     try:
         import wall_magneto_screen
-        wm_html, wm_tg = wall_magneto_screen.build()
-        if wm_html:
-            top.append(wm_html)
-        if wm_tg:
-            wa = (wa.rstrip() + "\n\n" + wm_tg) if wa else wm_tg
-        # Short-DTE view (0/1/7/14 DTE) — reuses the chains build() already cached.
-        sd_html, sd_tg = wall_magneto_screen.build_short()
-        if sd_html:
-            top.append(sd_html)
-        if sd_tg:
-            wa = (wa.rstrip() + "\n\n" + sd_tg) if wa else sd_tg
-        # Bounce setup (spot pinned to a wall, bigger OI opposite) — reuses the cached chains.
-        bo_html, bo_tg = wall_magneto_screen.build_bounce()
-        if bo_html:
-            top.append(bo_html)
-        if bo_tg:
-            wa = (wa.rstrip() + "\n\n" + bo_tg) if wa else bo_tg
+        # Single magneto/wall report (Norman, 2026-09-08): price pinned to a call/put wall with
+        # the Magneto >= 5% away, 0-7 DTE. Replaces the old ~30-DTE / short-DTE / bounce tables.
+        wg_html, wg_tg = wall_magneto_screen.build_wallglue()
+        if wg_html:
+            top.append(wg_html)
+        if wg_tg:
+            wa = (wa.rstrip() + "\n\n" + wg_tg) if wa else wg_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:
