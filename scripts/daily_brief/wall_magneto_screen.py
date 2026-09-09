@@ -32,6 +32,14 @@ GLUE_PCT = 2.0        # spot within this % of a wall = "pegada al muro"
 MIN_MAG_PCT = 5.0     # magneto at least this % (of spot) away from that wall
 MAX_GLUE_DTE = 7      # 0-7 DTE window
 MIN_MAGDIST_PCT = 8.0  # 2nd table: spot at least this % away from the Magneto (0-7 DTE)
+SHORT_BAND_PCT = 15.0  # 0-7 DTE: ignore strikes beyond this % of spot (deep-OTM hedges pollute
+#                        the walls/magneto — e.g. a QQQ $515 put wall 28% under a $714 spot)
+
+
+def _band(contracts, spot):
+    """Contracts whose strike is within SHORT_BAND_PCT of spot — the near-term band, so a deep-OTM
+    hedge strike with huge OI can't hijack the 0-7 DTE walls/magneto."""
+    return [c for c in contracts if spot and abs(c.strike - spot) / spot * 100 <= SHORT_BAND_PCT]
 
 
 def _near(level, spot) -> bool:
@@ -397,7 +405,7 @@ def _glue(spot, contracts, as_of):
             by_exp[c.expiration].append(c)
     if not by_exp:
         return None
-    cs = by_exp[min(by_exp, key=lambda x: (x - as_of).days)]  # nearest expiration in 0-7 DTE
+    cs = _band(by_exp[min(by_exp, key=lambda x: (x - as_of).days)], spot)  # near-term band only
     cw, pw, mg = call_wall(cs), put_wall(cs), magneto(cs)
     if not (cw and pw and mg):
         return None
@@ -495,7 +503,7 @@ def _magdist(spot, contracts, as_of):
     if not by_exp:
         return None
     e = min(by_exp, key=lambda x: (x - as_of).days)
-    mg = magneto(by_exp[e])
+    mg = magneto(_band(by_exp[e], spot))
     if not mg:
         return None
     mag = mg[0]
