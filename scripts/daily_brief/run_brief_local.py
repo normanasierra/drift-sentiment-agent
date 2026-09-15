@@ -25,6 +25,9 @@ PY = sys.executable  # the venv python running this
 OUT = REPO / "output"
 EMAIL = OUT / "brief_email.html"
 WA = OUT / "brief_whatsapp.txt"
+LOCK = OUT / "brief.lock"   # dedup: the 8am WakeToRun trigger + its StartWhenAvailable catch-up
+LOCK_TTL = 900              # both fire ~1s apart on wake → 2 emails; a lock < this (s) blocks the 2nd
+_own_lock = False           # True only in the instance that actually acquired the lock
 
 
 def load_env() -> None:
@@ -55,9 +58,44 @@ def fresh(f: Path) -> bool:
     return f.exists() and f.stat().st_size > 0
 
 
+def _acquire_lock() -> bool:
+    """True if no other brief run is in progress. The 8am WakeToRun trigger and its
+    StartWhenAvailable catch-up both fire on wake (~1s apart) → two instances → two emails.
+    Only the first gets the lock; a fresh lock (< LOCK_TTL) means another instance owns the run.
+    Never blocks the brief on a lock glitch (returns True on error)."""
+    try:
+        now = datetime.datetime.now().timestamp()
+        if LOCK.exists():
+            try:
+                prev = float(LOCK.read_text(encoding="utf-8").strip() or 0)
+            except Exception:  # noqa: BLE001
+                prev = 0.0
+            if now - prev < LOCK_TTL:      # another instance started recently → it's running
+                return False
+        OUT.mkdir(exist_ok=True)
+        LOCK.write_text(str(now), encoding="utf-8")
+        return True
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _release_lock() -> None:
+    try:
+        LOCK.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def main() -> None:
+    global _own_lock
     dry = "--dry" in sys.argv
     load_env()
+    if not _acquire_lock():   # another instance is already running (morning trigger fires 2x on wake)
+        log("otra instancia del brief ya está corriendo — salgo para no duplicar el reporte.")
+        return
+    _own_lock = True
     _stay_awake()  # keep the PC awake through generation (idle-sleep killed the 3pm run 2026-09-09)
 
     # Skip days the US market is closed (weekends + NYSE holidays), unless --force.
@@ -219,4 +257,6 @@ if __name__ == "__main__":
         main()
     finally:
         _stay_awake(False)   # release the keep-awake before deciding whether to sleep back
-        _maybe_sleep_back()
+        if _own_lock:        # only the instance that owns the run cleans up + may sleep the PC
+            _release_lock()
+            _maybe_sleep_back()
