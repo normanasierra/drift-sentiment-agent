@@ -74,9 +74,9 @@ def _notify(title: str, msg: str) -> None:
             timeout=15)
     except Exception:  # noqa: BLE001
         pass
-    # Best-effort WhatsApp too (no-op if CallMeBot creds aren't set on this machine).
+    # Best-effort Telegram too (no-op if TELEGRAM_* creds aren't set on this machine).
     try:
-        send = REPO / "scripts" / "daily_brief" / "send_whatsapp.py"
+        send = REPO / "scripts" / "daily_brief" / "send_telegram.py"
         subprocess.run([sys.executable, str(send)], input=f"{title} — {msg}",
                        text=True, cwd=str(send.parent), timeout=60)
     except Exception:  # noqa: BLE001

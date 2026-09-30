@@ -128,5 +128,72 @@ def format_block(band_pct: float = 10.0) -> str:
     return "\n".join(lines)
 
 
+# --------------------------------------------------------------------------- covered calls
+# Curated liquid/optionable universe for the covered-call theta screen. The $80-110
+# price filter keeps only the relevant names. Kept modest so the brief stays fast.
+_CC_UNIVERSE = sorted(set([
+    "CRM", "AMZN", "AMD", "TSLA", "INTC", "IBM", "STM", "COIN", "NOW", "MU", "MRVL",
+    "PLTR", "IREN", "MSFT", "NVDA", "NFLX", "AAPL", "META", "GOOGL", "AVGO", "TSM",
+    "QCOM", "JPM", "GS", "BAC", "WMT", "COST", "XOM", "DIS", "BA", "NKE", "SBUX",
+    "PYPL", "UBER", "SHOP", "WFC", "C", "SCHW", "BABA", "CVS", "DAL", "CSCO", "WYNN",
+    "ZM", "CRWV", "SOFI", "F", "SNAP",
+]))
+
+
+def _cc_theta_day(spot, strike, iv, t_years):
+    import math
+    from drift_sentiment.gex import _norm_pdf
+    if t_years <= 0 or iv <= 0:
+        return 0.0
+    vol_t = iv * math.sqrt(t_years)
+    d1 = (math.log(spot / strike) + 0.5 * iv * iv * t_years) / vol_t
+    return spot * _norm_pdf(d1) * iv / (2.0 * math.sqrt(t_years)) / 365.0
+
+
+def covered_call_block(limit: int = 6, lo: float = 80.0, hi: float = 110.0) -> str:
+    """Brief section: $80-110 optionable names with the HIGHEST near-term (7-30 DTE)
+    ATM theta — richest premium for selling (covered) calls. Educational, not advice.
+    '' on any failure so the brief never breaks."""
+    try:
+        import datetime
+        from drift_sentiment import polygon_client
+        from drift_sentiment.gex import _sane_iv
+    except Exception:  # noqa: BLE001
+        return ""
+    today = datetime.date.today()
+    rows = []
+    for t in _CC_UNIVERSE:
+        try:
+            spot, contracts = polygon_client.fetch_chain(t)
+            if not (lo <= spot <= hi):
+                continue
+            dtes = sorted({(c.expiration - today).days for c in contracts
+                           if 7 <= (c.expiration - today).days < 30})
+            if not dtes:
+                continue
+            dte = dtes[0]
+            near = [c for c in contracts if (c.expiration - today).days == dte
+                    and c.implied_volatility and _sane_iv(c.implied_volatility)]
+            if not near:
+                continue
+            atm = min(near, key=lambda c: abs(c.strike - spot))
+            theta = _cc_theta_day(spot, atm.strike, atm.implied_volatility, dte / 365.0)
+            rows.append((theta, t, spot, atm.strike, atm.implied_volatility, dte))
+        except Exception:  # noqa: BLE001
+            continue
+    if not rows:
+        return ""
+    rows.sort(reverse=True)
+    lines = ["COVERED CALLS — subyacentes $80-110 con MAYOR theta (mejor prima para VENDER "
+             "calls; venc. 7-30 días; educativo, NO consejo). theta = decaimiento diario por "
+             "acción del call ATM (×100 = por contrato). Comenta cada uno:"]
+    for theta, t, spot, strike, iv, dte in rows[:limit]:
+        lines.append(f"  {t}: spot {spot:.2f}, call ATM {strike:.0f} ({dte}d), IV {iv*100:.0f}%, "
+                     f"theta {theta:.3f}/día (${theta*100:.0f}/contrato)")
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     print(format_block() or "(nada cerca del put wall con sesgo alcista ahora)")
+    print()
+    print(covered_call_block() or "(sin candidatos covered-call $80-110 ahora)")

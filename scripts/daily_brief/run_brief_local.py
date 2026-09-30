@@ -176,11 +176,11 @@ def main() -> None:
     log((r.stdout or r.stderr).strip()[:600])
     if not (fresh(EMAIL) and fresh(WA)):
         log("FATAL: brief files missing/empty — not sending.")
-        if not dry:
+        if not dry and os.getenv("TELEGRAM_BOT_TOKEN"):
             try:
-                subprocess.run([PY, str(BRIEF / "send_whatsapp.py")], cwd=str(BRIEF),
-                               input=f"Brief {datetime.date.today()} fallo al generar.",
-                               text=True)
+                fm = OUT / "_fail_msg.txt"
+                fm.write_text(f"⚠️ Brief {datetime.date.today()} falló al generar.", encoding="utf-8")
+                run("send_telegram.py", "--text-file", str(fm))
             except Exception:  # noqa: BLE001
                 pass
         sys.exit(1)
@@ -195,16 +195,17 @@ def main() -> None:
     re_ = run("send_email.py", "--subject", f"Brief de Mercado - {date_es}",
               "--body-file", str(EMAIL), "--html")
     log(f"email rc={re_.returncode} {(re_.stdout or re_.stderr).strip()[:200]}")
-    log("mensajería móvil...")
-    if os.getenv("TELEGRAM_BOT_TOKEN"):  # prefer Telegram (reliable, no quota) when set
+    log("mensajería móvil (Telegram)...")
+    mobile_ok = True
+    if os.getenv("TELEGRAM_BOT_TOKEN"):
         rw = run("send_telegram.py", "--text-file", str(WA))
+        mobile_ok = rw.returncode == 0
         log(f"telegram rc={rw.returncode} {(rw.stdout or rw.stderr).strip()[:200]}")
     else:
-        rw = run("send_whatsapp.py", "--text-file", str(WA))
-        log(f"whatsapp rc={rw.returncode} {(rw.stdout or rw.stderr).strip()[:200]}")
+        log("Telegram no configurado — envío solo por email.")
 
     log("===== run finished =====")
-    sys.exit(0 if re_.returncode == 0 and rw.returncode == 0 else 1)
+    sys.exit(0 if re_.returncode == 0 and mobile_ok else 1)
 
 
 def _stay_awake(on: bool = True) -> None:

@@ -379,12 +379,22 @@ def _support_bounce_block() -> str:
         return ""
 
 
+def _covered_call_block() -> str:
+    """$80-110 names with the richest near-term theta — covered-call premium candidates.
+    Educational, never a recommendation. '' if nothing qualifies / on error."""
+    try:
+        from data_sources import holdings_screen
+        return holdings_screen.covered_call_block()
+    except Exception:  # noqa: BLE001 — a heavy screen never breaks the brief
+        return ""
+
+
 def gather() -> str:
     """Return a compact REAL-DATA block for the prompt, or '' if nothing loaded."""
     blocks = [
         _indices_block(), _bonds_block(), _world_block(), _etfs_block(),
         _watchlist_block(), _movers_block(), _portfolio_block(), _breakeven_block(),
-        _support_bounce_block(),
+        _support_bounce_block(), _covered_call_block(),
         _cramer_block(), _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
