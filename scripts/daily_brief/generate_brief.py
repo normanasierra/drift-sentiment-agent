@@ -154,7 +154,13 @@ def generate() -> None:
         "model": MODEL,
         "max_tokens": 16000,
         "messages": [{"role": "user", "content": prompt}],
-        "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 18}],
+        # 18 web searches took ~11 min — over the cloud's job limit, so the scheduled
+        # briefs never finished. 8 keeps it well under while still grounding the brief.
+        "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 8}],
+        # Stream: web search + a 16k-token answer is a multi-minute server op, and a
+        # single non-streaming request gets dropped ("RemoteDisconnected"). Streaming
+        # keeps data flowing so the connection stays alive to completion.
+        "stream": True,
     }).encode("utf-8")
 
     req = urllib.request.Request(API_URL, data=body, headers={
@@ -164,20 +170,48 @@ def generate() -> None:
     })
 
     def _post() -> dict:
-        """One API call, retrying transient failures (429/5xx/network) with backoff
-        so a hiccup at 9am doesn't cost the brief. Exits on a hard failure."""
+        """One STREAMING API call, accumulating text deltas. Retries transient failures
+        (429/5xx, connection drops, timeouts) with backoff so a hiccup doesn't cost the
+        brief. Returns {"content":[{"type":"text","text":...}]} like the non-stream shape."""
+        import ssl
+        try:  # certifi so the Anthropic cert verifies on macOS Python too
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:  # noqa: BLE001
+            ctx = ssl.create_default_context()
         last_err = "API call failed."
         for attempt in range(5):
             try:
-                with urllib.request.urlopen(req, timeout=300) as resp:  # noqa: S310
-                    return json.loads(resp.read().decode("utf-8", "replace"))
+                acc, stream_err = [], None
+                with urllib.request.urlopen(req, timeout=600, context=ctx) as resp:  # noqa: S310
+                    for raw in resp:  # server-sent events, one per line
+                        line = raw.decode("utf-8", "replace").strip()
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line[5:].strip()
+                        if not payload or payload == "[DONE]":
+                            continue
+                        try:
+                            evt = json.loads(payload)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if evt.get("type") == "content_block_delta":
+                            d = evt.get("delta", {})
+                            if d.get("type") == "text_delta":
+                                acc.append(d.get("text", ""))
+                        elif evt.get("type") == "error":
+                            stream_err = evt.get("error", {})
+                if stream_err:
+                    last_err = f"API stream error: {stream_err}"  # retry (often transient)
+                else:
+                    return {"content": [{"type": "text", "text": "".join(acc)}]}
             except urllib.error.HTTPError as exc:
                 last_err = f"API error {exc.code}: {exc.read()[:400].decode('utf-8', 'replace')}"
-                transient = exc.code in (429, 500, 502, 503, 529)
-            except urllib.error.URLError as exc:
+                if exc.code not in (429, 500, 502, 503, 529):
+                    sys.exit(last_err)  # hard failure, don't retry
+            except (urllib.error.URLError, OSError) as exc:  # incl. RemoteDisconnected/timeouts
                 last_err = f"Network error: {exc}"
-                transient = True
-            if transient and attempt < 4:
+            if attempt < 4:
                 time.sleep(15 * (attempt + 1))  # 15, 30, 45, 60s
                 continue
             sys.exit(last_err)

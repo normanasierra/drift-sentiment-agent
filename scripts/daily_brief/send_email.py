@@ -111,7 +111,11 @@ def send_email(subject: str, body: str, *, html: bool = False) -> None:
     else:
         msg.set_content(body)
 
-    context = ssl.create_default_context()
+    try:  # certifi CA bundle so Gmail's cert verifies on macOS Python too
+        import certifi
+        context = ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001
+        context = ssl.create_default_context()
     try:
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
             server.login(user, password)

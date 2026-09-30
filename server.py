@@ -784,7 +784,7 @@ def api_tasks_run(job: str = "", key: str = ""):
             parts = name.split()
             try:
                 subprocess.run([sys.executable, str(here / "scripts" / parts[0]), *parts[1:]],
-                               cwd=str(here), timeout=600)
+                               cwd=str(here), timeout=900)  # brief w/ web search can run several min
             except Exception:  # noqa: BLE001
                 pass
 
