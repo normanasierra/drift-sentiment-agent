@@ -150,16 +150,15 @@ def _cc_theta_day(spot, strike, iv, t_years):
     return spot * _norm_pdf(d1) * iv / (2.0 * math.sqrt(t_years)) / 365.0
 
 
-def covered_call_block(limit: int = 6, lo: float = 80.0, hi: float = 110.0) -> str:
-    """Brief section: $80-110 optionable names with the HIGHEST near-term (7-30 DTE)
-    ATM theta — richest premium for selling (covered) calls. Educational, not advice.
-    '' on any failure so the brief never breaks."""
+def _covered_call_rows(limit: int = 6, lo: float = 80.0, hi: float = 110.0):
+    """[(theta, ticker, spot, strike, iv, dte)] for $80-110 names with the highest
+    near-term (7-30 DTE) ATM theta, best first. [] on any failure."""
     try:
         import datetime
         from drift_sentiment import polygon_client
         from drift_sentiment.gex import _sane_iv
     except Exception:  # noqa: BLE001
-        return ""
+        return []
     today = datetime.date.today()
     rows = []
     for t in _CC_UNIVERSE:
@@ -181,16 +180,53 @@ def covered_call_block(limit: int = 6, lo: float = 80.0, hi: float = 110.0) -> s
             rows.append((theta, t, spot, atm.strike, atm.implied_volatility, dte))
         except Exception:  # noqa: BLE001
             continue
+    rows.sort(reverse=True)
+    return rows[:limit]
+
+
+def covered_call_block(limit: int = 6, lo: float = 80.0, hi: float = 110.0) -> str:
+    """Text version for the LLM prompt. '' if nothing qualifies."""
+    rows = _covered_call_rows(limit, lo, hi)
     if not rows:
         return ""
-    rows.sort(reverse=True)
     lines = ["COVERED CALLS — subyacentes $80-110 con MAYOR theta (mejor prima para VENDER "
              "calls; venc. 7-30 días; educativo, NO consejo). theta = decaimiento diario por "
              "acción del call ATM (×100 = por contrato). Comenta cada uno:"]
-    for theta, t, spot, strike, iv, dte in rows[:limit]:
+    for theta, t, spot, strike, iv, dte in rows:
         lines.append(f"  {t}: spot {spot:.2f}, call ATM {strike:.0f} ({dte}d), IV {iv*100:.0f}%, "
                      f"theta {theta:.3f}/día (${theta*100:.0f}/contrato)")
     return "\n".join(lines)
+
+
+def covered_call_html(limit: int = 6, lo: float = 80.0, hi: float = 110.0):
+    """(email_html_fragment, telegram_line) — a FIXED covered-call table for the brief,
+    rendered directly so it always appears (not left to the LLM). ('', '') if none."""
+    rows = _covered_call_rows(limit, lo, hi)
+    if not rows:
+        return "", ""
+    th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;"
+          "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
+    td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
+    tdl = td.replace("text-align:right", "text-align:left")
+    heads = "".join(f"<th style='{th}'>{h}</th>" for h in
+                    ("Ticker", "Spot", "Call ATM", "Venc.", "IV", "Theta/día", "×100"))
+    body = "".join(
+        f"<tr><td style='{tdl}'>{t}</td><td style='{td}'>{spot:.2f}</td>"
+        f"<td style='{td}'>{strike:.0f}</td><td style='{td}'>{dte}d</td>"
+        f"<td style='{td}'>{iv*100:.0f}%</td><td style='{td}'>{theta:.3f}</td>"
+        f"<td style='{td}'>${theta*100:.0f}</td></tr>"
+        for theta, t, spot, strike, iv, dte in rows)
+    html = (
+        "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
+        "margin:20px 0 4px'>🎯 Covered Calls ($80-110, theta alto)</h2>"
+        "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
+        "Subyacentes $80-110 con la mayor prima para VENDER calls (ATM, 7-30 días). "
+        "Theta = decaimiento diario por acción (×100 = por contrato). Educativo, NO asesoría.</p>"
+        "<table style='border-collapse:collapse'><thead><tr>" + heads
+        + "</tr></thead><tbody>" + body + "</tbody></table>")
+    tg = "🎯 Covered calls $80-110 (theta): " + ", ".join(
+        f"{t} {theta:.2f}" for theta, t, *_ in rows)
+    return html, tg
 
 
 if __name__ == "__main__":

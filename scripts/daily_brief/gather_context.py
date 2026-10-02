@@ -394,7 +394,7 @@ def gather() -> str:
     blocks = [
         _indices_block(), _bonds_block(), _world_block(), _etfs_block(),
         _watchlist_block(), _movers_block(), _portfolio_block(), _breakeven_block(),
-        _support_bounce_block(), _covered_call_block(),
+        _support_bounce_block(),
         _cramer_block(), _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)

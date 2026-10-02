@@ -249,6 +249,15 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + rsi_wa) if wa else rsi_wa
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
+    try:  # covered-call screen ($80-110, high theta) — fixed table so it ALWAYS appears
+        from data_sources import holdings_screen
+        cc_html, cc_tg = holdings_screen.covered_call_html()
+        if cc_html:
+            top.append(cc_html)
+        if cc_tg:
+            wa = (wa.rstrip() + "\n\n" + cc_tg) if wa else cc_tg
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
+        pass
     try:
         import wall_magneto_screen
         # Single magneto/wall report (Norman, 2026-09-08): price pinned to a call/put wall with

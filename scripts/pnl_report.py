@@ -57,7 +57,7 @@ def format_report(data: dict) -> str:
     today = datetime.date.today()
     by_u = data["by_u"]
     rows = sorted(by_u.items(), key=lambda kv: kv[1]["mv"], reverse=True)
-    lines = [f"📊 P&L CARTERA — {today.strftime('%d/%m/%Y')} (Schwab, real)",
+    lines = [f"📊 P&L CARTERA — {today.strftime('%m/%d/%Y')} (Schwab, real)",
              f"Valor total: ${data['mv']:,.0f}",
              f"P&L abierto (no realizado, desde entrada): ${data['open']:,.0f}",
              f"P&L de HOY: ${data['day']:,.0f}",
@@ -118,7 +118,7 @@ def main() -> None:
             subprocess.run([sys.executable, str(BRIEF / "send_telegram.py"),
                             "--text-file", str(f)], cwd=str(BRIEF), timeout=60)
             subprocess.run([sys.executable, str(BRIEF / "send_email.py"),
-                            "--subject", "P&L de tu cartera - " + datetime.date.today().strftime("%d/%m"),
+                            "--subject", "P&L de tu cartera - " + datetime.date.today().strftime("%m/%d"),
                             "--body-file", str(f)], cwd=str(BRIEF), timeout=60)
         except Exception as e:  # noqa: BLE001
             print(f"(aviso: envío falló: {e})")

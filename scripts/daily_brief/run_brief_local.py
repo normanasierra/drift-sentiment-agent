@@ -190,7 +190,7 @@ def main() -> None:
         log("===== DRY run done (not sending) =====")
         return
 
-    date_es = datetime.date.today().strftime("%d/%m/%Y")
+    date_es = datetime.date.today().strftime("%m/%d/%Y")
     log("emailing...")
     re_ = run("send_email.py", "--subject", f"Brief de Mercado - {date_es}",
               "--body-file", str(EMAIL), "--html")

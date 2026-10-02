@@ -106,7 +106,7 @@ def build(day: datetime.date | None = None, *, label: str = "HOY") -> tuple[str,
     if not items:
         return "", ""
     when_txt = "hoy" if label == "HOY" else (
-        (day or datetime.date.today()).strftime("el %a %d/%m"))
+        (day or datetime.date.today()).strftime("el %a %m/%d"))
     stars = _stars(items)                     # ⭐ names with a big Magneto↔wall gap
     star_thr = 8
     try:
