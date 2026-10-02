@@ -32,64 +32,70 @@ def _under(ins: dict) -> str:
 
 def build() -> tuple[str, dict]:
     from data_sources import schwab, schwab_trades
+    LABELS = schwab_trades.ACCOUNT_LABELS
     today = datetime.date.today()
     monday = today - datetime.timedelta(days=today.weekday())
 
-    # Current positions: symbol -> (marketValue signed, underlying)
+    # Current positions keyed by (account_label, symbol) -> marketValue (signed).
     tok = schwab._access_token()
-    cur: dict[str, dict] = {}
+    cur: dict[tuple, dict] = {}
     r = requests.get("https://api.schwabapi.com/trader/v1/accounts",
                      params={"fields": "positions"},
                      headers={"Authorization": f"Bearer {tok}"}, timeout=30)
     for acct in r.json():
-        for p in acct.get("securitiesAccount", {}).get("positions", []):
+        sa = acct.get("securitiesAccount", {})
+        label = LABELS.get(str(sa.get("accountNumber", ""))[-4:], str(sa.get("accountNumber", ""))[-4:])
+        for p in sa.get("positions", []):
             sym = p.get("instrument", {}).get("symbol", "")
-            cur[sym] = {"mv": p.get("marketValue", 0) or 0,
-                        "under": _under(p.get("instrument", {}))}
+            cur[(label, sym)] = {"mv": p.get("marketValue", 0) or 0,
+                                 "under": _under(p.get("instrument", {}))}
 
-    # This week's option legs, grouped by symbol.
-    legs: dict[str, dict] = {}
+    # This week's option legs, grouped by (account_label, symbol).
+    legs: dict[tuple, dict] = {}
     for t in schwab_trades._fetch_trade_txns(14):
         td = (t.get("tradeDate") or "")[:10]
         if not td or datetime.date.fromisoformat(td) < monday:
             continue
+        label = LABELS.get(str(t.get("_last4") or str(t.get("accountNumber", ""))[-4:]),
+                           str(t.get("_last4") or ""))
         for it in (t.get("transferItems") or []):
             ins = it.get("instrument", {})
             if ins.get("assetType") != "OPTION":
                 continue
-            sym = ins.get("symbol", "")
-            d = legs.setdefault(sym, {"cash": 0.0, "opened": False,
-                                      "under": _under(ins), "desc": ins.get("description", "")})
+            key = (label, ins.get("symbol", ""))
+            d = legs.setdefault(key, {"cash": 0.0, "opened": False, "under": _under(ins)})
             d["cash"] += it.get("cost", 0) or 0          # signed: - paid, + received
             if it.get("positionEffect") == "OPENING":
                 d["opened"] = True
 
-    # Keep only symbols that were OPENED this week.
+    # Rows for symbols OPENED this week, carrying their account.
     rows = []
-    for sym, d in legs.items():
+    for (label, sym), d in legs.items():
         if not d["opened"]:
             continue
-        mv = cur.get(sym, {}).get("mv", 0.0)       # 0 if already closed
-        pnl = mv + d["cash"]
-        rows.append({"under": d["under"], "sym": sym.strip(), "pnl": pnl,
-                     "open": sym in cur, "mv": mv})
-    rows.sort(key=lambda x: x["pnl"], reverse=True)
+        mv = cur.get((label, sym), {}).get("mv", 0.0)   # 0 if already closed
+        rows.append({"acct": label, "under": d["under"],
+                     "strike": sym.split()[-1] if " " in sym else "",
+                     "pnl": mv + d["cash"], "open": (label, sym) in cur})
 
     total = sum(x["pnl"] for x in rows)
-    n_open = sum(1 for x in rows if x["open"])
+    accts = sorted({x["acct"] for x in rows})
     lines = [f"📈 P&L — ENTRADAS DE ESTA SEMANA ({monday.strftime('%m/%d')}–{today.strftime('%m/%d')})",
-             f"Entradas: {len(rows)} ({n_open} abiertas, {len(rows)-n_open} cerradas)",
-             f"P&L total de lo entrado esta semana: ${total:,.0f}",
-             "",
-             "Por entrada (P&L | estado):"]
-    for x in rows:
-        est = "abierta" if x["open"] else "cerrada"
-        lines.append(f"  {x['under']} {x['sym'].split()[-1] if ' ' in x['sym'] else ''}: "
-                     f"${x['pnl']:,.0f} ({est})")
+             f"Entradas: {len(rows)} | P&L total: ${total:,.0f}"]
+    for a in accts:
+        ar = sorted([x for x in rows if x["acct"] == a], key=lambda x: x["pnl"], reverse=True)
+        a_real = sum(x["pnl"] for x in ar if not x["open"])
+        a_unre = sum(x["pnl"] for x in ar if x["open"])
+        lines += ["", f"━━━ CUENTA {a} ━━━"]
+        for x in ar:
+            lines.append(f"  {x['under']} {x['strike']}: ${x['pnl']:,.0f} "
+                         f"({'abierta' if x['open'] else 'cerrada'})")
+        lines += [f"  — Cerradas: ${a_real:,.0f} | Abiertas: ${a_unre:,.0f} | "
+                  f"Subtotal {a}: ${a_real + a_unre:,.0f}"]
     realized = sum(x["pnl"] for x in rows if not x["open"])
     unreal = sum(x["pnl"] for x in rows if x["open"])
     lines += [
-        "──────────────────────────",
+        "══════════════════════════",
         f"Cerradas (realizado):     ${realized:,.0f}",
         f"Abiertas (no realizado):  ${unreal:,.0f}",
         f"TOTAL ENTRADAS SEMANA:    ${total:,.0f}",
