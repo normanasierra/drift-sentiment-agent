@@ -258,6 +258,18 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + cc_tg) if wa else cc_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
+    try:  # entries P&L — market-close (4:15pm) run only: today daily, full week on Fridays
+        if local.hour >= 16:
+            if str(REPO / "scripts") not in sys.path:
+                sys.path.insert(0, str(REPO / "scripts"))
+            import weekly_entries_pnl as wep
+            ep_html, ep_tg = wep.brief_section("week" if local.weekday() == 4 else "today")
+            if ep_html:
+                top.append(ep_html)
+            if ep_tg:
+                wa = (wa.rstrip() + "\n\n" + ep_tg) if wa else ep_tg
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
+        pass
     try:
         import wall_magneto_screen
         # Single magneto/wall report (Norman, 2026-09-08): price pinned to a call/put wall with
