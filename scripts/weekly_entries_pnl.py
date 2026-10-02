@@ -86,9 +86,18 @@ def build() -> tuple[str, dict]:
         est = "abierta" if x["open"] else "cerrada"
         lines.append(f"  {x['under']} {x['sym'].split()[-1] if ' ' in x['sym'] else ''}: "
                      f"${x['pnl']:,.0f} ({est})")
-    lines.append("")
-    lines.append("Educativo, NO es asesoría. (Sin comisiones.)")
-    return "\n".join(lines), {"total": total, "rows": rows, "monday": monday, "today": today}
+    realized = sum(x["pnl"] for x in rows if not x["open"])
+    unreal = sum(x["pnl"] for x in rows if x["open"])
+    lines += [
+        "──────────────────────────",
+        f"Cerradas (realizado):     ${realized:,.0f}",
+        f"Abiertas (no realizado):  ${unreal:,.0f}",
+        f"TOTAL ENTRADAS SEMANA:    ${total:,.0f}",
+        "",
+        "Educativo, NO es asesoría. (Sin comisiones.)",
+    ]
+    return "\n".join(lines), {"total": total, "realized": realized, "unreal": unreal,
+                              "rows": rows, "monday": monday, "today": today}
 
 
 def main() -> None:
