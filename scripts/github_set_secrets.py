@@ -27,8 +27,13 @@ REPO = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     tok = os.getenv("GH_TOKEN") or (sys.argv[1] if len(sys.argv) > 1 else "")
+    if not tok:  # fallback: a local .ghtoken file (one line, the PAT) — avoids paste corruption
+        tf = REPO / ".ghtoken"
+        if tf.exists():
+            tok = tf.read_text(encoding="utf-8").strip()
+    tok = "".join(c for c in tok if ord(c) < 128).strip()  # strip any non-ASCII paste damage
     if not tok:
-        sys.exit("Falta el token. Usa:  GH_TOKEN=ghp_xxx .venv/bin/python scripts/github_set_secrets.py")
+        sys.exit("Falta el token (GH_TOKEN, argumento, o archivo .ghtoken).")
 
     url = subprocess.check_output(["git", "-C", str(REPO), "remote", "get-url", "origin"]).decode().strip()
     m = re.search(r"[:/]([^/:]+)/([^/]+?)(\.git)?$", url)

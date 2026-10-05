@@ -12,3 +12,6 @@ scratchpad_*.log
 
 .backups/
 *.bak
+
+# local GitHub PAT (never commit)
+.ghtoken
