@@ -150,7 +150,7 @@ def _cc_theta_day(spot, strike, iv, t_years):
     return spot * _norm_pdf(d1) * iv / (2.0 * math.sqrt(t_years)) / 365.0
 
 
-def _covered_call_rows(limit: int = 6, lo: float = 80.0, hi: float = 110.0):
+def _covered_call_rows(limit: int = 6, lo: float = 80.0, hi: float = 120.0):
     """[(theta, ticker, spot, strike, iv, dte)] for $80-110 names with the highest
     near-term (7-30 DTE) ATM theta, best first. [] on any failure."""
     try:
@@ -184,21 +184,21 @@ def _covered_call_rows(limit: int = 6, lo: float = 80.0, hi: float = 110.0):
     return rows[:limit]
 
 
-def covered_call_block(limit: int = 6, lo: float = 80.0, hi: float = 110.0) -> str:
+def covered_call_block(limit: int = 6, lo: float = 80.0, hi: float = 120.0) -> str:
     """Text version for the LLM prompt. '' if nothing qualifies."""
     rows = _covered_call_rows(limit, lo, hi)
     if not rows:
         return ""
-    lines = ["COVERED CALLS — subyacentes $80-110 con MAYOR theta (mejor prima para VENDER "
-             "calls; venc. 7-30 días; educativo, NO consejo). theta = decaimiento diario por "
-             "acción del call ATM (×100 = por contrato). Comenta cada uno:"]
+    lines = [f"COVERED CALLS — subyacentes ${lo:.0f}-${hi:.0f} con MAYOR theta (mejor prima para "
+             "VENDER calls; venc. 7-30 días; educativo, NO consejo). theta = decaimiento diario "
+             "por acción del call ATM (×100 = por contrato). Comenta cada uno:"]
     for theta, t, spot, strike, iv, dte in rows:
         lines.append(f"  {t}: spot {spot:.2f}, call ATM {strike:.0f} ({dte}d), IV {iv*100:.0f}%, "
                      f"theta {theta:.3f}/día (${theta*100:.0f}/contrato)")
     return "\n".join(lines)
 
 
-def covered_call_html(limit: int = 6, lo: float = 80.0, hi: float = 110.0):
+def covered_call_html(limit: int = 6, lo: float = 80.0, hi: float = 120.0):
     """(email_html_fragment, telegram_line) — a FIXED covered-call table for the brief,
     rendered directly so it always appears (not left to the LLM). ('', '') if none."""
     rows = _covered_call_rows(limit, lo, hi)
@@ -218,9 +218,9 @@ def covered_call_html(limit: int = 6, lo: float = 80.0, hi: float = 110.0):
         for theta, t, spot, strike, iv, dte in rows)
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
-        "margin:20px 0 4px'>🎯 Covered Calls ($80-110, theta alto)</h2>"
+        f"margin:20px 0 4px'>🎯 Covered Calls (${lo:.0f}-${hi:.0f}, theta alto)</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        "Subyacentes $80-110 con la mayor prima para VENDER calls (ATM, 7-30 días). "
+        f"Subyacentes ${lo:.0f}-${hi:.0f} con la mayor prima para VENDER calls (ATM, 7-30 días). "
         "Theta = decaimiento diario por acción (×100 = por contrato). Educativo, NO asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + body + "</tbody></table>")
