@@ -1,18 +1,15 @@
 name: Daily Market Brief
 
-# Runs the daily pre-market brief on GitHub's servers (no dependency on any
-# personal machine). Secrets are stored as encrypted GitHub Actions secrets.
+# Runs the full daily brief in GitHub's cloud — independent of any personal machine
+# (so it fires even with the Mac off). Triggered on time by cron-job.org via the GitHub
+# API (workflow_dispatch). Secrets live as encrypted GitHub Actions secrets; the fresh
+# Schwab token is pulled from Render at runtime so the weekly re-auth propagates here.
 on:
-  # Cloud fallback DISABLED again (2026-07-29): GitHub's scheduled cron fired LATE
-  # (~11am instead of 8:45am) AND its run has no live Schwab session, so it delivered a
-  # late, DUPLICATE brief with no break-even table. The LOCAL brief (wakes the PC, has
-  # Schwab) is the source now; the full cloud brief WITH break-even lives on Render
-  # (job=brief, triggered once TASKS_KEY is set). Re-enable below only as a true
-  # PC-is-OFF fallback, accepting its timing slop + missing break-even table.
-  # schedule:
-  #   - cron: '45 12 * * 1-5'
-  #   - cron: '15 19 * * 1-5'
-  workflow_dispatch: {}   # manual "Run workflow" button (testing / cloud fallback)
+  workflow_dispatch: {}
+
+concurrency:
+  group: daily-brief
+  cancel-in-progress: false
 
 jobs:
   brief:
@@ -20,41 +17,29 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install deps
+        run: pip install --quiet requests certifi python-dotenv
 
-      - name: Install deps for real-data sources
-        run: pip install --quiet requests
-
-      - name: Generate the brief (Anthropic API + web search + real data)
+      - name: Pull the freshest Schwab token from Render
         env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: python scripts/render_pull_token.py || true
+
+      - name: Generate the brief and send it (email + Telegram)
+        env:
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          SCHWAB_APP_KEY: ${{ secrets.SCHWAB_APP_KEY }}
+          SCHWAB_APP_SECRET: ${{ secrets.SCHWAB_APP_SECRET }}
+          SCHWAB_REDIRECT_URI: ${{ secrets.SCHWAB_REDIRECT_URI }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          HYPERLIQUID_ADDRESS: ${{ secrets.HYPERLIQUID_ADDRESS }}
-          SCHWAB_ACCESS_TOKEN: ${{ secrets.SCHWAB_ACCESS_TOKEN }}
-        run: python scripts/daily_brief/generate_brief.py
-
-      - name: Email the full brief
-        env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           BRIEF_EMAIL_TO: ${{ secrets.BRIEF_EMAIL_TO }}
-        run: >
-          python scripts/daily_brief/send_email.py
-          --subject "Brief de Mercado - $(date -u +%Y-%m-%d)"
-          --body-file output/brief_email.html --html
-
-      - name: WhatsApp the key points
-        env:
-          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
-          CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
-        run: python scripts/daily_brief/send_whatsapp.py --text-file output/brief_whatsapp.txt
-
-      # If any step above failed, ping WhatsApp so a bad run is never silent.
-      - name: Alert on failure
-        if: failure()
-        env:
-          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
-          CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
-        run: echo "Brief de mercado FALLO hoy en GitHub Actions. Revisa los logs del repo." | python scripts/daily_brief/send_whatsapp.py
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/daily_brief/run_brief_local.py
