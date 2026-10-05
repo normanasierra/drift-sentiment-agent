@@ -21,10 +21,7 @@ if [ -x .venv/bin/python ]; then
   .venv/bin/python scripts/render_pull_token.py 2>/dev/null
 fi
 
-# Catch up any brief slot that passed while the Mac was asleep/off (dedup'd per slot).
-# This runs every ~30 min + on login, so a late wake still gets the morning brief.
-if [ -x .venv/bin/python ]; then
-  .venv/bin/python scripts/brief_catchup.py >/dev/null 2>&1 &
-fi
+# (Brief catch-up removed 2026-10-05: the brief now runs in GitHub Actions — cloud,
+# machine-independent — triggered by cron-job.org, so the Mac no longer fires it.)
 
 echo "$(date '+%Y-%m-%d %H:%M') auto-sync done -> $(git rev-parse --short HEAD)"
