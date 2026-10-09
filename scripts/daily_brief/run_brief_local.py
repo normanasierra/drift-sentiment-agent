@@ -59,10 +59,11 @@ def fresh(f: Path) -> bool:
 
 
 def _acquire_lock() -> bool:
-    """True if no other brief run is in progress. The 8am WakeToRun trigger and its
-    StartWhenAvailable catch-up both fire on wake (~1s apart) → two instances → two emails.
-    Only the first gets the lock; a fresh lock (< LOCK_TTL) means another instance owns the run.
-    Never blocks the brief on a lock glitch (returns True on error)."""
+    """True if no other brief run is in progress. Several triggers can fire in the SAME second —
+    the 8am WakeToRun trigger + its StartWhenAvailable catch-up, or (power-on after travel) every
+    missed task catching up at once (seen 4 instances at 20:02:00 on 2026-10-08). So acquisition is
+    ATOMIC via O_EXCL: only ONE process can create the lock file; the rest get FileExistsError and
+    bow out. A stale lock (>= LOCK_TTL, a crashed run) is cleared first. Never blocks on a glitch."""
     try:
         now = datetime.datetime.now().timestamp()
         if LOCK.exists():
@@ -70,11 +71,22 @@ def _acquire_lock() -> bool:
                 prev = float(LOCK.read_text(encoding="utf-8").strip() or 0)
             except Exception:  # noqa: BLE001
                 prev = 0.0
-            if now - prev < LOCK_TTL:      # another instance started recently → it's running
-                return False
+            if now - prev >= LOCK_TTL:          # stale (prior run crashed) → clear it
+                try:
+                    LOCK.unlink()
+                except Exception:  # noqa: BLE001
+                    pass
+            else:
+                return False                    # fresh lock → another instance is running
         OUT.mkdir(exist_ok=True)
-        LOCK.write_text(str(now), encoding="utf-8")
+        fd = os.open(str(LOCK), os.O_CREAT | os.O_EXCL | os.O_WRONLY)  # atomic: exactly one wins
+        try:
+            os.write(fd, str(now).encode("utf-8"))
+        finally:
+            os.close(fd)
         return True
+    except FileExistsError:                     # lost the race — another instance holds the lock
+        return False
     except Exception:  # noqa: BLE001
         return True
 
