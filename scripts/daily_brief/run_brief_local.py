@@ -28,6 +28,11 @@ WA = OUT / "brief_whatsapp.txt"
 LOCK = OUT / "brief.lock"   # dedup: the 8am WakeToRun trigger + its StartWhenAvailable catch-up
 LOCK_TTL = 900              # both fire ~1s apart on wake → 2 emails; a lock < this (s) blocks the 2nd
 _own_lock = False           # True only in the instance that actually acquired the lock
+LAST_SENT = OUT / "brief_last_sent.txt"  # epoch of the last successful send (cooldown dedup)
+COOLDOWN = 7200             # a scheduled (non --force) run skips if a brief went out < 2h ago: the
+#                             atomic lock only stops SIMULTANEOUS dupes; a missed-task catch-up fires
+#                             minutes-to-an-hour after the real run (seen 08:04 + 08:26 on 2026-10-09),
+#                             not overlapping, so it needs a time window. Real 8am/3pm/10pm are 7h+ apart.
 
 
 def load_env() -> None:
@@ -108,6 +113,16 @@ def main() -> None:
         log("otra instancia del brief ya está corriendo — salgo para no duplicar el reporte.")
         return
     _own_lock = True
+    # Cooldown: don't re-send if a brief already went out recently (a missed-task catch-up firing
+    # minutes after the real run). --force (manual regens) bypasses it; real scheduled runs are 7h+ apart.
+    if "--force" not in sys.argv and not dry:
+        try:
+            prev_sent = float(LAST_SENT.read_text(encoding="utf-8").strip()) if LAST_SENT.exists() else 0.0
+        except Exception:  # noqa: BLE001
+            prev_sent = 0.0
+        if datetime.datetime.now().timestamp() - prev_sent < COOLDOWN:
+            log("brief ya enviado hace <2h — salgo para no duplicar (catch-up de tarea atrasada).")
+            return
     _stay_awake()  # keep the PC awake through generation (idle-sleep killed the 3pm run 2026-09-09)
 
     # Skip days the US market is closed (weekends + NYSE holidays), unless --force.
@@ -216,6 +231,11 @@ def main() -> None:
     else:
         log("Telegram no configurado — envío solo por email.")
 
+    if re_.returncode == 0:  # record a successful send so a catch-up within COOLDOWN won't re-send
+        try:
+            LAST_SENT.write_text(str(datetime.datetime.now().timestamp()), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
     log("===== run finished =====")
     sys.exit(0 if re_.returncode == 0 and mobile_ok else 1)
 
