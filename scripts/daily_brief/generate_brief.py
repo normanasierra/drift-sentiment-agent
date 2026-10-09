@@ -267,6 +267,18 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + cc_tg) if wa else cc_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
+    try:  # detailed daily P&L by account (gross/deductions/net) — after-close run only
+        if local.hour >= 16:
+            if str(REPO / "scripts") not in sys.path:
+                sys.path.insert(0, str(REPO / "scripts"))
+            import daily_pnl
+            dp_html, dp_tg = daily_pnl.brief_section()
+            if dp_html:
+                top.append(dp_html)
+            if dp_tg:
+                wa = (wa.rstrip() + "\n\n" + dp_tg) if wa else dp_tg
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
+        pass
     try:  # entries P&L — market-close (4:15pm) run only: today daily, full week on Fridays
         if local.hour >= 16:
             if str(REPO / "scripts") not in sys.path:
