@@ -311,6 +311,15 @@ def generate() -> None:
     except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
         pass
     try:
+        import gamma_walls_screen  # GEX gamma walls for his positions (merged from the Mac report)
+        gw_html, gw_tg = gamma_walls_screen.build()
+        if gw_html:
+            top.append(gw_html)
+        if gw_tg:
+            wa = (wa.rstrip() + "\n\n" + gw_tg) if wa else gw_tg
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
+        pass
+    try:
         import closed_trades  # recently closed positions + realized P&L (exact Schwab amounts)
         ct_html, ct_tg = closed_trades.build()
         if ct_html:
