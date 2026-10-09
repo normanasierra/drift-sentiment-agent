@@ -169,6 +169,7 @@ def _closed_positions(txns: list[dict]) -> list[dict]:
     for (last4, kind, ident), items in groups.items():
         sym_filter = ident if kind == "SYM" else None
         realized = 0.0
+        gross = 0.0
         net_qty = 0.0
         closed_qty = 0.0
         close_dates: list[datetime] = []
@@ -185,6 +186,7 @@ def _closed_positions(txns: list[dict]) -> list[dict]:
                     sym_raw = s
                 amt = li.get("amount") or 0.0
                 net_qty += amt
+                gross += li.get("cost") or 0.0   # trade cash before fees (signed) — gross P&L
                 eff = (li.get("positionEffect") or "").upper()
                 if eff == "CLOSING":
                     closed_qty += abs(amt)
@@ -204,6 +206,8 @@ def _closed_positions(txns: list[dict]) -> list[dict]:
             "sym_raw": sym_raw or "",
             "sym": pretty_occ(sym_raw or ""),
             "realized": round(realized, 2),
+            "gross": round(gross, 2),
+            "fees": round(gross - realized, 2),   # deductions = gross − net realized
             "close_date": close_d.isoformat(),
             "open_date": open_d.isoformat() if open_d else None,
             "contracts": int(round(closed_qty)),

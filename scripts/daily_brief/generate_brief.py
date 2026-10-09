@@ -241,6 +241,15 @@ def generate() -> None:
     _hr = "\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
     top: list[str] = []
     try:
+        import realized_today  # TODAY's realized P&L by account (gross/fees/net) — FIRST, at the top
+        rt_html, rt_tg = realized_today.build()
+        if rt_html:
+            top.append(rt_html)
+        if rt_tg:
+            wa = (rt_tg + "\n\n" + wa.lstrip()) if wa else rt_tg  # lead the WhatsApp/Telegram too
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
+        pass
+    try:
         import rsi_screen
         rsi_html, rsi_wa = rsi_screen.build()
         if rsi_html:
