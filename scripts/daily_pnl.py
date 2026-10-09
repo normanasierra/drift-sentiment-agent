@@ -84,7 +84,6 @@ def _text(data: dict) -> str:
             f"  Bruto del día:                ${d['gross']:,.0f}",
             f"  Comisiones/deducciones:      -${d['fees']:,.2f}",
             f"  NETO del día:                 ${d['net']:,.0f}",
-            f"  Balance cuenta:               ${d['balance']:,.0f}" if d['balance'] is not None else "",
         ]
     lines += ["══════════════════════════",
               f"NETO DEL DÍA (todas):           ${gN:,.0f}",
@@ -109,15 +108,13 @@ def brief_section():
     gN = gF = 0.0
     for label in sorted(data):
         d = data[label]; gN += d["net"]; gF += d["fees"]
-        bal = f"${d['balance']:,.0f}" if d["balance"] is not None else "—"
         rows.append(
             f"<tr><td style='{tdl};font-weight:600' colspan='2'>CUENTA {label}</td></tr>"
             f"<tr><td style='{tdl}'>Realizado hoy (cerrados)</td><td style='{td};color:{sign(d['realized'])}'>${d['realized']:,.0f}</td></tr>"
             f"<tr><td style='{tdl}'>No realizado (abiertas)</td><td style='{td};color:{sign(d['unreal'])}'>${d['unreal']:,.0f}</td></tr>"
             f"<tr><td style='{tdl}'>Bruto del día</td><td style='{td};color:{sign(d['gross'])}'>${d['gross']:,.0f}</td></tr>"
             f"<tr><td style='{tdl}'>Comisiones/deducciones</td><td style='{td};color:#dc2626'>-${d['fees']:,.2f}</td></tr>"
-            f"<tr><td style='{tdl};font-weight:700'>NETO del día</td><td style='{td};font-weight:700;color:{sign(d['net'])}'>${d['net']:,.0f}</td></tr>"
-            f"<tr><td style='{tdl};color:#64748b'>Balance cuenta</td><td style='{td};color:#64748b'>{bal}</td></tr>")
+            f"<tr><td style='{tdl};font-weight:700'>NETO del día</td><td style='{td};font-weight:700;color:{sign(d['net'])}'>${d['net']:,.0f}</td></tr>")
     html = (
         f"<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;margin:20px 0 4px'>"
         f"💰 P&L diario por cuenta — {today.strftime('%m/%d/%Y')}</h2>"
