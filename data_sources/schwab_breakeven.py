@@ -146,12 +146,24 @@ def positions_breakeven() -> list[dict]:
         })
         unders.add(under)
 
-    spot = {}
+    # Spot: Schwab market data (paid, real-time) for equities; Yahoo for indices (SPX→^GSPC,
+    # etc.) and for any equity Schwab can't price — so the table never regresses vs Yahoo-only.
+    spot: dict = {}
+    try:
+        from data_sources import schwab_marketdata as smd
+        eq = sorted({u for u in unders if smd.is_equity_symbol(u) and u not in _YF})
+        sq = smd.quotes(eq)
+        spot = {u: (sq.get(u) or {}).get("price") for u in eq}
+    except Exception:  # noqa: BLE001
+        spot = {}
     try:
         from data_sources import yahoo
-        ymap = {u: _YF.get(u, u) for u in unders}
-        q = yahoo.quotes(sorted(set(ymap.values())))
-        spot = {u: (q.get(ymap[u]) or {}).get("price") for u in unders}
+        need = [u for u in unders if spot.get(u) is None]  # indices + any Schwab miss
+        if need:
+            ymap = {u: _YF.get(u, u) for u in need}
+            q = yahoo.quotes(sorted(set(ymap.values())))
+            for u in need:
+                spot[u] = (q.get(ymap[u]) or {}).get("price")
     except Exception:  # noqa: BLE001
         pass
 

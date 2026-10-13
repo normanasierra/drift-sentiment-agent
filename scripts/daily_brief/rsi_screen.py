@@ -28,13 +28,21 @@ TOP_N = 5  # show the 5 highest-volume names per side per timeframe
 TIMEFRAMES = [("15m", "15 min", "15m", "5d"), ("1d", "1 día", "1d", "6mo")]
 
 
-def _bars(sym: str, interval: str, range_: str, timeout: int = 10):
-    """(closes, volumes) from Yahoo for the given interval/range. ([], []) on any failure."""
+def _bars(sym: str, tf_key: str, y_interval: str, y_range: str, timeout: int = 10):
+    """(closes, volumes) oldest→newest. Schwab market data first (paid, real-time); Yahoo
+    (free, flaky) as fallback so the screen still works if Schwab misses. ([], []) on failure."""
+    try:
+        from data_sources import schwab_marketdata as smd
+        closes, vols = smd.bars(sym, tf_key)
+        if closes:
+            return closes, vols
+    except Exception:  # noqa: BLE001 — fall through to Yahoo
+        pass
     import requests
     try:
         r = requests.get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
-            params={"interval": interval, "range": range_},
+            params={"interval": y_interval, "range": y_range},
             headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout,
         )
         q = r.json()["chart"]["result"][0]["indicators"]["quote"][0]
@@ -71,12 +79,26 @@ def screen() -> tuple[dict, dict]:
     import time
     ob = {k: [] for k, *_ in TIMEFRAMES}
     osd = {k: [] for k, *_ in TIMEFRAMES}
+
+    # One batched Schwab quote for the whole universe → freshest price, appended as the daily
+    # series' forming candle so the daily RSI is as-of-now (Schwab's daily history ends at the
+    # last COMPLETED session; this matches Yahoo's live forming-candle behavior).
+    try:
+        from data_sources import schwab_marketdata as smd
+        live = smd.quotes(UNIVERSE)
+    except Exception:  # noqa: BLE001
+        live = {}
+
+    tf = {k: (k, intv, rng) for k, _lbl, intv, rng in TIMEFRAMES}
     for s in UNIVERSE:
-        dcloses, dvols = _bars(s, "1d", "6mo")  # daily: RSI-1d + volume for ranking both tables
+        dcloses, dvols = _bars(s, *tf["1d"])  # daily: RSI-1d + volume for ranking both tables
         if not dcloses:
             continue
+        lp = (live.get(s) or {}).get("price")
+        if lp is not None and dcloses[-1] != lp:
+            dcloses = dcloses + [float(lp)]  # forming candle = live price (freshness parity)
         vol = float(dvols[-1]) if dvols else 0.0
-        series = {"1d": dcloses, "15m": _bars(s, "15m", "5d")[0]}
+        series = {"1d": dcloses, "15m": _bars(s, *tf["15m"])[0]}
         for key, closes in series.items():
             rs = _rsi(closes)
             if rs is None or not closes:
