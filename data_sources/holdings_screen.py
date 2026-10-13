@@ -152,7 +152,7 @@ def _cc_theta_day(spot, strike, iv, t_years):
 
 def _covered_call_rows(limit: int = 6, lo: float = 80.0, hi: float = 120.0):
     """[(theta, ticker, spot, strike, iv, dte)] for $80-110 names with the highest
-    near-term (7-30 DTE) ATM theta, best first. [] on any failure."""
+    near-term (3-18 DTE) ATM theta, best first. [] on any failure."""
     try:
         import datetime
         from drift_sentiment import polygon_client
@@ -167,7 +167,7 @@ def _covered_call_rows(limit: int = 6, lo: float = 80.0, hi: float = 120.0):
             if not (lo <= spot <= hi):
                 continue
             dtes = sorted({(c.expiration - today).days for c in contracts
-                           if 7 <= (c.expiration - today).days < 30})
+                           if 3 <= (c.expiration - today).days <= 18})
             if not dtes:
                 continue
             dte = dtes[0]
@@ -190,7 +190,7 @@ def covered_call_block(limit: int = 6, lo: float = 80.0, hi: float = 120.0) -> s
     if not rows:
         return ""
     lines = [f"COVERED CALLS — subyacentes ${lo:.0f}-${hi:.0f} con MAYOR theta (mejor prima para "
-             "VENDER calls; venc. 7-30 días; educativo, NO consejo). theta = decaimiento diario "
+             "VENDER calls; venc. 3-18 días; educativo, NO consejo). theta = decaimiento diario "
              "por acción del call ATM (×100 = por contrato). Comenta cada uno:"]
     for theta, t, spot, strike, iv, dte in rows:
         lines.append(f"  {t}: spot {spot:.2f}, call ATM {strike:.0f} ({dte}d), IV {iv*100:.0f}%, "
@@ -220,7 +220,7 @@ def covered_call_html(limit: int = 6, lo: float = 80.0, hi: float = 120.0):
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
         f"margin:20px 0 4px'>🎯 Covered Calls (${lo:.0f}-${hi:.0f}, theta alto)</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        f"Subyacentes ${lo:.0f}-${hi:.0f} con la mayor prima para VENDER calls (ATM, 7-30 días). "
+        f"Subyacentes ${lo:.0f}-${hi:.0f} con la mayor prima para VENDER calls (ATM, 3-18 días). "
         "Theta = decaimiento diario por acción (×100 = por contrato). Educativo, NO asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + body + "</tbody></table>")
