@@ -105,6 +105,34 @@ def _release_lock() -> None:
         pass
 
 
+def _cloud_already_sent_today() -> bool:
+    """CLOUD (Render) cross-machine dedup: True if a 'Brief de Mercado' email is ALREADY in the Gmail
+    inbox today — i.e. the PC (on time) or an earlier cloud run already sent it. This makes the cloud
+    a pure FALLBACK for when the PC is off, never duplicating the on-time PC brief. Needs Gmail IMAP
+    creds in Render's env (GMAIL_USER + GMAIL_APP_PASSWORD, or IMAP_USER/IMAP_PASSWORD). Returns False
+    on any error (deliver — the fallback must not MISS the brief); the cloud runs ~2.5h after the PC,
+    so the PC's morning email is reliably in the inbox by then and a false 'not found' is rare."""
+    import imaplib
+    user = os.getenv("IMAP_USER") or os.getenv("GMAIL_USER")
+    pw = os.getenv("IMAP_PASSWORD") or os.getenv("GMAIL_APP_PASSWORD")
+    if not user or not pw:
+        return False
+    since = datetime.date.today().strftime("%d-%b-%Y")
+    for attempt in range(2):
+        try:
+            M = imaplib.IMAP4_SSL("imap.gmail.com", timeout=30)
+            M.login(user, pw)
+            M.select("INBOX", readonly=True)
+            typ, data = M.search(None, "SINCE", since, "SUBJECT", '"Brief de Mercado"')  # quote the phrase
+            M.logout()
+            return typ == "OK" and bool(data and data[0].split())
+        except Exception:  # noqa: BLE001
+            if attempt == 0:
+                import time as _t
+                _t.sleep(2)
+    return False
+
+
 def main() -> None:
     global _own_lock
     dry = "--dry" in sys.argv
@@ -123,6 +151,12 @@ def main() -> None:
         if datetime.datetime.now().timestamp() - prev_sent < COOLDOWN:
             log("brief ya enviado hace <2h — salgo para no duplicar (catch-up de tarea atrasada).")
             return
+    # Cloud fallback cross-machine dedup: on Render, skip if the PC already emailed today's brief, so
+    # the always-on cloud run never duplicates the on-time PC run. Applies even with --force (which
+    # only bypasses the closed-market guard). No-op off Render (the PC).
+    if os.getenv("RENDER") and not dry and _cloud_already_sent_today():
+        log("la PC ya envió el brief hoy (en el inbox) — la nube no duplica.")
+        return
     _stay_awake()  # keep the PC awake through generation (idle-sleep killed the 3pm run 2026-09-09)
 
     # Skip days the US market is closed (weekends + NYSE holidays), unless --force.

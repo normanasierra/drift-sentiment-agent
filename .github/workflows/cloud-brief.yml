@@ -66,11 +66,6 @@ jobs:
             exit 1
           fi
 
-          # --- Travel window (weekday schedule only). EDIT THESE when Norman travels. ---
-          WIN_START=2026-08-14
-          WIN_END=2026-08-23
-          # -----------------------------------------------------------------------------
-
           TODAY=$(date -u +%Y-%m-%d)
 
           if [ "$EVENT" = "workflow_dispatch" ]; then
@@ -80,12 +75,11 @@ jobs:
             # Sunday-night schedule: ALWAYS fire, force past the closed-market guard.
             JOB="brief_force"
           else
-            # Weekday schedule: fire ONLY inside the travel window; local PC handles it otherwise.
+            # Weekday schedule: ALWAYS fire now — the cloud is the DAILY FALLBACK for when the PC is
+            # off (Norman, 2026-10-13). run_brief_local self-skips closed-market days and, on Render,
+            # skips when the PC already emailed today's brief (Gmail-inbox dedup), so it never
+            # duplicates the on-time PC run. (No more travel-window gating.)
             JOB="brief"
-            if [[ "$TODAY" < "$WIN_START" || "$TODAY" > "$WIN_END" ]]; then
-              echo "Weekday $TODAY is outside the travel window ($WIN_START..$WIN_END) — skipping; the local PC brief handles it."
-              exit 0
-            fi
           fi
 
           echo "Firing cloud job=$JOB at $(date -u '+%Y-%m-%d %H:%M UTC') (today=$TODAY, event=$EVENT, sched='$SCHED')"
