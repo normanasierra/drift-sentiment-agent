@@ -1,12 +1,16 @@
-"""Top-of-brief section: TODAY's realized P&L, detailed BY ACCOUNT, with GROSS, deductions
-(commissions/fees) and NET — the exact Schwab transaction amounts (= thinkorswim to the cent).
+"""After-close brief section: realized P&L detailed BY ACCOUNT with GROSS, deductions (commissions)
+and NET — the exact Schwab transaction amounts (= thinkorswim). Shown only in the 4:15pm after-close
+report (generate_brief gates it to the close hour).
 
-Only positions whose last close is TODAY (Norman's UTC-4 day). Educational — NOT advice.
-Best-effort: returns ('', '') if Schwab's down or nothing closed today, so the brief always sends.
+- Every after-close weekday report: TODAY's realized (positions closed today).
+- FRIDAYS additionally: the current week's total (Mon–Fri).
+Both divided by account and totalized at the end. Educational — NOT advice. Best-effort: ('', '')
+if Schwab's down or nothing to show, so the brief always sends.
 """
 
 from __future__ import annotations
 
+import datetime
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -32,18 +36,10 @@ def _m0(x) -> str:
         return "n/d"
 
 
-def build() -> tuple[str, str]:
-    """(email_html_fragment, telegram_line) for TODAY's realized P&L by account. ('', '') if
-    nothing closed today or Schwab's down."""
-    try:
-        from data_sources import schwab_trades as st
-        today = st._today_local().isoformat()
-        rows = [r for r in st.closed_trades(180, 2) if (r.get("close_date") or "")[:10] == today]
-    except Exception:  # noqa: BLE001
-        return "", ""
-    if not rows:
-        return "", ""
-
+def _section(rows: list[dict], title: str, subtitle: str, total_label: str):
+    """(html, net_total, per_account_net_OrderedDict) for a realized table grouped by account, with
+    per-account subtotals and a grand total at the end. rows: {account, sym, contracts, gross, fees,
+    realized}."""
     by_acct: OrderedDict = OrderedDict()
     for r in sorted(rows, key=lambda x: (x.get("account") or "", x.get("sym") or "")):
         by_acct.setdefault(r.get("account") or "?", []).append(r)
@@ -57,11 +53,13 @@ def build() -> tuple[str, str]:
 
     body = []
     g_gross = g_fees = g_net = 0.0
+    per: OrderedDict = OrderedDict()
     for acct, rs in by_acct.items():
         a_gross = sum(r.get("gross") or 0 for r in rs)
         a_fees = sum(r.get("fees") or 0 for r in rs)
         a_net = sum(r.get("realized") or 0 for r in rs)
         g_gross += a_gross; g_fees += a_fees; g_net += a_net
+        per[acct] = a_net
         for i, r in enumerate(rs):
             net = r.get("realized") or 0.0
             col = GREEN if net >= 0 else RED
@@ -72,16 +70,14 @@ def build() -> tuple[str, str]:
                 f"<td style='{td}'>{_m(r.get('gross'))}</td>"
                 f"<td style='{td};color:{RED}'>-${abs(r.get('fees') or 0):,.2f}</td>"
                 f"<td style='{td};color:{col};font-weight:600'>{_m(net)}</td></tr>")
-        # per-account subtotal
         body.append(
             f"<tr><td style='{tdl};background:#eef2ff;font-weight:700' colspan='3'>{acct} — Subtotal</td>"
             f"<td style='{td};background:#eef2ff;font-weight:700'>{_m(a_gross)}</td>"
             f"<td style='{td};background:#eef2ff;font-weight:700;color:{RED}'>-${abs(a_fees):,.2f}</td>"
             f"<td style='{td};background:#eef2ff;font-weight:700;color:{GREEN if a_net >= 0 else RED}'>"
             f"{_m(a_net)}</td></tr>")
-    # grand total
     body.append(
-        f"<tr><td style='{tdl};background:#dbeafe;font-weight:800' colspan='3'>TOTAL HOY (ambas)</td>"
+        f"<tr><td style='{tdl};background:#dbeafe;font-weight:800' colspan='3'>TOTAL {total_label} (ambas)</td>"
         f"<td style='{td};background:#dbeafe;font-weight:800'>{_m(g_gross)}</td>"
         f"<td style='{td};background:#dbeafe;font-weight:800;color:{RED}'>-${abs(g_fees):,.2f}</td>"
         f"<td style='{td};background:#dbeafe;font-weight:800;color:{GREEN if g_net >= 0 else RED}'>"
@@ -89,16 +85,57 @@ def build() -> tuple[str, str]:
 
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
-        "margin:4px 0 4px'>💰 Realizado HOY — por cuenta</h2>"
+        f"margin:4px 0 4px'>{title}</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        "P&L de posiciones cerradas HOY, con <b>bruto</b>, <b>comisiones</b> (deducciones) y "
-        "<b>neto</b> — montos EXACTOS de Schwab (= thinkorswim). Educativo, NO es asesoría.</p>"
+        f"{subtitle}</p>"
         "<table style='border-collapse:collapse;font:11px -apple-system,Segoe UI,Arial,sans-serif'>"
         "<thead><tr>" + heads + "</tr></thead><tbody>" + "".join(body) + "</tbody></table>")
+    return html, g_net, per
 
-    per = " · ".join(f"{a} {_m0(sum(r.get('realized') or 0 for r in rs))}" for a, rs in by_acct.items())
-    tg = f"💰 Realizado HOY: {per} · Total {_m0(g_net)} (neto)"
-    return html, tg
+
+def build() -> tuple[str, str]:
+    """(email_html_fragment, telegram_line). TODAY's realized by account; on Fridays also the current
+    week's total (Mon–Fri). ('', '') if nothing to show / Schwab down."""
+    try:
+        from data_sources import schwab_trades as st
+        today = st._today_local()
+        all_recent = st.closed_trades(180, 8)  # enough to cover Mon..Fri of the current week
+    except Exception:  # noqa: BLE001
+        return "", ""
+
+    today_iso = today.isoformat()
+    parts: list[str] = []
+    tg: list[str] = []
+
+    day_rows = [r for r in all_recent if (r.get("close_date") or "")[:10] == today_iso]
+    if day_rows:
+        h, net, per = _section(
+            day_rows, "💰 Realizado HOY — por cuenta",
+            "P&L de posiciones cerradas HOY, con <b>bruto</b>, <b>comisiones</b> (deducciones) y "
+            "<b>neto</b> — montos EXACTOS de Schwab (= thinkorswim). Educativo, NO es asesoría.",
+            "HOY")
+        parts.append(h)
+        tg.append("💰 HOY: " + " · ".join(f"{a} {_m0(v)}" for a, v in per.items())
+                  + f" · Total {_m0(net)}")
+
+    if today.weekday() == 4:  # Friday — add the current week's total (Mon–Fri)
+        monday = (today - datetime.timedelta(days=today.weekday())).isoformat()
+        week_rows = [r for r in all_recent
+                     if monday <= (r.get("close_date") or "")[:10] <= today_iso]
+        if week_rows:
+            h, net, per = _section(
+                week_rows, "📅 Realizado SEMANA (Lun–Vie) — por cuenta",
+                "Suma de la <b>semana corriente</b> (lunes a hoy), por cuenta. Montos EXACTOS de "
+                "Schwab, netos de comisiones. Educativo, NO es asesoría.",
+                "SEMANA")
+            parts.append(h)
+            tg.append("📅 Semana: " + " · ".join(f"{a} {_m0(v)}" for a, v in per.items())
+                      + f" · Total {_m0(net)}")
+
+    if not parts:
+        return "", ""
+    sep = "\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:12px 0'>\n"
+    return sep.join(parts), " || ".join(tg)
 
 
 if __name__ == "__main__":

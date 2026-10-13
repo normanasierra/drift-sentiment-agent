@@ -240,15 +240,19 @@ def generate() -> None:
         sys.path.insert(0, str(REPO))
     _hr = "\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
     top: list[str] = []
-    try:
-        import realized_today  # TODAY's realized P&L by account (gross/fees/net) — FIRST, at the top
-        rt_html, rt_tg = realized_today.build()
-        if rt_html:
-            top.append(rt_html)
-        if rt_tg:
-            wa = (rt_tg + "\n\n" + wa.lstrip()) if wa else rt_tg  # lead the WhatsApp/Telegram too
-    except Exception:  # noqa: BLE001 — best-effort; never block the brief
-        pass
+    # Daily realized P&L ONLY in the after-close afternoon report (~4:15pm) — Norman wants the day's
+    # FINAL numbers, so gate to the close hour (16-20h local), not the 8am or 10pm run. On Fridays the
+    # section also appends the current week's total (Mon-Fri). 'local' is UTC-4 (AST).
+    if 16 <= local.hour <= 20:
+        try:
+            import realized_today  # realized P&L by account (gross/fees/net) — FIRST, at the top
+            rt_html, rt_tg = realized_today.build()
+            if rt_html:
+                top.append(rt_html)
+            if rt_tg:
+                wa = (rt_tg + "\n\n" + wa.lstrip()) if wa else rt_tg  # lead the WhatsApp/Telegram too
+        except Exception:  # noqa: BLE001 — best-effort; never block the brief
+            pass
     try:
         import rsi_screen
         rsi_html, rsi_wa = rsi_screen.build()
