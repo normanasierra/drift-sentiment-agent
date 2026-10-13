@@ -32,6 +32,10 @@ MIN_MAG_PCT = 5.0     # magneto at least this % (of spot) away from that wall
 MIN_MAGDIST_PCT = 8.0  # 2nd table: spot at least this % away from the Magneto
 MAX_MAGNET_DTE = 14   # scan 0-14 DTE for the REAL magnet (strong magnets live at ~1-2 weeks, not 0DTE)
 MIN_STRENGTH = 0.20   # only trust a magnet this concentrated — below this the flow is noise
+MIN_MAGNET_EXP_OI = 2000    # an expiration needs at least this total banded OI to host a real magnet
+MIN_MAGNET_OI_FRAC = 0.20   # ...and at least this share of the window's HEAVIEST expiration, so a thin
+#                             far week can't win on "concentration" alone (the bug that let AMD's
+#                             761-OI week beat its 409k-OI dominant Friday)
 SHORT_BAND_PCT = 15.0  # ignore strikes beyond this % of spot (deep-OTM hedges pollute the
 #                        walls/magneto — e.g. a QQQ $515 put wall 28% under a $714 spot)
 
@@ -46,7 +50,12 @@ def _strong_magnet(contracts, spot, as_of):
     """(strength, expiration, banded_contracts, magneto_strike) for the expiration in the 0-14 DTE
     window whose Magneto is the MOST concentrated — the clustered OI that most acts like a real
     magnet pulling the price (Norman: 'mientras más alto el volumen junto al imán, más jala'). None
-    if no expiration has a concentrated-enough magnet (only weak/noisy flow)."""
+    if no expiration has a concentrated-enough magnet (only weak/noisy flow).
+
+    An expiration is eligible only if it carries REAL open interest — at least MIN_MAGNET_EXP_OI
+    contracts in the band AND at least MIN_MAGNET_OI_FRAC of the window's HEAVIEST expiration — so a
+    thin far week whose tiny OI happens to pile on one strike can't win on 'concentration' alone
+    (the bug that made AMD read a 761-OI week over its 409k-OI dominant Friday)."""
     from collections import defaultdict
 
     from drift_sentiment.magneto import magneto, magneto_strength
@@ -55,9 +64,20 @@ def _strong_magnet(contracts, spot, as_of):
         d = (c.expiration - as_of).days
         if 0 <= d <= MAX_MAGNET_DTE:
             by_exp[c.expiration].append(c)
+
+    # Banded contracts + total banded OI per in-window expiration; the OI floor keeps the magnet
+    # where the open interest actually is (the dominant expirations), not on a thin far week.
+    banded = {e: _band(cs, spot) for e, cs in by_exp.items()}
+    oi_by_exp = {e: sum((c.open_interest or 0) for c in b) for e, b in banded.items()}
+    max_oi = max(oi_by_exp.values(), default=0)
+    if max_oi <= 0:
+        return None
+    floor = max(MIN_MAGNET_EXP_OI, MIN_MAGNET_OI_FRAC * max_oi)
+
     best = None  # (strength, exp, banded_contracts, magneto_strike)
-    for e, cs in by_exp.items():
-        b = _band(cs, spot)
+    for e, b in banded.items():
+        if oi_by_exp[e] < floor:          # skip thin expirations — not where the real magnet lives
+            continue
         mg = magneto(b)
         if not mg or not _near(mg[0], spot):
             continue
