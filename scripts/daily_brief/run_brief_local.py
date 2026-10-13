@@ -105,13 +105,14 @@ def _release_lock() -> None:
         pass
 
 
-def _cloud_already_sent_today() -> bool:
-    """CLOUD (Render) cross-machine dedup: True if a 'Brief de Mercado' email is ALREADY in the Gmail
-    inbox today — i.e. the PC (on time) or an earlier cloud run already sent it. This makes the cloud
-    a pure FALLBACK for when the PC is off, never duplicating the on-time PC brief. Needs Gmail IMAP
-    creds in Render's env (GMAIL_USER + GMAIL_APP_PASSWORD, or IMAP_USER/IMAP_PASSWORD). Returns False
-    on any error (deliver — the fallback must not MISS the brief); the cloud runs ~2.5h after the PC,
-    so the PC's morning email is reliably in the inbox by then and a false 'not found' is rare."""
+def _cloud_already_sent_today(phrase: str = "Brief de Mercado") -> bool:
+    """CLOUD (Render) cross-machine dedup: True if an email whose SUBJECT contains ``phrase`` is
+    ALREADY in the Gmail inbox today — i.e. the PC (on time) or an earlier cloud run already sent that
+    report. ``phrase`` is the per-report-type subject ('Brief de Mercado' = the regular/morning run,
+    'Cierre de Mercado' = the 4:15pm after-close run) so the two types dedup INDEPENDENTLY. Makes the
+    cloud a pure FALLBACK for when the PC is off, never duplicating the on-time PC run. Needs Gmail
+    IMAP creds in Render's env (GMAIL_USER + GMAIL_APP_PASSWORD). Returns False on any error (deliver —
+    the fallback must not MISS); the cloud runs well after the PC, so a false 'not found' is rare."""
     import imaplib
     user = os.getenv("IMAP_USER") or os.getenv("GMAIL_USER")
     pw = os.getenv("IMAP_PASSWORD") or os.getenv("GMAIL_APP_PASSWORD")
@@ -123,7 +124,7 @@ def _cloud_already_sent_today() -> bool:
             M = imaplib.IMAP4_SSL("imap.gmail.com", timeout=30)
             M.login(user, pw)
             M.select("INBOX", readonly=True)
-            typ, data = M.search(None, "SINCE", since, "SUBJECT", '"Brief de Mercado"')  # quote the phrase
+            typ, data = M.search(None, "SINCE", since, "SUBJECT", f'"{phrase}"')  # quote the phrase
             M.logout()
             return typ == "OK" and bool(data and data[0].split())
         except Exception:  # noqa: BLE001
@@ -137,6 +138,10 @@ def main() -> None:
     global _own_lock
     dry = "--dry" in sys.argv
     load_env()
+    is_close = "--close" in sys.argv   # the after-close 4:15pm report (realized P&L + Fri weekly)
+    report_phrase = "Cierre de Mercado" if is_close else "Brief de Mercado"  # distinct subject per type
+    if is_close:
+        os.environ["BRIEF_WITH_REALIZED"] = "1"  # tells generate_brief to include the realized section
     if not _acquire_lock():   # another instance is already running (morning trigger fires 2x on wake)
         log("otra instancia del brief ya está corriendo — salgo para no duplicar el reporte.")
         return
@@ -154,8 +159,8 @@ def main() -> None:
     # Cloud fallback cross-machine dedup: on Render, skip if the PC already emailed today's brief, so
     # the always-on cloud run never duplicates the on-time PC run. Applies even with --force (which
     # only bypasses the closed-market guard). No-op off Render (the PC).
-    if os.getenv("RENDER") and not dry and _cloud_already_sent_today():
-        log("la PC ya envió el brief hoy (en el inbox) — la nube no duplica.")
+    if os.getenv("RENDER") and not dry and _cloud_already_sent_today(report_phrase):
+        log(f"la PC ya envió '{report_phrase}' hoy (en el inbox) — la nube no duplica.")
         return
     _stay_awake()  # keep the PC awake through generation (idle-sleep killed the 3pm run 2026-09-09)
 
@@ -253,7 +258,7 @@ def main() -> None:
 
     date_es = datetime.date.today().strftime("%m/%d/%Y")
     log("emailing...")
-    re_ = run("send_email.py", "--subject", f"Brief de Mercado - {date_es}",
+    re_ = run("send_email.py", "--subject", f"{report_phrase} - {date_es}",
               "--body-file", str(EMAIL), "--html")
     log(f"email rc={re_.returncode} {(re_.stdout or re_.stderr).strip()[:200]}")
     log("mensajería móvil (Telegram)...")

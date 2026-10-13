@@ -240,10 +240,10 @@ def generate() -> None:
         sys.path.insert(0, str(REPO))
     _hr = "\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
     top: list[str] = []
-    # Daily realized P&L ONLY in the after-close afternoon report (~4:15pm) — Norman wants the day's
-    # FINAL numbers, so gate to the close hour (16-20h local), not the 8am or 10pm run. On Fridays the
-    # section also appends the current week's total (Mon-Fri). 'local' is UTC-4 (AST).
-    if 16 <= local.hour <= 20:
+    # Daily realized P&L ONLY in the after-close 4:15pm report — set by run_brief_local --close (the PC
+    # DriftBriefClose task + the cloud brief_close job), so it's independent of the exact run hour (the
+    # cloud fires with GitHub's variable lag). On Fridays the section also appends the week's total.
+    if os.getenv("BRIEF_WITH_REALIZED"):
         try:
             import realized_today  # realized P&L by account (gross/fees/net) — FIRST, at the top
             rt_html, rt_tg = realized_today.build()

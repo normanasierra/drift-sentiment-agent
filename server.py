@@ -753,6 +753,9 @@ _TASK_JOBS = {
     # weekend/holiday. Used by the Sunday-night cloud schedule (the PC is powered OFF on
     # weekends, so the local Windows task can't fire). Needs TELEGRAM_BOT_TOKEN in the env.
     "brief_force": ["daily_brief/run_brief_local.py --force"],
+    # After-close 4:15pm report: --close forces the realized-P&L section (daily + Friday weekly) and
+    # uses a distinct 'Cierre de Mercado' subject so it dedups independently from the morning run.
+    "brief_close": ["daily_brief/run_brief_local.py --force --close"],
     "morning": ["breakeven_report.py", "gamma_levels_report.py"],
     "breakeven": ["breakeven_report.py"],
     "gamma": ["gamma_levels_report.py"],

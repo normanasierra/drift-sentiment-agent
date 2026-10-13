@@ -33,7 +33,8 @@ name: Cloud brief (Render trigger)
 on:
   schedule:
     - cron: '30 23 * * 0'     # Sun 23:30 UTC -> lands ~Sun 22:00 AST after GitHub's lag (job=brief_force)
-    - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT weekdays; travel-window only (job=brief)
+    - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT weekdays -> ~11am AST fallback (job=brief)
+    - cron: '30 20 * * 1-5'   # 20:30 UTC weekdays -> after the PC's 4:15pm close -> job=brief_close (realized P&L)
   workflow_dispatch:
     inputs:
       job:
@@ -43,6 +44,7 @@ on:
         options:
           - brief_force
           - brief
+          - brief_close
 
 concurrency:
   group: cloud-brief
@@ -74,10 +76,14 @@ jobs:
           elif [ "$SCHED" = "30 23 * * 0" ]; then
             # Sunday-night schedule: ALWAYS fire, force past the closed-market guard.
             JOB="brief_force"
+          elif [ "$SCHED" = "30 20 * * 1-5" ]; then
+            # Weekday AFTER-CLOSE schedule: the realized-P&L report (daily + Friday weekly). Its
+            # distinct 'Cierre de Mercado' subject dedups it independently from the morning run.
+            JOB="brief_close"
           else
-            # Weekday schedule: ALWAYS fire now — the cloud is the DAILY FALLBACK for when the PC is
-            # off (Norman, 2026-10-13). run_brief_local self-skips closed-market days and, on Render,
-            # skips when the PC already emailed today's brief (Gmail-inbox dedup), so it never
+            # Weekday morning schedule: ALWAYS fire — the cloud is the DAILY FALLBACK for when the PC
+            # is off (Norman, 2026-10-13). run_brief_local self-skips closed-market days and, on
+            # Render, skips when the PC already emailed today's brief (Gmail-inbox dedup), so it never
             # duplicates the on-time PC run. (No more travel-window gating.)
             JOB="brief"
           fi
