@@ -151,9 +151,9 @@ def _cc_theta_day(spot, strike, iv, t_years):
 
 
 def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                       min_theta: float = 0.30):
+                       min_theta: float = 0.20):
     """[(theta, ticker, spot, strike, iv, dte)] for ALL $80-120 names (3-18 DTE) whose ATM call
-    theta clears ``min_theta`` (Norman: theta > 0.30), best first. [] on any failure."""
+    theta clears ``min_theta`` (Norman: theta > 0.20), best first. [] on any failure."""
     try:
         import datetime
         from drift_sentiment import polygon_client
@@ -181,13 +181,13 @@ def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
             rows.append((theta, t, spot, atm.strike, atm.implied_volatility, dte))
         except Exception:  # noqa: BLE001
             continue
-    rows = [r for r in rows if r[0] > min_theta]   # theta floor — Norman: only theta > 0.30
+    rows = [r for r in rows if r[0] > min_theta]   # theta floor — Norman: theta > 0.20
     rows.sort(reverse=True)
     return rows[:limit]
 
 
 def covered_call_block(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                       min_theta: float = 0.30) -> str:
+                       min_theta: float = 0.20) -> str:
     """Text version for the LLM prompt. '' if nothing qualifies."""
     rows = _covered_call_rows(limit, lo, hi, min_theta)
     if not rows:
@@ -202,7 +202,7 @@ def covered_call_block(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
 
 
 def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                      min_theta: float = 0.30):
+                      min_theta: float = 0.20):
     """(email_html_fragment, telegram_line) — a FIXED covered-call table for the brief,
     rendered directly so it always appears (not left to the LLM). ('', '') if none."""
     rows = _covered_call_rows(limit, lo, hi, min_theta)
