@@ -159,6 +159,53 @@ def fetch_chain(ticker: str, *, timeout: int = 30) -> tuple[float, list[Contract
     return spot, contracts
 
 
+def fetch_near_term(
+    ticker: str, *, max_dte: int = 7, timeout: int = 30
+) -> tuple[float, list[Contract]]:
+    """Snapshot of ONLY the contracts expiring within ``max_dte`` days.
+
+    Same universe/parse as :func:`fetch_chain`, but adds a server-side
+    ``expiration_date`` window so it does not page the entire chain — the fast path
+    for near-term scans (expected move / 0-7 DTE ATM straddles) where the whole
+    long-dated chain would be wasted bandwidth (SPX/NDX page into the hundreds).
+    Returns ``(spot, contracts)``; raises :class:`PolygonError` on HTTP/auth issues.
+    """
+    key = _api_key()
+    as_of = today()
+    url = f"{BASE_URL}/v3/snapshot/options/{ticker.upper()}"
+    params = {
+        "expiration_date.gte": as_of.isoformat(),
+        "expiration_date.lte": date.fromordinal(as_of.toordinal() + max_dte).isoformat(),
+        "limit": 250,
+        "apiKey": key,
+    }
+    contracts: list[Contract] = []
+    spot: float | None = None
+    while url:
+        resp = _get_with_retry(url, params, timeout)
+        if resp.status_code != 200:
+            raise PolygonError(
+                f"Near-term snapshot failed ({resp.status_code}): {resp.text[:200]}"
+            )
+        payload = resp.json()
+        for result in payload.get("results", []):
+            if spot is None:
+                ua = result.get("underlying_asset", {})
+                if ua.get("price"):
+                    spot = float(ua["price"])
+                    _record_timeframe(ticker, ua.get("timeframe"))
+            c = _parse_contract(result)
+            if c is not None:
+                contracts.append(c)
+        url = payload.get("next_url")
+        params = {"apiKey": key}
+    if not contracts:
+        raise PolygonError(f"No contracts within {max_dte} DTE for {ticker.upper()}.")
+    if spot is None:
+        spot = _fetch_spot(ticker, key, timeout)
+    return spot, contracts
+
+
 def _third_friday(year: int, month: int) -> date:
     """The 3rd-Friday monthly-expiration date for a given month."""
     first_weekday, _ = calendar.monthrange(year, month)  # Monday=0 .. Sunday=6
