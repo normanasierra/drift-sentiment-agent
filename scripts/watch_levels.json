@@ -1,0 +1,22 @@
+{
+  "_comment": "Niveles clave de MarketSnack que el watcher vigila (ping Telegram a <=0.3%). Candy los refresca al re-sacar MarketSnack. Actualizado 2026-10-14.",
+  "SPX": {
+    "spot_src": "$SPX",
+    "levels": [
+      {"name": "Put Wall / Magneto 7700", "price": 7700},
+      {"name": "Gamma Flip 7734", "price": 7734},
+      {"name": "Call Wall 7740", "price": 7740},
+      {"name": "Call Wall 7800", "price": 7800}
+    ]
+  },
+  "AMD": {
+    "spot_src": "AMD",
+    "levels": [
+      {"name": "Put Wall 560", "price": 560},
+      {"name": "Magneto 580", "price": 580},
+      {"name": "Gamma Flip 590", "price": 590},
+      {"name": "Call Wall 600", "price": 600},
+      {"name": "Call Wall 610", "price": 610}
+    ]
+  }
+}

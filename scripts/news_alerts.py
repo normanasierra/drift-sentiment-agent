@@ -29,6 +29,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SEEN = REPO / "output" / "news_seen.json"
 SIG_SEEN = REPO / "output" / "signal_seen.json"   # Cramer + InfusionTV signal dedup
+WATCH_LEVELS = REPO / "scripts" / "watch_levels.json"  # AMD/SPX MarketSnack levels (tracked config, hand-refreshed)
+LEVEL_SEEN = REPO / "output" / "level_seen.json"       # level-hit dedup (once per level per day; ephemeral)
 NEWS_URL = "https://api.polygon.io/v2/reference/news"
 FRESH_MIN = 30    # only headlines published within this many minutes get pushed
 MAX_SEND = 4      # more than this in one poll -> one summary line (WhatsApp rate limit)
@@ -161,6 +163,68 @@ def _signal_alerts(dry: bool) -> None:
         SIG_SEEN.write_text(json.dumps(list(seen)[-800:]), encoding="utf-8")
 
 
+def _quote_price(symbol: str) -> float | None:
+    """Last price for an equity or index ($SPX, $VIX…) from Schwab market data."""
+    try:
+        import requests
+        from data_sources import schwab
+        tok = schwab._access_token()
+        if not tok:
+            return None
+        r = requests.get("https://api.schwabapi.com/marketdata/v1/quotes", params={"symbols": symbol},
+                         headers={"Authorization": f"Bearer {tok}"}, timeout=15)
+        q = (r.json().get(symbol) or {}).get("quote") or {}
+        p = q.get("lastPrice")
+        if p is None:
+            p = q.get("mark")
+        return float(p) if p is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _level_alerts(dry: bool, near_pct: float = 0.3) -> None:
+    """Ping Telegram when a watched ticker's price comes within ``near_pct`` of a MarketSnack level
+    (output/watch_levels.json), deduped once per level/day. Levels are refreshed by hand when Candy
+    re-pulls MarketSnack — the automated watcher can't reach it (browser-only)."""
+    try:
+        cfg = json.loads(WATCH_LEVELS.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    try:
+        seen = set(json.loads(LEVEL_SEEN.read_text(encoding="utf-8")))
+    except Exception:  # noqa: BLE001
+        seen = set()
+    hits: list[tuple[str, str]] = []
+    for tk, info in cfg.items():
+        if tk.startswith("_") or not isinstance(info, dict):
+            continue  # skip _comment / metadata keys
+        px = _quote_price(info.get("spot_src", tk))
+        if not px:
+            continue
+        for lv in info.get("levels", []):
+            p, name = lv.get("price"), lv.get("name", "")
+            if not p:
+                continue
+            dist = abs(px - p) / p * 100
+            if dist <= near_pct:
+                key = f"{tk}:{name}:{today}"
+                if key not in seen:
+                    arrow = "↑ subiendo a" if px < p else "↓ bajando a"
+                    hits.append((key, f"📍 {tk} ${px:,.2f} — {arrow} {name} (a {dist:.2f}%)"))
+    if not hits:
+        return
+    if dry:
+        print("[DRY] niveles tocados:", [h[1] for h in hits])
+        return
+    for k, msg in hits:
+        _telegram(msg)
+        seen.add(k)
+        time.sleep(1)
+    LEVEL_SEEN.write_text(json.dumps(list(seen)[-500:]), encoding="utf-8")
+
+
 def _load_seen() -> set[str]:
     try:
         return set(json.loads(SEEN.read_text(encoding="utf-8")))
@@ -252,6 +316,7 @@ def main() -> None:
         for a in fresh:
             print("---\n" + _fmt(a))
         _signal_alerts(dry)
+        _level_alerts(dry)
         return
 
     if fresh:
@@ -264,6 +329,7 @@ def main() -> None:
             _telegram(f"📰 {len(fresh)} noticias de mercado nuevas: {heads}…")
     _save_seen(seen)
     _signal_alerts(dry)
+    _level_alerts(dry)
 
 
 if __name__ == "__main__":
