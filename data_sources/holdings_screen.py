@@ -206,8 +206,12 @@ def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
     """(email_html_fragment, telegram_line) — a FIXED covered-call table for the brief,
     rendered directly so it always appears (not left to the LLM). ('', '') if none."""
     rows = _covered_call_rows(limit, lo, hi, min_theta)
-    if not rows:
-        return "", ""
+    if not rows:  # always render the section (even empty) so it never silently vanishes from the brief
+        html = ("<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
+                f"margin:20px 0 4px'>🎯 Covered Calls (${lo:.0f}-${hi:.0f}, theta &gt; {min_theta:.2f})</h2>"
+                "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#64748b;margin:0 0 6px'>"
+                f"Sin candidatos hoy (${lo:.0f}-${hi:.0f}, 3-18 DTE) con theta &gt; {min_theta:.2f}.</p>")
+        return html, ""
     th = ("padding:4px 7px;border:1px solid #e2e8f0;background:#f1f5f9;text-align:right;"
           "font:600 11px -apple-system,Segoe UI,Arial,sans-serif")
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
