@@ -55,17 +55,34 @@ def _config() -> tuple[str, str, str]:
     return user, password, to
 
 
-def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: str, sender: str) -> None:
+def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: str, sender: str,
+                 inline_images: dict[str, str] | None = None) -> None:
     """Send via Resend's HTTPS API — used in the cloud (Render), where outbound SMTP is
-    blocked. Stdlib only (urllib), like send_whatsapp.py."""
+    blocked. Stdlib only (urllib), like send_whatsapp.py. ``inline_images`` (cid -> path) ride
+    along as inline attachments (content_id) when the files exist."""
+    import base64
     import json
     import urllib.error
     import urllib.request
 
-    payload = json.dumps({
+    body_payload: dict[str, object] = {
         "from": sender, "to": [to], "subject": subject,
         ("html" if html else "text"): body,
-    }).encode("utf-8")
+    }
+    attachments = []
+    for cid, path in (inline_images or {}).items():
+        try:
+            with open(path, "rb") as fh:
+                attachments.append({
+                    "filename": f"{cid}.png",
+                    "content": base64.b64encode(fh.read()).decode("ascii"),
+                    "content_id": cid,  # lets <img src="cid:cid"> resolve inline
+                })
+        except OSError:
+            pass
+    if attachments:
+        body_payload["attachments"] = attachments
+    payload = json.dumps(body_payload).encode("utf-8")
     req = urllib.request.Request(
         "https://api.resend.com/emails", data=payload, method="POST",
         headers={
@@ -87,7 +104,17 @@ def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: str, 
     print(f"Email sent to {to} via Resend ({'HTML' if html else 'plain'}).")
 
 
-def send_email(subject: str, body: str, *, html: bool = False) -> None:
+def send_email(
+    subject: str,
+    body: str,
+    *,
+    html: bool = False,
+    inline_images: dict[str, str] | None = None,
+) -> None:
+    """Send the brief. ``inline_images`` maps a Content-ID to a local image path; each is
+    embedded inline so the HTML can reference it as ``<img src="cid:THAT_ID">``. Only the
+    local Gmail-SMTP path embeds them (the cloud fallback rarely has the chart files)."""
+    inline_images = inline_images or {}
     # In the cloud (Render blocks outbound SMTP) send via Resend's HTTPS API when it's
     # configured; locally keep using Gmail SMTP (works there, keeps your own From).
     resend_key = os.getenv("RESEND_API_KEY")
@@ -96,7 +123,8 @@ def send_email(subject: str, body: str, *, html: bool = False) -> None:
         if not to:
             raise EmailError("BRIEF_EMAIL_TO / GMAIL_USER no está seteado.")
         sender = os.getenv("RESEND_FROM", "Brief de Mercado <onboarding@resend.dev>")
-        _send_resend(subject, body, html=html, api_key=resend_key, to=to, sender=sender)
+        _send_resend(subject, body, html=html, api_key=resend_key, to=to, sender=sender,
+                     inline_images=inline_images)
         return
 
     user, password, to = _config()
@@ -108,6 +136,15 @@ def send_email(subject: str, body: str, *, html: bool = False) -> None:
     if html:
         msg.set_content("This message requires an HTML-capable email client.")
         msg.add_alternative(body, subtype="html")
+        if inline_images:
+            html_part = msg.get_payload()[-1]  # the text/html alternative just added
+            for cid, path in inline_images.items():
+                try:
+                    with open(path, "rb") as fh:
+                        html_part.add_related(fh.read(), maintype="image",
+                                              subtype="png", cid=f"<{cid}>")
+                except OSError:
+                    pass  # a missing chart must never block the brief
     else:
         msg.set_content(body)
 
@@ -139,7 +176,17 @@ def main() -> int:
     parser.add_argument(
         "--html", action="store_true", help="Send the body as HTML."
     )
+    parser.add_argument(
+        "--inline-image", action="append", default=[], metavar="CID=PATH",
+        help="Embed an inline image the HTML references as <img src='cid:CID'>. Repeatable.",
+    )
     args = parser.parse_args()
+
+    inline: dict[str, str] = {}
+    for spec in args.inline_image:
+        if "=" in spec:
+            cid, path = spec.split("=", 1)
+            inline[cid.strip()] = path.strip()
 
     if args.body_file:
         with open(args.body_file, "r", encoding="utf-8") as fh:
@@ -150,7 +197,7 @@ def main() -> int:
     if not body.strip():
         raise EmailError("Empty body — nothing to send.")
 
-    send_email(args.subject, body, html=args.html)
+    send_email(args.subject, body, html=args.html, inline_images=inline or None)
     return 0
 
 

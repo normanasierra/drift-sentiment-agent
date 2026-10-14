@@ -252,6 +252,8 @@ def main() -> None:
         sys.exit(1)
     log("brief files OK.")
 
+    inline_args = _embed_walls_charts()  # append AMD/SPX MarketSnack wall charts (if present)
+
     if dry:
         log("===== DRY run done (not sending) =====")
         return
@@ -259,7 +261,7 @@ def main() -> None:
     date_es = datetime.date.today().strftime("%m/%d/%Y")
     log("emailing...")
     re_ = run("send_email.py", "--subject", f"{report_phrase} - {date_es}",
-              "--body-file", str(EMAIL), "--html")
+              "--body-file", str(EMAIL), "--html", *inline_args)
     log(f"email rc={re_.returncode} {(re_.stdout or re_.stderr).strip()[:200]}")
     log("mensajería móvil (Telegram)...")
     mobile_ok = True
@@ -277,6 +279,47 @@ def main() -> None:
             pass
     log("===== run finished =====")
     sys.exit(0 if re_.returncode == 0 and mobile_ok else 1)
+
+
+def _embed_walls_charts() -> list[str]:
+    """Embed the latest AMD + SPX MarketSnack wall charts into the brief HTML and return the
+    ``--inline-image`` args for send_email.py. The headless brief CANNOT reach MarketSnack
+    (browser-only), so these are the PNGs Candy generated on the last manual re-pull — each is
+    stamped with its generation date/time, and anything older than a day gets an amber
+    'refresh' flag, so a stale chart is never shown as if it were today's."""
+    charts = [("amd_walls", OUT / "amd_walls_week.png", "AMD"),
+              ("spx_walls", OUT / "spx_walls_week.png", "SPX")]
+    present = [(cid, p, label) for cid, p, label in charts if fresh(p)]
+    if not present:
+        return []
+    now = datetime.datetime.now()
+    blocks = ['<h3 style="color:#e8eaed;font-family:system-ui,Segoe UI,sans-serif;'
+              'margin:22px 0 6px">🧱 Muros por vencimiento (MarketSnack)</h3>']
+    inline_args: list[str] = []
+    for cid, p, label in present:
+        mtime = datetime.datetime.fromtimestamp(p.stat().st_mtime)
+        stamp = mtime.strftime("%d-%b %I:%M%p")
+        warn = ('  ·  <span style="color:#f0a030">⏳ conviene refrescar con MarketSnack</span>'
+                if (now - mtime).days >= 1 else '')
+        inline_args += ["--inline-image", f"{cid}={p}"]
+        blocks.append(
+            f'<div style="margin:8px 0 14px">'
+            f'<img src="cid:{cid}" alt="{label} muros" '
+            f'style="max-width:100%;height:auto;border-radius:8px"/>'
+            f'<div style="color:#9aa7b5;font-size:12px;'
+            f'font-family:system-ui,Segoe UI,sans-serif;margin-top:3px">'
+            f'{label} — MarketSnack, generada {stamp}{warn}</div></div>')
+    try:
+        html = EMAIL.read_text(encoding="utf-8")
+        injection = "\n".join(blocks)
+        html = (html.replace("</body>", injection + "\n</body>")
+                if "</body>" in html else html + "\n" + injection)
+        EMAIL.write_text(html, encoding="utf-8")
+        log(f"muros embebidos en el brief: {', '.join(l for _, _, l in present)}.")
+    except Exception as exc:  # noqa: BLE001 — never let chart embedding break the brief
+        log(f"aviso: no pude embeber las gráficas de muros ({exc}); sigo sin ellas.")
+        return []
+    return inline_args
 
 
 def _stay_awake(on: bool = True) -> None:
