@@ -64,6 +64,14 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    para el mercado hoy**. Prioriza lo que mueve índices / tasas / sectores esta
    mañana. Resume bien: claro, concreto y sin relleno.
 
+3b. **Jim Cramer / CNBC Investing Club** (Norman lo sigue MUY de cerca): del bloque DATOS REALES
+   → **JIM CRAMER**, **ANALIZA y RESUME sus jugadas** — sus upgrades/downgrades, compras/adds,
+   ventas y las **acciones** que nombra, con su **postura** (comprar/añadir/mantener/vender) y el
+   **porqué**. El cuerpo del email es solo teaser (la tesis completa está tras su login), así que
+   **sintetiza de los TITULARES**. Cierra con una lectura de su **sesgo de la semana** (ej.
+   "alcista en financieras: upgrades a Goldman y Wells Fargo; añade a X; ve J&J como compra").
+   Educativo, NO recomendación.
+
 4. **Trump**: busca lo más reciente y relevante para el MERCADO que haya dicho
    o hecho Trump (declaraciones, aranceles, Fed, política económica, órdenes
    ejecutivas). Resume en 2-4 viñetas con enfoque en impacto de mercado. Si no
@@ -123,6 +131,10 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   7 Magníficas están ALINEADAS.
 - **Noticias macro de HOY**: 3-5 viñetas (titular en negrita + por qué importa
   para el mercado hoy). De overnight / pre-mercado — **no** recap de ayer.
+- **🗞️ Jim Cramer / CNBC Investing Club**: 2-4 viñetas que **RESUMEN y ANALIZAN** sus
+  jugadas (upgrade/compra/venta + la **acción** y su **postura**), del bloque JIM CRAMER.
+  Es un **análisis** de sus posiciones, NO solo titulares. Cierra con su **sesgo de la semana**.
+  Si el bloque no trae nada, omite.
 - **Movers ≥5%** (usa el bloque DATOS REALES: "MOVERS PRE-MERCADO" en la corrida de
   la MAÑANA, o "MOVERS DEL DÍA" en la de la TARDE). Lista las compañías que suben
   **≥5%** con su símbolo, el **%** y el precio; añade una frase de **por qué se

@@ -250,8 +250,10 @@ def _cramer_block() -> str:
         return ""
     if not items:
         return ""
-    lines = ["JIM CRAMER / CNBC INVESTING CLUB (ABRE y RESUME BIEN cada nota: su tesis, las "
-             "acciones que nombra y su postura comprar/vender/mantener — Norman lo sigue de cerca):"]
+    lines = ["JIM CRAMER / CNBC INVESTING CLUB (ANALIZA y RESUME sus jugadas DE LOS TITULARES: "
+             "upgrades/downgrades, compras/adds, ventas, las acciones que nombra y su postura "
+             "comprar/añadir/mantener/vender. El cuerpo es solo teaser — la tesis completa está "
+             "tras su login — así que sintetiza del titular. Norman lo sigue MUY de cerca):"]
     for it in items[:6]:
         body = " ".join((it.get("body") or "").split())[:1600]
         lines.append(f"  · [{it.get('when', '')}] {it.get('subject', '')}")
