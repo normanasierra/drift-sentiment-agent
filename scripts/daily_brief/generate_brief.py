@@ -271,6 +271,15 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + cc_tg) if wa else cc_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
+    try:  # Jim Cramer / CNBC Investing Club — actionable calls (upgrades/buys/sells), fixed section
+        import cramer_screen
+        cr_html, cr_tg = cramer_screen.build()
+        if cr_html:
+            top.append(cr_html)
+        if cr_tg:
+            wa = (wa.rstrip() + "\n\n" + cr_tg) if wa else cr_tg
+    except Exception:  # noqa: BLE001 — best-effort; never block the brief
+        pass
     try:  # detailed daily P&L by account (gross/deductions/net) — after-close run only
         if local.hour >= 16:
             if str(REPO / "scripts") not in sys.path:
