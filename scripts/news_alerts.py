@@ -28,6 +28,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 SEEN = REPO / "output" / "news_seen.json"
+SIG_SEEN = REPO / "output" / "signal_seen.json"   # Cramer + InfusionTV signal dedup
 NEWS_URL = "https://api.polygon.io/v2/reference/news"
 FRESH_MIN = 30    # only headlines published within this many minutes get pushed
 MAX_SEND = 4      # more than this in one poll -> one summary line (WhatsApp rate limit)
@@ -97,6 +98,69 @@ def whatsapp(text: str) -> None:
         pass
 
 
+def _telegram(text: str) -> None:
+    """Send via Telegram — the live alert channel (WhatsApp/CallMeBot quota died)."""
+    try:
+        p = str(REPO / "scripts" / "daily_brief")
+        if p not in sys.path:
+            sys.path.insert(0, p)
+        from send_telegram import send_telegram
+        send_telegram(text)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _signal_alerts(dry: bool) -> None:
+    """Cramer calls + InfusionTV NEW signals from email -> Telegram, deduped
+    (output/signal_seen.json). Near-real-time (every ~10 min). First run seeds a baseline
+    silently so it never blasts the backlog."""
+    items: list[tuple[str, str]] = []
+    try:
+        p = str(REPO / "scripts" / "daily_brief")
+        if p not in sys.path:
+            sys.path.insert(0, p)
+        import cramer_screen
+        for c in cramer_screen.calls(since_days=1):
+            items.append((f"cramer:{c['subject']}|{c['when']}",
+                          f"🗞️ CRAMER {c['stance']}\n{c['subject']}\n"
+                          f"(CNBC Investing Club · {c['when']})"))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from data_sources import email_inbox
+        for s in email_inbox.infusion_signals(since_days=1, new_only=True):
+            tgt = f" · 🎯 {s['target']}" if s.get("target") else ""
+            dirn = f" {s['direction']}" if s.get("direction") else ""
+            items.append((f"infusion:{s['subject']}|{s['when']}",
+                          f"📡 INFUSION TV — señal nueva: {s['ticker']}{dirn}{tgt}\n"
+                          f"{s['subject']}\nhttps://miembros.infusiontv.app/signal-tracker"))
+    except Exception:  # noqa: BLE001
+        pass
+    if not items:
+        return
+    try:
+        seen = set(json.loads(SIG_SEEN.read_text(encoding="utf-8")))
+    except Exception:  # noqa: BLE001
+        seen = set()
+    first = not SIG_SEEN.exists()
+    new = [(k, t) for k, t in items if k not in seen]
+    if first and not dry:
+        SIG_SEEN.parent.mkdir(exist_ok=True)
+        SIG_SEEN.write_text(json.dumps([k for k, _ in items]), encoding="utf-8")
+        return
+    if dry:
+        print(f"[DRY] señales nuevas (Cramer/Infusion): {len(new)}")
+        for _k, t in new:
+            print("---\n" + t)
+        return
+    for k, t in new:
+        _telegram(t)
+        seen.add(k)
+        time.sleep(1)
+    if new:
+        SIG_SEEN.write_text(json.dumps(list(seen)[-800:]), encoding="utf-8")
+
+
 def _load_seen() -> set[str]:
     try:
         return set(json.loads(SEEN.read_text(encoding="utf-8")))
@@ -154,8 +218,8 @@ def _fmt(a: dict) -> str:
 def main() -> None:
     load_env()
     if "--hello" in sys.argv:
-        whatsapp("✅ Candy: vigilante de NOTICIAS activo. Te aviso aquí al instante "
-                 "cuando salga una noticia de mercado relevante (tus tickers o macro). 🖤")
+        _telegram("✅ Candy: vigilante activo — noticias de mercado + calls de Cramer + señales "
+                  "de Infusion TV. Te aviso al instante por aquí. 🖤")
         return
 
     arts = _fetch()
@@ -184,20 +248,22 @@ def main() -> None:
             fresh.append(a)
 
     if dry:
-        print(f"[DRY] {len(fresh)} se enviarían:")
+        print(f"[DRY] {len(fresh)} noticias se enviarían:")
         for a in fresh:
             print("---\n" + _fmt(a))
+        _signal_alerts(dry)
         return
 
     if fresh:
         if len(fresh) <= MAX_SEND:
             for a in fresh:
-                whatsapp(_fmt(a))
-                time.sleep(5)
+                _telegram(_fmt(a))
+                time.sleep(2)
         else:
             heads = " · ".join((x.get("title") or "")[:40] for x in fresh[:5])
-            whatsapp(f"📰 {len(fresh)} noticias de mercado nuevas: {heads}…")
+            _telegram(f"📰 {len(fresh)} noticias de mercado nuevas: {heads}…")
     _save_seen(seen)
+    _signal_alerts(dry)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from __future__ import annotations
 import email
 import imaplib
 import os
+import re
 from email.header import decode_header
 
 from dotenv import load_dotenv
@@ -194,6 +195,65 @@ def cramer_notes(*, since_days: int = 2, max_msgs: int = 6) -> list[dict]:
                     "subject": subj,
                     "body": _declutter_cramer(_readable_body(msg))[:4500],
                     "when": _email_when(msg),
+                })
+        M.logout()
+    except Exception:  # noqa: BLE001
+        return []
+    return out
+
+
+INFUSION_SENDERS = ["infusiontv", "infusioninvestments"]
+# "Alerta de señal: New signal: TSM" / "... Signal moved: SMH" -> (kind, ticker)
+_INFUSION_SIG = re.compile(r"(New signal|Signal moved)\s*:?\s*([A-Z]{1,6})\b", re.I)
+
+
+def infusion_signals(*, since_days: int = 2, max_msgs: int = 20,
+                     new_only: bool = False) -> list[dict]:
+    """InfusionTV signal-alert emails (FROM infusiontv) as
+    [{subject, ticker, kind, direction, target, body, when}]. ``kind`` is 'new' (New signal) or
+    'moved' (Signal moved); ``new_only`` keeps just brand-new signals. These are Infusion Capital's
+    swing-trade / premium-sell mentor alerts, which Norman follows. [] if none/unconfigured."""
+    user = os.getenv("IMAP_USER") or os.getenv("SMTP_USER") or os.getenv("GMAIL_USER")
+    pw = (os.getenv("IMAP_PASSWORD") or os.getenv("SMTP_PASSWORD")
+          or os.getenv("GMAIL_APP_PASSWORD"))
+    if not user or not pw:
+        return []
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=since_days)).strftime("%d-%b-%Y")
+    out: list[dict] = []
+    seen: set[str] = set()
+    try:
+        M = imaplib.IMAP4_SSL(IMAP_HOST)
+        M.login(user, pw)
+        M.select("INBOX", readonly=True)
+        for frag in INFUSION_SENDERS:
+            typ, data = M.search(None, "SINCE", since, "FROM", frag)
+            if typ != "OK":
+                continue
+            for num in (data[0].split() or [])[-max_msgs:]:
+                typ, msg_data = M.fetch(num, "(RFC822)")
+                if typ != "OK" or not msg_data or not msg_data[0]:
+                    continue
+                msg = email.message_from_bytes(msg_data[0][1])
+                subj = _decode(msg.get("Subject"))
+                m = _INFUSION_SIG.search(subj)
+                if not m:  # only real signal alerts ("New signal: X" / "Signal moved: X")
+                    continue
+                mid = _decode(msg.get("Message-ID")) or subj
+                if mid in seen:
+                    continue
+                seen.add(mid)
+                kind = "moved" if "moved" in m.group(1).lower() else "new"
+                if new_only and kind != "new":
+                    continue
+                body = " ".join((_readable_body(msg) or "").split())
+                dirn = re.search(r"Direction:\s*(long|short)", body, re.I)
+                tgt = re.search(r"Target:\s*([\d.]+)", body, re.I)
+                out.append({
+                    "subject": subj, "ticker": m.group(2).upper(), "kind": kind,
+                    "direction": dirn.group(1).lower() if dirn else "",
+                    "target": tgt.group(1) if tgt else None,
+                    "body": body[:600], "when": _email_when(msg),
                 })
         M.logout()
     except Exception:  # noqa: BLE001

@@ -32,7 +32,7 @@ name: Cloud brief (Render trigger)
 # =============================================================================
 on:
   schedule:
-    - cron: '30 23 * * 0'     # Sun 23:30 UTC -> lands ~Sun 22:00 AST after GitHub's lag (job=brief_force)
+    - cron: '30 20 * * 0'     # Sun 20:30 UTC -> lands ~Sun 19:00 AST (7pm) after GitHub's lag (job=brief_force)
     - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT weekdays -> ~11am AST fallback (job=brief)
     - cron: '30 20 * * 1-5'   # 20:30 UTC weekdays -> after the PC's 4:15pm close -> job=brief_close (realized P&L)
   workflow_dispatch:
@@ -73,8 +73,8 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ]; then
             # Manual run: force-send by default so an end-to-end test works any day.
             JOB="${DISPATCH_JOB:-brief_force}"
-          elif [ "$SCHED" = "30 23 * * 0" ]; then
-            # Sunday-night schedule: ALWAYS fire, force past the closed-market guard.
+          elif [ "$SCHED" = "30 20 * * 0" ]; then
+            # Sunday 7pm schedule: ALWAYS fire, force past the closed-market guard.
             JOB="brief_force"
           elif [ "$SCHED" = "30 20 * * 1-5" ]; then
             # Weekday AFTER-CLOSE schedule: the realized-P&L report (daily + Friday weekly). Its
