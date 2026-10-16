@@ -240,19 +240,7 @@ def generate() -> None:
         sys.path.insert(0, str(REPO))
     _hr = "\n<hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>\n"
     top: list[str] = []
-    # Daily realized P&L ONLY in the after-close 4:15pm report — set by run_brief_local --close (the PC
-    # DriftBriefClose task + the cloud brief_close job), so it's independent of the exact run hour (the
-    # cloud fires with GitHub's variable lag). On Fridays the section also appends the week's total.
-    if os.getenv("BRIEF_WITH_REALIZED"):
-        try:
-            import realized_today  # realized P&L by account (gross/fees/net) — FIRST, at the top
-            rt_html, rt_tg = realized_today.build()
-            if rt_html:
-                top.append(rt_html)
-            if rt_tg:
-                wa = (rt_tg + "\n\n" + wa.lstrip()) if wa else rt_tg  # lead the WhatsApp/Telegram too
-        except Exception:  # noqa: BLE001 — best-effort; never block the brief
-            pass
+    # (Daily realized P&L is now folded into the single merged money report below — Norman, 2026-10-16.)
     try:
         import rsi_screen
         rsi_html, rsi_wa = rsi_screen.build()
@@ -280,28 +268,38 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + cr_tg) if wa else cr_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
-    try:  # detailed daily P&L by account (gross/deductions/net) — after-close run only
+    try:  # ONE merged money report, after-close only (Norman, 2026-10-16): today's P&L by account
+        # (realized + unrealized + balance) with the closed-trades table joined right below it, and on
+        # Fridays the week's realized total (Mon–Fri) underneath. Replaces the old separate
+        # realized_today / daily_pnl / weekly_entries / closed_trades sections. Break-even table is kept.
         if local.hour >= 16:
-            if str(REPO / "scripts") not in sys.path:
-                sys.path.insert(0, str(REPO / "scripts"))
+            for _p in (REPO / "scripts", REPO / "scripts" / "daily_brief"):
+                if str(_p) not in sys.path:
+                    sys.path.insert(0, str(_p))
             import daily_pnl
+            import closed_trades
             dp_html, dp_tg = daily_pnl.brief_section()
-            if dp_html:
-                top.append(dp_html)
-            if dp_tg:
-                wa = (wa.rstrip() + "\n\n" + dp_tg) if wa else dp_tg
-    except Exception:  # noqa: BLE001 — best-effort; never block the brief
-        pass
-    try:  # entries P&L — market-close (4:15pm) run only: today daily, full week on Fridays
-        if local.hour >= 16:
-            if str(REPO / "scripts") not in sys.path:
-                sys.path.insert(0, str(REPO / "scripts"))
-            import weekly_entries_pnl as wep
-            ep_html, ep_tg = wep.brief_section("week" if local.weekday() == 4 else "today")
-            if ep_html:
-                top.append(ep_html)
-            if ep_tg:
-                wa = (wa.rstrip() + "\n\n" + ep_tg) if wa else ep_tg
+            ct_html, ct_tg = closed_trades.build(recent_days=1)  # today's closes (the daily report)
+            wk_html = ""
+            if local.weekday() == 4:  # Friday: week's realized total (Mon–Fri) below the daily report
+                try:
+                    from data_sources import schwab_trades
+                    tw = schwab_trades.realized_totals(180, 5) or {}
+                    per = tw.get("per_account") or {}
+                    grand = tw.get("grand")
+                    if grand is not None:
+                        bits = " · ".join(f"{k} ${v:+,.2f}" for k, v in per.items())
+                        wk_html = ("<p style='font:13px -apple-system,Segoe UI,Arial,sans-serif;"
+                                   "color:#0f172a;margin:10px 0 0'>📅 <b>Semana (Lun–Vie) — realizado:</b> "
+                                   + (bits + " · " if bits else "") + f"<b>Total ${grand:+,.2f}</b></p>")
+                except Exception:  # noqa: BLE001
+                    pass
+            combined = "".join(x for x in (dp_html, ct_html, wk_html) if x)
+            if combined.strip():
+                top.append(combined)  # single entry → no <hr> between daily P&L and closed trades
+            for _tg in (dp_tg, ct_tg):
+                if _tg:
+                    wa = (wa.rstrip() + "\n\n" + _tg) if wa else _tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:
@@ -353,15 +351,7 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + gw_tg) if wa else gw_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
-    try:
-        import closed_trades  # recently closed positions + realized P&L (exact Schwab amounts)
-        ct_html, ct_tg = closed_trades.build()
-        if ct_html:
-            top.append(ct_html)
-        if ct_tg:
-            wa = (wa.rstrip() + "\n\n" + ct_tg) if wa else ct_tg
-    except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
-        pass
+    # (Closed trades are now merged into the single money report above — Norman, 2026-10-16.)
     if top:
         email = _hr.join(top) + _hr + email
 
