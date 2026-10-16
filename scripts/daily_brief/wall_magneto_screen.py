@@ -26,10 +26,11 @@ UNIVERSE = [
 MIN_GAP_PCT = 8.0     # earnings ⭐: magneto at least this far (% of spot) from the dominant wall
 MAX_LEVEL_PCT = 35.0  # ignore magneto/walls beyond this % of spot — not a near-term level
 
-# --- Wall-glue setup (0-7 DTE): the ONLY magneto/wall report in the brief now (2026-09-08) ---
-GLUE_PCT = 2.0        # spot within this % of a wall = "pegada al muro"
-MIN_MAG_PCT = 5.0     # magneto at least this % (of spot) away from that wall
-MIN_MAGDIST_PCT = 8.0  # 2nd table: spot at least this % away from the Magneto
+# --- Wall-glue setup (Norman 2026-10-16): stocks GLUED (within GLUE_PTS points) to a wall while the
+#     strongest Magneto sits MORE than MAG_FAR_PTS points away. Absolute POINTS ($), not percent. ---
+GLUE_PTS = 5.0        # spot within this many points ($) of a wall = "pegada al muro" (Norman: ≤5)
+MAG_FAR_PTS = 20.0    # ...and the Magneto must be MORE than this many points ($) from spot
+MIN_MAGDIST_PCT = 8.0  # 2nd table (magdist): spot at least this % away from the Magneto
 MAX_MAGNET_DTE = 14   # scan 0-14 DTE for the REAL magnet (strong magnets live at ~1-2 weeks, not 0DTE)
 MIN_STRENGTH = 0.20   # only trust a magnet this concentrated — below this the flow is noise
 MIN_MAGNET_EXP_OI = 2000    # an expiration needs at least this total banded OI to host a real magnet
@@ -438,10 +439,10 @@ def build_bounce() -> tuple[str, str]:
 
 
 def _glue(spot, contracts, as_of):
-    """Setup dict for a stock PINNED (<= GLUE_PCT) to its nearest wall when that wall is the WEAK
-    one — the opposite wall OR the (strong) Magneto holds more OI — and the price is NOT on the
-    Magneto. Levels come from the expiration with the STRONGEST magnet (0-14 DTE). None if it
-    doesn't qualify."""
+    """Setup dict for a stock GLUED within GLUE_PTS points of its nearest wall (put OR call) while
+    its strongest Magneto sits MORE than MAG_FAR_PTS points away — price pinned to a wall with the
+    magnet pulling from far (Norman 2026-10-16). Levels come from the expiration with the STRONGEST
+    magnet (0-14 DTE). None if it doesn't qualify."""
     from drift_sentiment.walls import call_wall, put_wall
     sm = _strong_magnet(contracts, spot, as_of)   # strongest (real) magnet + its expiration
     if not sm:
@@ -450,28 +451,24 @@ def _glue(spot, contracts, as_of):
     cw, pw = call_wall(cs), put_wall(cs)
     if not (cw and pw):
         return None
-    # nearest wall to the price (where it's pinned) vs the opposite wall
-    call, put = ("call", cw.strike, cw.open_interest or 0), ("put", pw.strike, pw.open_interest or 0)
-    near, opp = (call, put) if abs(cw.strike - spot) <= abs(pw.strike - spot) else (put, call)
-    if abs(near[1] - spot) / spot * 100 > GLUE_PCT:      # must be pinned to the near wall
+    # the wall (put or call) NEAREST to the price — the one it's glued to
+    call = ("call", cw.strike, cw.open_interest or 0)
+    put = ("put", pw.strike, pw.open_interest or 0)
+    near = call if abs(cw.strike - spot) <= abs(pw.strike - spot) else put
+    wall_dist = abs(near[1] - spot)
+    if wall_dist > GLUE_PTS:                 # must be GLUED (<= 2 pts) to a wall
         return None
-    if abs(mag_s - spot) / spot * 100 <= GLUE_PCT:       # must NOT be pinned to the magnet
+    mag_dist = abs(mag_s - spot)
+    if mag_dist <= MAG_FAR_PTS:              # ...and the Magneto must be MORE than 20 pts away
         return None
-    mag_oi = sum((c.open_interest or 0) for c in cs if c.strike == mag_s)  # OI at the magnet strike
-    if not (opp[2] > near[2] or mag_oi > near[2]):        # near wall must be the WEAKER one
-        return None
-    # target = the bigger force by OI (opposite wall or the magnet)
-    if mag_oi >= opp[2]:
-        tgt, tstrike, toi = "imán", mag_s, mag_oi
-    else:
-        tgt, tstrike, toi = f"muro {opp[0]}", opp[1], opp[2]
-    return {"side": near[0], "wall": near[1], "wall_oi": near[2], "tgt": tgt, "tgt_s": tstrike,
-            "tgt_oi": toi, "dist": abs(tstrike - spot) / spot * 100, "fuerza": strength,
-            "dir": "↑" if tstrike > spot else "↓", "dte": (e - as_of).days, "spot": spot}
+    return {"side": near[0], "wall": near[1], "wall_oi": near[2], "wall_dist": wall_dist,
+            "mag": mag_s, "mag_dist": mag_dist, "fuerza": strength,
+            "dir": "↑" if mag_s > spot else "↓", "dte": (e - as_of).days, "spot": spot}
 
 
 def screen_wallglue() -> list[dict]:
-    """Universe names pinned to a wall with the Magneto >= 5% away, 0-7 DTE, biggest room first."""
+    """Universe names glued (<= GLUE_PTS pts) to a wall with the Magneto > MAG_FAR_PTS pts away,
+    0-14 DTE, farthest magnet first."""
     import time
     out: list[dict] = []
     for s in UNIVERSE:
@@ -483,14 +480,14 @@ def screen_wallglue() -> list[dict]:
         if g:
             g["sym"] = s
             out.append(g)
-    out.sort(key=lambda d: -d["dist"])
+    out.sort(key=lambda d: -d["mag_dist"])
     return out
 
 
 def build_wallglue() -> tuple[str, str]:
-    """(email_html_fragment, telegram_line): names pinned to their nearest wall when that wall is
-    the WEAK one — the opposite wall or the Magneto holds more OI — and the price is not on the
-    Magneto (0-7 DTE). ('', '') if nothing qualifies / on failure, so the brief always sends."""
+    """(email_html_fragment, telegram_line): names GLUED within GLUE_PTS points of a wall (put or
+    call) while the strongest Magneto sits MORE than MAG_FAR_PTS points away (0-14 DTE), farthest
+    magnet first. ('', '') if nothing qualifies / on failure, so the brief always sends."""
     try:
         items = screen_wallglue()
     except Exception:  # noqa: BLE001
@@ -503,29 +500,29 @@ def build_wallglue() -> tuple[str, str]:
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in
-                    ("Ticker", "Precio", "Muro débil (pegado)", "Objetivo (+OI)", "Dist", "Fuerza", "DTE"))
+                    ("Ticker", "Precio", "Muro pegado", "Dist muro", "Imán", "Dist imán", "DTE"))
     rows = []
     for d in items:
         rows.append(
             f"<tr><td style='{tdl}'>{d['sym']}</td>"
             f"<td style='{td}'>${d['spot']:,.2f}</td>"
-            f"<td style='{tdl}'>{d['side']} ${d['wall']:g} · OI {d['wall_oi']:,}</td>"
-            f"<td style='{tdl}'>{d['tgt']} ${d['tgt_s']:g} · OI {d['tgt_oi']:,}</td>"
-            f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} {d['dist']:.1f}%</td>"
-            f"<td style='{td}'>{d['fuerza']:.2f}</td>"
+            f"<td style='{tdl}'>{d['side']} ${d['wall']:g}</td>"
+            f"<td style='{td}'>${d['wall_dist']:.2f}</td>"
+            f"<td style='{tdl}'>${d['mag']:g}</td>"
+            f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} ${d['mag_dist']:.2f}</td>"
             f"<td style='{td}'>{d['dte']}d</td></tr>")
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
-        "margin:20px 0 4px'>🎯 Precio en muro débil — imán fuerte enfrente</h2>"
+        f"margin:20px 0 4px'>🧱 Pegadas a un muro — imán lejos (&gt;{MAG_FAR_PTS:.0f} pts)</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        f"Precio pegado (≤{GLUE_PCT:.0f}%) al muro más cercano, pero ese muro es el DÉBIL: el muro "
-        "opuesto o el imán tiene MÁS OI, y el precio no está en el imán. Imán = la expiración con la "
-        f"concentración más fuerte (≥{MIN_STRENGTH:.2f}, hasta {MAX_MAGNET_DTE} DTE). Objetivo = la "
-        "fuerza mayor (↑ arriba / ↓ abajo). Data factual, NO es asesoría.</p>"
+        f"Acciones pegadas (≤{GLUE_PTS:.0f} pts) a un muro (put o call) con el imán a MÁS de "
+        f"{MAG_FAR_PTS:.0f} pts del precio (↑ imán arriba / ↓ abajo). Imán = la expiración con la "
+        f"concentración más fuerte (≥{MIN_STRENGTH:.2f}, hasta {MAX_MAGNET_DTE} DTE). Niveles del "
+        "MOTOR (pueden diferir de MarketSnack). Data factual, NO es asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
-    tg = "🎯 Muro débil, imán fuerte enfrente: " + ", ".join(
-        f"{d['sym']} →{d['tgt']} {d['dir']}{d['dist']:.0f}%(f{d['fuerza']:.2f})" for d in items[:8])
+    tg = f"🧱 Pegadas a muro, imán >{MAG_FAR_PTS:.0f}pts: " + ", ".join(
+        f"{d['sym']} {d['side']}${d['wall']:g} imán{d['dir']}${d['mag_dist']:.0f}" for d in items[:8])
     return html, tg
 
 
