@@ -304,19 +304,14 @@ def generate() -> None:
         pass
     try:
         import wall_magneto_screen
-        # Single magneto/wall report (Norman, 2026-09-08): price pinned to a call/put wall with
-        # the Magneto >= 5% away, 0-7 DTE. Replaces the old ~30-DTE / short-DTE / bounce tables.
+        # Walls report (Norman 2026-10-16): stocks GLUED <=5 pts to a wall with the Magneto >20 pts
+        # away. The old 2nd "magdist" table (price >=8% from the magnet) was dropped 2026-10-19 —
+        # it overlapped this one and the brief was at Gmail's clip limit (Norman: resumir más).
         wg_html, wg_tg = wall_magneto_screen.build_wallglue()
         if wg_html:
             top.append(wg_html)
         if wg_tg:
             wa = (wa.rstrip() + "\n\n" + wg_tg) if wa else wg_tg
-        # 2nd table: names whose price sits >= 8% from the Magneto (0-7 DTE). Reuses cached chains.
-        md_html, md_tg = wall_magneto_screen.build_magdist()
-        if md_html:
-            top.append(md_html)
-        if md_tg:
-            wa = (wa.rstrip() + "\n\n" + md_tg) if wa else md_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:

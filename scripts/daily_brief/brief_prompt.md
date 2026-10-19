@@ -159,12 +159,9 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   catalizador de HOY si lo hay, o un nivel clave; **nunca** "compra/vende"). Ordena por
   mayor movimiento del día. Si el portafolio viene de la watchlist (Schwab sin conectar),
   dilo en una línea al inicio de la sección. Encabezado recordando que es educativo.
-- **Break-even — lectura por posición (opciones)**: la **tabla** de break-even por posición
-  YA se incluye automáticamente ARRIBA de este reporte — **NO la reproduzcas ni vuelvas a
-  listar las posiciones una por una** (sería duplicado). Da SOLO **3-5 viñetas** destacando
-  las posiciones **más cerca** y **más lejos** de su break-even y qué necesita el subyacente
-  para llegar. Educativo, **nunca** "vende/mantén". Omite si no aparece el bloque
-  "BREAK-EVEN + ANÁLISIS POR POSICIÓN" (Schwab sin conectar).
+- **Break-even**: la **tabla** de break-even por posición YA va automáticamente ARRIBA del
+  reporte — **NO la reproduzcas, NO la comentes y NO listes las posiciones** (sería duplicado y
+  alarga el brief sin aportar). Simplemente no toques ese tema.
 - **Agenda de HOY — lo que sucederá durante el día** (sección DESTACADA): datos
   económicos con **hora** y consenso, Fed, earnings (marca los del portafolio) y
   demás catalizadores, ordenados por hora / importancia.
@@ -192,3 +189,6 @@ Incluye, en este orden y muy conciso:
 - Nunca inventes precios ni cifras; marca lo desconocido como n/d.
 - Nunca des recomendaciones de compra/venta. Solo datos, niveles y contexto.
 - Ambos bloques deben producirse aunque falte algún dato. Todo en español.
+- **LONGITUD — el email debe ser CORTO y escaneable (~2 min de lectura).** Viñetas de UNA línea,
+  tablas compactas (sin columnas ni texto de relleno), cero introducciones. Una sección sin señal
+  clara hoy = UNA sola línea. Prioriza SIEMPRE señal sobre volumen; no repitas datos entre secciones.
