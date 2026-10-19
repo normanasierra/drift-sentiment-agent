@@ -21,7 +21,8 @@ def _ssl_context() -> ssl.SSLContext:
         return ssl.create_default_context()
 
 MIN_CAP = 5_000_000_000   # only notable (large-cap) names — the calendar has many micro-caps
-MAX_ROWS = 20             # keep two earnings tables (HOY + MAÑANA) under Gmail's clip limit
+MAX_ROWS = 10             # top-10 by market cap per table — keep HOY + MAÑANA compact (Norman: resumir;
+#                           20 rows x2 bloated the brief to Gmail's clip limit and crowded out the agenda)
 MAX_STAR_LOOKUPS = 20     # cap option-chain fetches for the ⭐ big-gap flag (items are cap-sorted)
 _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
        "Chrome/122.0 Safari/537.36")

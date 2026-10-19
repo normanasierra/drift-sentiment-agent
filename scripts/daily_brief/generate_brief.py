@@ -330,11 +330,10 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + t_tg) if wa else t_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
+    be_table = ""  # break-even table — prepended FIRST and PROTECTED from the size trim (see assembly)
     try:
         from data_sources import schwab_breakeven
-        be_table = schwab_breakeven.report_fragment()
-        if be_table:
-            top.append(be_table)
+        be_table = schwab_breakeven.report_fragment() or ""
     except Exception:  # noqa: BLE001 — the brief must still send if Schwab is down
         pass
     try:
@@ -347,17 +346,24 @@ def generate() -> None:
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     # (Closed trades are now merged into the single money report above — Norman, 2026-10-16.)
-    if top:
-        email = _hr.join(top) + _hr + email
-
-    # Hard size cap so Gmail never clips (>102,400 bytes shows "[Message clipped]"). The structured
-    # tables (top: P&L/BE, screens, earnings) come first and are always kept intact; if the total
-    # is too big, trim the LLM narrative's TAIL (the bottom) to fit, tag-safe via _close_html.
+    # Assembly + hard size cap (Gmail clips >102,400 bytes -> "[Message clipped]"). Order: break-even
+    # table (Norman wants it on top), then the other fixed tables, then the LLM brief. The LLM brief
+    # carries the NEWS, SPX watchlist, movers and the AGENDA Norman relies on, so it is kept WHOLE and
+    # the break-even table is protected too; if the total is over, we trim the TAIL of the OTHER fixed
+    # tables (gamma / earnings-mañana go first), never the brief. (Before 2026-10-19 the brief's own
+    # tail was trimmed, silently dropping the agenda/news/movers on heavy-table days.)
+    llm = email
     CLIP_SAFE = 100_000
-    if len(email.encode("utf-8")) > CLIP_SAFE:
-        email = _close_html(email.encode("utf-8")[:CLIP_SAFE].decode("utf-8", "ignore")) + (
+    be_part = (be_table + _hr) if be_table else ""
+    tables = (_hr.join(top) + _hr) if top else ""
+    fixed_budget = CLIP_SAFE - len((be_part + llm).encode("utf-8"))
+    if fixed_budget < 0:
+        fixed_budget = 0
+    if len(tables.encode("utf-8")) > fixed_budget:
+        tables = _close_html(tables.encode("utf-8")[:fixed_budget].decode("utf-8", "ignore")) + (
             "<p style='font:11px -apple-system,Segoe UI,Arial,sans-serif;color:#94a3b8;"
-            "margin:8px 0'>…(análisis recortado para no pasar el límite de Gmail)</p>")
+            "margin:8px 0'>…(tablas recortadas para no pasar el límite de Gmail)</p>")
+    email = be_part + tables + llm
 
     OUT_DIR.mkdir(exist_ok=True)
     EMAIL_FILE.write_text(email, encoding="utf-8")
