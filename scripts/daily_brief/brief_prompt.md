@@ -64,13 +64,16 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    para el mercado hoy**. Prioriza lo que mueve índices / tasas / sectores esta
    mañana. Resume bien: claro, concreto y sin relleno.
 
-3b. **Jim Cramer / CNBC Investing Club** (Norman lo sigue MUY de cerca): del bloque DATOS REALES
-   → **JIM CRAMER**, **ANALIZA y RESUME sus jugadas** — sus upgrades/downgrades, compras/adds,
-   ventas y las **acciones** que nombra, con su **postura** (comprar/añadir/mantener/vender) y el
-   **porqué**. El cuerpo del email es solo teaser (la tesis completa está tras su login), así que
-   **sintetiza de los TITULARES**. Cierra con una lectura de su **sesgo de la semana** (ej.
-   "alcista en financieras: upgrades a Goldman y Wells Fargo; añade a X; ve J&J como compra").
-   Educativo, NO recomendación.
+3b. **Jim Cramer / CNBC Investing Club** (Norman lo sigue MUY de cerca): **ANALIZA y RESUME sus
+   jugadas** — upgrades/downgrades, compras/adds, ventas, niveles y las **acciones** que nombra,
+   con su **postura** (comprar/añadir/mantener/vender) y el **porqué**. Los emails del bloque DATOS
+   REALES → **JIM CRAMER** son solo teaser (la tesis está tras su login), así que **BUSCA EN LA WEB
+   con WebSearch** la cobertura PÚBLICA de los últimos 3-4 días — CNBC publica abierto sus artículos
+   del Investing Club y los recaps de Mad Money (acción, postura, nivel, porqué) — y analiza CADA
+   jugada combinando eso con los titulares del email. Fuentes: **CNBC (primaria), Benzinga**; NO uses
+   tipranks. Verifica que sea reciente. Cierra con su **sesgo de la semana** (ej. "alcista en
+   financieras: Goldman y Wells Fargo; añade Kimberly-Clark; cauto en AI nuevo"). Educativo, NO
+   recomendación.
 
 4. **Trump**: busca lo más reciente y relevante para el MERCADO que haya dicho
    o hecho Trump (declaraciones, aranceles, Fed, política económica, órdenes
@@ -131,10 +134,10 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   7 Magníficas están ALINEADAS.
 - **Noticias macro de HOY**: 3-5 viñetas (titular en negrita + por qué importa
   para el mercado hoy). De overnight / pre-mercado — **no** recap de ayer.
-- **🗞️ Jim Cramer / CNBC Investing Club**: 2-4 viñetas que **RESUMEN y ANALIZAN** sus
-  jugadas (upgrade/compra/venta + la **acción** y su **postura**), del bloque JIM CRAMER.
-  Es un **análisis** de sus posiciones, NO solo titulares. Cierra con su **sesgo de la semana**.
-  Si el bloque no trae nada, omite.
+- **🗞️ Jim Cramer / CNBC Investing Club**: 3-5 viñetas que **ANALIZAN** sus jugadas de los últimos
+  días (la **acción** + su **postura** comprar/añadir/mantener/vender + nivel/porqué), combinando los
+  titulares del email con la **cobertura pública que buscaste en la web**. Es un **análisis**, NO solo
+  titulares. Cierra con su **sesgo de la semana**.
 - **Movers ≥5%** (usa el bloque DATOS REALES: "MOVERS PRE-MERCADO" en la corrida de
   la MAÑANA, o "MOVERS DEL DÍA" en la de la TARDE). Lista las compañías que suben
   **≥5%** con su símbolo, el **%** y el precio; añade una frase de **por qué se
