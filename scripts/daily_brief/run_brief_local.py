@@ -282,44 +282,38 @@ def main() -> None:
 
 
 def _embed_walls_charts() -> list[str]:
-    """Embed the latest AMD + SPX MarketSnack wall charts into the brief HTML and return the
-    ``--inline-image`` args for send_email.py. The headless brief CANNOT reach MarketSnack
-    (browser-only), so these are the PNGs Candy generated on the last manual re-pull — each is
-    stamped with its generation date/time, and anything older than a day gets an amber
-    'refresh' flag, so a stale chart is never shown as if it were today's."""
-    charts = [("amd_walls", OUT / "amd_walls_week.png", "AMD"),
-              ("spx_walls", OUT / "spx_walls_week.png", "SPX")]
-    present = [(cid, p, label) for cid, p, label in charts if fresh(p)]
-    if not present:
+    """Generate the SPX walls-per-expiration chart FRESH from the engine and embed it in the brief,
+    returning the ``--inline-image`` arg for send_email.py. Norman (2026-10-20): only SPX now (AMD
+    dropped), and it must update by itself — MarketSnack needs a browser the headless brief can't
+    reach, so the levels come from the options engine (`walls_chart.build_spx`) and refresh every run."""
+    try:
+        import walls_chart
+        walls_chart.build_spx()  # (re)generate output/spx_walls_week.png from engine data
+    except Exception as exc:  # noqa: BLE001
+        log(f"aviso: no pude generar la gráfica SPX ({exc}).")
+    p = OUT / "spx_walls_week.png"
+    if not fresh(p):
+        log("aviso: no hay gráfica SPX para embeber.")
         return []
-    now = datetime.datetime.now()
-    blocks = ['<h3 style="color:#e8eaed;font-family:system-ui,Segoe UI,sans-serif;'
-              'margin:22px 0 6px">🧱 Muros por vencimiento (MarketSnack)</h3>']
-    inline_args: list[str] = []
-    for cid, p, label in present:
-        mtime = datetime.datetime.fromtimestamp(p.stat().st_mtime)
-        stamp = mtime.strftime("%d-%b %I:%M%p")
-        warn = ('  ·  <span style="color:#f0a030">⏳ conviene refrescar con MarketSnack</span>'
-                if (now - mtime).days >= 1 else '')
-        inline_args += ["--inline-image", f"{cid}={p}"]
-        blocks.append(
-            f'<div style="margin:8px 0 14px">'
-            f'<img src="cid:{cid}" alt="{label} muros" '
-            f'style="max-width:100%;height:auto;border-radius:8px"/>'
-            f'<div style="color:#9aa7b5;font-size:12px;'
-            f'font-family:system-ui,Segoe UI,sans-serif;margin-top:3px">'
-            f'{label} — MarketSnack, generada {stamp}{warn}</div></div>')
+    cid = "spx_walls"
+    stamp = datetime.datetime.fromtimestamp(p.stat().st_mtime).strftime("%d-%b %I:%M%p")
+    block = (
+        '<h3 style="color:#e8eaed;font-family:system-ui,Segoe UI,sans-serif;margin:22px 0 6px">'
+        '🧱 SPX — muros por vencimiento</h3>'
+        f'<div style="margin:8px 0 14px"><img src="cid:{cid}" alt="SPX muros" '
+        'style="max-width:100%;height:auto;border-radius:8px"/>'
+        '<div style="color:#9aa7b5;font-size:12px;font-family:system-ui,Segoe UI,sans-serif;'
+        f'margin-top:3px">SPX · niveles del motor · generada {stamp}</div></div>')
     try:
         html = EMAIL.read_text(encoding="utf-8")
-        injection = "\n".join(blocks)
-        html = (html.replace("</body>", injection + "\n</body>")
-                if "</body>" in html else html + "\n" + injection)
+        html = (html.replace("</body>", block + "\n</body>")
+                if "</body>" in html else html + "\n" + block)
         EMAIL.write_text(html, encoding="utf-8")
-        log(f"muros embebidos en el brief: {', '.join(l for _, _, l in present)}.")
+        log("gráfica SPX (motor) embebida en el brief.")
     except Exception as exc:  # noqa: BLE001 — never let chart embedding break the brief
-        log(f"aviso: no pude embeber las gráficas de muros ({exc}); sigo sin ellas.")
+        log(f"aviso: no pude embeber la gráfica SPX ({exc}); sigo sin ella.")
         return []
-    return inline_args
+    return ["--inline-image", f"{cid}={p}"]
 
 
 def _stay_awake(on: bool = True) -> None:
