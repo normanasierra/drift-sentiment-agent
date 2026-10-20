@@ -59,10 +59,13 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    el overnight y el pre-mercado; **NO el recap de la sesión de ayer**. Si el bloque
    de DATOS REALES incluye **NEWSLETTERS PAGADAS** (CNBC/Barron's/MarketSnacks del
    inbox), úsalas como **fuente PRINCIPAL** (contenido de pago, más valioso que la
-   web abierta) y complementa con **Yahoo Finance** y **CNBC** por web, verificando
-   que sea de HOY. Cada titular: una frase clara de **qué pasó** y **por qué importa
-   para el mercado hoy**. Prioriza lo que mueve índices / tasas / sectores esta
-   mañana. Resume bien: claro, concreto y sin relleno.
+   web abierta) y complementa buscando en la web (WebSearch) la cobertura de
+   **Bloomberg** (su sección de mercados — Norman la quiere SIEMPRE; suele estar tras
+   muro de pago, así que usa titulares/resúmenes públicos), **Yahoo Finance** y
+   **CNBC**, verificando que sea de HOY. Incluye al menos **1 titular de Bloomberg** si
+   lo hay. Cada titular: una frase clara de **qué pasó** y **por qué importa para el
+   mercado hoy**. Prioriza lo que mueve índices / tasas / sectores esta mañana. Resume
+   bien: claro, concreto y sin relleno.
 
 3b. **Jim Cramer / CNBC Investing Club** (Norman lo sigue MUY de cerca): **ANALIZA y RESUME sus
    jugadas** — upgrades/downgrades, compras/adds, ventas, niveles y las **acciones** que nombra,
