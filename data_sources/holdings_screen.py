@@ -151,17 +151,16 @@ def _cc_theta_day(spot, strike, iv, t_years):
 
 
 def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                       min_theta: float = 0.0, wall_pts: float = 2.0,
-                       mag_pts: float = 5.0):
-    """[(theta, ticker, spot, strike, iv, dte, put_wall, call_wall, magneto)] for the $80-120
-    names (3-18 DTE) that pass Norman's covered-call filter (2026-10-16, tuned so $80-120 isn't
-    always empty):
-      - ATM-call theta > ``min_theta`` (0 = no floor; always sorted highest-theta first),
-      - spot at least ``wall_pts`` away from AT LEAST ONE wall (put OR call),
+                       min_theta: float = 0.18, wall_pts: float = 2.0,
+                       mag_pts: float = 5.0, otm_pts: float = 8.0):
+    """[(theta, ticker, side, spot, strike, iv, dte, put_wall, call_wall, magneto)] for the $80-120
+    names (nearest 3-18 DTE) — premium to SELL on BOTH sides (Norman 2026-10-20):
+      - the highest-theta OTM CALL (strike >= spot+otm_pts, a covered call) AND OTM PUT
+        (strike <= spot-otm_pts, a cash-secured put), each with theta > ``min_theta``,
+      - spot at least ``wall_pts`` from AT LEAST ONE wall (put OR call),
       - Magneto at least ``mag_pts`` above OR below spot.
     Walls = max-OI strike, Magneto = max net-notional strike — from the ENGINE over the near-term
-    expiration, banded +/-15% (headless, so it can't read MarketSnack; those levels can differ,
-    and a MarketSnack-corrected list is sent separately by hand). [] on any failure."""
+    expiration, banded +/-15%. Highest theta first. [] on any failure."""
     try:
         import datetime
         from drift_sentiment import polygon_client
@@ -181,18 +180,9 @@ def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
                            if 3 <= (c.expiration - today).days <= 18})
             if not dtes:
                 continue
-            dte = dtes[0]  # nearest 3-18 DTE expiry = highest theta
-            exp_cs = [c for c in contracts if (c.expiration - today).days == dte]
-            calls_iv = [c for c in exp_cs if c.is_call and c.implied_volatility
-                        and _sane_iv(c.implied_volatility)]
-            if not calls_iv:
-                continue
-            atm = min(calls_iv, key=lambda c: abs(c.strike - spot))
-            theta = _cc_theta_day(spot, atm.strike, atm.implied_volatility, dte / 365.0)
-            if theta <= min_theta:  # keep positive theta (min_theta=0 => no floor); sorted below
-                continue
-            # Walls (max OI) + Magneto (max net notional) over the near-term expiration, banded +/-15%
-            band = [c for c in exp_cs if abs(c.strike - spot) / spot <= 0.15]
+            # Walls (max OI) + Magneto (max net notional) from the NEAREST expiration, banded +/-15%
+            near_cs = [c for c in contracts if (c.expiration - today).days == dtes[0]]
+            band = [c for c in near_cs if abs(c.strike - spot) / spot <= 0.15]
             cw = walls_mod.call_wall(band)
             pw = walls_mod.put_wall(band)
             mg = magneto_mod.magneto(band)
@@ -205,8 +195,32 @@ def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
             mag_ok = mag is not None and abs(spot - mag) >= mag_pts
             if not (wall_ok and mag_ok):
                 continue
-            rows.append((theta, t, spot, atm.strike, atm.implied_volatility, dte,
-                         put_wall, call_wall, mag))
+            # For each side, scan ALL 3-18 DTE expirations for the nearest-OTM strike (>= otm_pts
+            # from spot) and keep the HIGHEST theta — an OTM option's theta can peak past the
+            # nearest week, so the nearest expiry is NOT necessarily the richest.
+            by_dte: dict = {}
+            for c in contracts:
+                d = (c.expiration - today).days
+                if 3 <= d <= 18:
+                    by_dte.setdefault(d, []).append(c)
+            for side in ("call", "put"):
+                best = None  # (theta, strike, iv, dte)
+                for d, ecs in by_dte.items():
+                    if side == "call":
+                        cand_set = [c for c in ecs if c.is_call and c.strike >= spot + otm_pts
+                                    and c.implied_volatility and _sane_iv(c.implied_volatility)]
+                    else:
+                        cand_set = [c for c in ecs if c.is_put and c.strike <= spot - otm_pts
+                                    and c.implied_volatility and _sane_iv(c.implied_volatility)]
+                    if not cand_set:
+                        continue
+                    cand = min(cand_set, key=lambda c: abs(c.strike - spot))  # closest to the OTM edge
+                    th = _cc_theta_day(spot, cand.strike, cand.implied_volatility, d / 365.0)
+                    if best is None or th > best[0]:
+                        best = (th, cand.strike, cand.implied_volatility, d)
+                if best and best[0] > min_theta:  # theta floor — Norman: theta > 0.18
+                    rows.append((best[0], t, side, spot, best[1], best[2], best[3],
+                                 put_wall, call_wall, mag))
         except Exception:  # noqa: BLE001
             continue
     rows.sort(key=lambda r: r[0], reverse=True)  # highest theta first
@@ -214,34 +228,37 @@ def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
 
 
 def covered_call_block(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                       min_theta: float = 0.0, wall_pts: float = 2.0,
-                       mag_pts: float = 5.0) -> str:
+                       min_theta: float = 0.18, wall_pts: float = 2.0,
+                       mag_pts: float = 5.0, otm_pts: float = 8.0) -> str:
     """Text version for the LLM prompt. '' if nothing qualifies."""
-    rows = _covered_call_rows(limit, lo, hi, min_theta, wall_pts, mag_pts)
+    rows = _covered_call_rows(limit, lo, hi, min_theta, wall_pts, mag_pts, otm_pts)
     if not rows:
         return ""
-    _thr = "ordenadas por theta más alto" if min_theta <= 0 else f"theta > {min_theta:.2f}"
-    lines = [f"COVERED CALLS — ${lo:.0f}-${hi:.0f}, {_thr}, venc. 3-18 días, "
-             f"spot ≥{wall_pts:.0f} pts de un muro (PW/CW) y Magneto ≥{mag_pts:.0f} pts del spot "
-             "(niveles del MOTOR; educativo, NO consejo). theta = decaimiento diario del call ATM "
-             "(×100 = por contrato). Comenta cada uno:"]
+    lines = [f"PRIMA PARA VENDER (covered calls + cash-secured puts) — ${lo:.0f}-${hi:.0f}, "
+             f"theta > {min_theta:.2f}, strike ≥{otm_pts:.0f} pts OTM, venc. 3-18 días, "
+             f"spot ≥{wall_pts:.0f} pts de un muro y Magneto ≥{mag_pts:.0f} pts del spot "
+             "(niveles del MOTOR; educativo, NO consejo). CALL = vender call cubierto arriba; "
+             "PUT = vender put asegurado abajo. theta = decaimiento diario (×100 = por contrato). "
+             "Comenta cada uno:"]
     _f = lambda x: f"{x:.0f}" if x is not None else "n/d"  # noqa: E731
-    for theta, t, spot, strike, iv, dte, pw, cw, mag in rows:
-        lines.append(f"  {t}: spot {spot:.2f}, call ATM {strike:.0f} ({dte}d), IV {iv*100:.0f}%, "
-                     f"theta {theta:.3f}/día (${theta*100:.0f}/contrato); "
+    for theta, t, side, spot, strike, iv, dte, pw, cw, mag in rows:
+        kind = "CALL" if side == "call" else "PUT"
+        otm = abs(strike - spot)
+        lines.append(f"  {t} {kind} {strike:.0f} ({otm:.0f} OTM, {dte}d): spot {spot:.2f}, "
+                     f"IV {iv*100:.0f}%, theta {theta:.3f}/día (${theta*100:.0f}/contrato); "
                      f"PW {_f(pw)} / CW {_f(cw)} / Magneto {_f(mag)}")
     return "\n".join(lines)
 
 
 def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                      min_theta: float = 0.0, wall_pts: float = 2.0, mag_pts: float = 5.0):
-    """(email_html_fragment, telegram_line) — a FIXED covered-call table for the brief,
-    rendered directly so it always appears (not left to the LLM). ('', '') if none."""
-    rows = _covered_call_rows(limit, lo, hi, min_theta, wall_pts, mag_pts)
-    _thr = "theta más alto" if min_theta <= 0 else f"theta &gt; {min_theta:.2f}"
-    _title = f"🎯 Covered Calls (${lo:.0f}-${hi:.0f})"
-    _filters = (f"${lo:.0f}-${hi:.0f} · {_thr} · 3-18 DTE · "
-                f"spot ≥{wall_pts:.0f} pts de un muro · Magneto ≥{mag_pts:.0f} pts del spot")
+                      min_theta: float = 0.18, wall_pts: float = 2.0, mag_pts: float = 5.0,
+                      otm_pts: float = 8.0):
+    """(email_html_fragment, telegram_line) — a FIXED covered-call + cash-secured-put table for the
+    brief, rendered directly so it always appears (not left to the LLM). ('', '') if none."""
+    rows = _covered_call_rows(limit, lo, hi, min_theta, wall_pts, mag_pts, otm_pts)
+    _title = f"🎯 Covered Calls + Puts (${lo:.0f}-${hi:.0f})"
+    _filters = (f"${lo:.0f}-${hi:.0f} · theta &gt; {min_theta:.2f} · strike ≥{otm_pts:.0f} pts OTM · "
+                f"3-18 DTE · spot ≥{wall_pts:.0f} pts de un muro · Magneto ≥{mag_pts:.0f} pts del spot")
     if not rows:  # always render the section (even empty) so it never silently vanishes from the brief
         html = ("<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
                 f"margin:20px 0 4px'>{_title}</h2>"
@@ -254,26 +271,32 @@ def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
     td = "padding:4px 7px;border:1px solid #e2e8f0;text-align:right;font:11px -apple-system,Segoe UI,Arial,sans-serif"
     tdl = td.replace("text-align:right", "text-align:left")
     heads = "".join(f"<th style='{th}'>{h}</th>" for h in
-                    ("Ticker", "Spot", "Call ATM", "Venc.", "IV", "Theta/día", "×100",
+                    ("Ticker", "Tipo", "Spot", "Strike (OTM)", "Venc.", "IV", "Theta/día", "×100",
                      "Put Wall", "Call Wall", "Magneto"))
     body = "".join(
-        f"<tr><td style='{tdl}'>{t}</td><td style='{td}'>{spot:.2f}</td>"
-        f"<td style='{td}'>{strike:.0f}</td><td style='{td}'>{dte}d</td>"
+        f"<tr><td style='{tdl}'>{t}</td>"
+        f"<td style='{tdl};color:{'#0E8F5E' if side == 'call' else '#C4362F'};font-weight:700'>"
+        f"{'CALL' if side == 'call' else 'PUT'}</td>"
+        f"<td style='{td}'>{spot:.2f}</td>"
+        f"<td style='{td}'>{strike:.0f} ({'+' if side == 'call' else '−'}{abs(strike-spot):.0f})</td>"
+        f"<td style='{td}'>{dte}d</td>"
         f"<td style='{td}'>{iv*100:.0f}%</td><td style='{td}'>{theta:.3f}</td>"
         f"<td style='{td}'>${theta*100:.0f}</td>"
         f"<td style='{td}'>{_f(pw)}</td><td style='{td}'>{_f(cw)}</td><td style='{td}'>{_f(mag)}</td></tr>"
-        for theta, t, spot, strike, iv, dte, pw, cw, mag in rows)
+        for theta, t, side, spot, strike, iv, dte, pw, cw, mag in rows)
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
         f"margin:20px 0 4px'>{_title}</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        f"Filtro: {_filters}. Para VENDER calls (ATM). Theta = decaimiento diario por acción "
+        f"Filtro: {_filters}. Prima para VENDER: <b>CALL</b> = call cubierto (strike arriba), "
+        "<b>PUT</b> = put asegurado (strike abajo). Theta = decaimiento diario por acción "
         "(×100 = por contrato). Muros/Magneto del MOTOR (pueden diferir de MarketSnack). "
         "Educativo, NO asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + body + "</tbody></table>")
-    tg = f"🎯 Covered calls ${lo:.0f}-${hi:.0f} (theta): " + ", ".join(
-        f"{t} {theta:.2f}" for theta, t, *_ in rows)
+    tg = f"🎯 Covered calls + puts ${lo:.0f}-${hi:.0f}: " + ", ".join(
+        f"{t} {'C' if side == 'call' else 'P'}{strike:.0f}({theta:.2f})"
+        for theta, t, side, spot, strike, *_ in rows)
     return html, tg
 
 
