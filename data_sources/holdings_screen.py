@@ -136,7 +136,7 @@ _CC_UNIVERSE = sorted(set([
     "PLTR", "IREN", "MSFT", "NVDA", "NFLX", "AAPL", "META", "GOOGL", "AVGO", "TSM",
     "QCOM", "JPM", "GS", "BAC", "WMT", "COST", "XOM", "DIS", "BA", "NKE", "SBUX",
     "PYPL", "UBER", "SHOP", "WFC", "C", "SCHW", "BABA", "CVS", "DAL", "CSCO", "WYNN",
-    "ZM", "CRWV", "SOFI", "F", "SNAP",
+    "ZM", "CRWV", "SOFI", "F", "SNAP", "HOOD",
 ]))
 
 
@@ -151,7 +151,7 @@ def _cc_theta_day(spot, strike, iv, t_years):
 
 
 def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                       min_theta: float = 0.18, wall_pts: float = 2.0,
+                       min_theta: float = 0.15, wall_pts: float = 2.0,
                        mag_pts: float = 5.0, otm_pts: float = 8.0):
     """[(theta, ticker, side, spot, strike, iv, dte, put_wall, call_wall, magneto)] for the $80-120
     names (nearest 3-18 DTE) — premium to SELL on BOTH sides (Norman 2026-10-20):
@@ -218,7 +218,7 @@ def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
                     th = _cc_theta_day(spot, cand.strike, cand.implied_volatility, d / 365.0)
                     if best is None or th > best[0]:
                         best = (th, cand.strike, cand.implied_volatility, d)
-                if best and best[0] > min_theta:  # theta floor — Norman: theta > 0.18
+                if best and best[0] > min_theta:  # theta floor — Norman: theta > 0.15
                     rows.append((best[0], t, side, spot, best[1], best[2], best[3],
                                  put_wall, call_wall, mag))
         except Exception:  # noqa: BLE001
@@ -227,14 +227,14 @@ def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
     return rows[:limit]
 
 
-# Relaxed fallback (Norman 2026-10-20): "déjalo así; si no hay candidato, cambiamos a .15 de theta
-# o acciones hasta 150." If the strict screen is empty, retry with theta > 0.15 AND price up to $150.
+# Relaxed fallback (Norman 2026-10-20): the primary theta floor is now 0.15 ($80-120); if the
+# screen is still EMPTY, extend the price band up to $150 (theta stays 0.15) so it isn't empty.
 _RELAX_THETA = 0.15
 _RELAX_HI = 150.0
 
 
 def _cc_rows_with_fallback(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                           min_theta: float = 0.18, wall_pts: float = 2.0,
+                           min_theta: float = 0.15, wall_pts: float = 2.0,
                            mag_pts: float = 5.0, otm_pts: float = 8.0):
     """(rows, relaxed): strict rows first; if NONE qualify, retry relaxed (theta > _RELAX_THETA,
     price up to _RELAX_HI) so the report isn't empty. ``relaxed`` True when the fallback was used."""
@@ -247,7 +247,7 @@ def _cc_rows_with_fallback(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
 
 
 def covered_call_block(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                       min_theta: float = 0.18, wall_pts: float = 2.0,
+                       min_theta: float = 0.15, wall_pts: float = 2.0,
                        mag_pts: float = 5.0, otm_pts: float = 8.0) -> str:
     """Text version for the LLM prompt. '' if nothing qualifies."""
     rows, relaxed = _cc_rows_with_fallback(limit, lo, hi, min_theta, wall_pts, mag_pts, otm_pts)
@@ -255,25 +255,27 @@ def covered_call_block(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
         return ""
     if relaxed:
         min_theta, hi = _RELAX_THETA, max(hi, _RELAX_HI)
-    _rx = " · RELAJADO (no había candidatos a theta>0.18 / $80-120)" if relaxed else ""
+    _rx = " · RELAJADO (sin candidatos en $80-120 → precio hasta $150)" if relaxed else ""
     lines = [f"PRIMA PARA VENDER (covered calls + cash-secured puts) — ${lo:.0f}-${hi:.0f}{_rx}, "
              f"theta > {min_theta:.2f}, strike ≥{otm_pts:.0f} pts OTM, venc. 3-18 días, "
              f"spot ≥{wall_pts:.0f} pts de un muro y Magneto ≥{mag_pts:.0f} pts del spot "
              "(niveles del MOTOR; educativo, NO consejo). CALL = vender call cubierto arriba; "
-             "PUT = vender put asegurado abajo. theta = decaimiento diario (×100 = por contrato). "
-             "Comenta cada uno:"]
+             "PUT = vender put asegurado abajo (⭐ = PUT con imán AL ALZA = sesgo arriba, el "
+             "escenario preferido: seguro + a favor de la subida). theta = decaimiento diario "
+             "(×100 = por contrato). Comenta cada uno:"]
     _f = lambda x: f"{x:.0f}" if x is not None else "n/d"  # noqa: E731
     for theta, t, side, spot, strike, iv, dte, pw, cw, mag in rows:
+        star = "⭐ " if (side == "put" and mag is not None and mag > spot) else ""
         kind = "CALL" if side == "call" else "PUT"
         otm = abs(strike - spot)
-        lines.append(f"  {t} {kind} {strike:.0f} ({otm:.0f} OTM, {dte}d): spot {spot:.2f}, "
+        lines.append(f"  {star}{t} {kind} {strike:.0f} ({otm:.0f} OTM, {dte}d): spot {spot:.2f}, "
                      f"IV {iv*100:.0f}%, theta {theta:.3f}/día (${theta*100:.0f}/contrato); "
                      f"PW {_f(pw)} / CW {_f(cw)} / Magneto {_f(mag)}")
     return "\n".join(lines)
 
 
 def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
-                      min_theta: float = 0.18, wall_pts: float = 2.0, mag_pts: float = 5.0,
+                      min_theta: float = 0.15, wall_pts: float = 2.0, mag_pts: float = 5.0,
                       otm_pts: float = 8.0):
     """(email_html_fragment, telegram_line) — a FIXED covered-call + cash-secured-put table for the
     brief, rendered directly so it always appears (not left to the LLM). ('', '') if none."""
@@ -284,7 +286,7 @@ def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
     _title = f"🎯 Covered Calls + Puts (${lo:.0f}-${hi:.0f}){_rx}"
     _filters = (f"${lo:.0f}-${hi:.0f} · theta &gt; {min_theta:.2f} · strike ≥{otm_pts:.0f} pts OTM · "
                 f"3-18 DTE · spot ≥{wall_pts:.0f} pts de un muro · Magneto ≥{mag_pts:.0f} pts del spot"
-                + (" · (sin candidatos estrictos → bajé a theta 0.15 y precio hasta $150)" if relaxed else ""))
+                + (" · (sin candidatos en $80-120 → extendí el precio hasta $150)" if relaxed else ""))
     if not rows:  # always render the section (even empty) so it never silently vanishes from the brief
         html = ("<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
                 f"margin:20px 0 4px'>{_title}</h2>"
@@ -302,7 +304,7 @@ def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
     body = "".join(
         f"<tr><td style='{tdl}'>{t}</td>"
         f"<td style='{tdl};color:{'#0E8F5E' if side == 'call' else '#C4362F'};font-weight:700'>"
-        f"{'CALL' if side == 'call' else 'PUT'}</td>"
+        f"{'CALL' if side == 'call' else ('⭐ PUT' if (mag is not None and mag > spot) else 'PUT')}</td>"
         f"<td style='{td}'>{spot:.2f}</td>"
         f"<td style='{td}'>{strike:.0f} ({'+' if side == 'call' else '−'}{abs(strike-spot):.0f})</td>"
         f"<td style='{td}'>{dte}d</td>"
@@ -315,7 +317,8 @@ def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
         f"margin:20px 0 4px'>{_title}</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
         f"Filtro: {_filters}. Prima para VENDER: <b>CALL</b> = call cubierto (strike arriba), "
-        "<b>PUT</b> = put asegurado (strike abajo). Theta = decaimiento diario por acción "
+        "<b>PUT</b> = put asegurado (strike abajo; <b>⭐</b> = imán AL ALZA = sesgo arriba, el "
+        "escenario preferido: seguro + a favor de la subida). Theta = decaimiento diario por acción "
         "(×100 = por contrato). Muros/Magneto del MOTOR (pueden diferir de MarketSnack). "
         "Educativo, NO asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
