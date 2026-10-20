@@ -227,14 +227,36 @@ def _covered_call_rows(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
     return rows[:limit]
 
 
+# Relaxed fallback (Norman 2026-10-20): "déjalo así; si no hay candidato, cambiamos a .15 de theta
+# o acciones hasta 150." If the strict screen is empty, retry with theta > 0.15 AND price up to $150.
+_RELAX_THETA = 0.15
+_RELAX_HI = 150.0
+
+
+def _cc_rows_with_fallback(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
+                           min_theta: float = 0.18, wall_pts: float = 2.0,
+                           mag_pts: float = 5.0, otm_pts: float = 8.0):
+    """(rows, relaxed): strict rows first; if NONE qualify, retry relaxed (theta > _RELAX_THETA,
+    price up to _RELAX_HI) so the report isn't empty. ``relaxed`` True when the fallback was used."""
+    rows = _covered_call_rows(limit, lo, hi, min_theta, wall_pts, mag_pts, otm_pts)
+    if rows:
+        return rows, False
+    rows = _covered_call_rows(limit, lo, max(hi, _RELAX_HI), _RELAX_THETA,
+                              wall_pts, mag_pts, otm_pts)
+    return rows, bool(rows)
+
+
 def covered_call_block(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
                        min_theta: float = 0.18, wall_pts: float = 2.0,
                        mag_pts: float = 5.0, otm_pts: float = 8.0) -> str:
     """Text version for the LLM prompt. '' if nothing qualifies."""
-    rows = _covered_call_rows(limit, lo, hi, min_theta, wall_pts, mag_pts, otm_pts)
+    rows, relaxed = _cc_rows_with_fallback(limit, lo, hi, min_theta, wall_pts, mag_pts, otm_pts)
     if not rows:
         return ""
-    lines = [f"PRIMA PARA VENDER (covered calls + cash-secured puts) — ${lo:.0f}-${hi:.0f}, "
+    if relaxed:
+        min_theta, hi = _RELAX_THETA, max(hi, _RELAX_HI)
+    _rx = " · RELAJADO (no había candidatos a theta>0.18 / $80-120)" if relaxed else ""
+    lines = [f"PRIMA PARA VENDER (covered calls + cash-secured puts) — ${lo:.0f}-${hi:.0f}{_rx}, "
              f"theta > {min_theta:.2f}, strike ≥{otm_pts:.0f} pts OTM, venc. 3-18 días, "
              f"spot ≥{wall_pts:.0f} pts de un muro y Magneto ≥{mag_pts:.0f} pts del spot "
              "(niveles del MOTOR; educativo, NO consejo). CALL = vender call cubierto arriba; "
@@ -255,10 +277,14 @@ def covered_call_html(limit: int = 40, lo: float = 80.0, hi: float = 120.0,
                       otm_pts: float = 8.0):
     """(email_html_fragment, telegram_line) — a FIXED covered-call + cash-secured-put table for the
     brief, rendered directly so it always appears (not left to the LLM). ('', '') if none."""
-    rows = _covered_call_rows(limit, lo, hi, min_theta, wall_pts, mag_pts, otm_pts)
-    _title = f"🎯 Covered Calls + Puts (${lo:.0f}-${hi:.0f})"
+    rows, relaxed = _cc_rows_with_fallback(limit, lo, hi, min_theta, wall_pts, mag_pts, otm_pts)
+    if relaxed:
+        min_theta, hi = _RELAX_THETA, max(hi, _RELAX_HI)
+    _rx = " · RELAJADO" if relaxed else ""
+    _title = f"🎯 Covered Calls + Puts (${lo:.0f}-${hi:.0f}){_rx}"
     _filters = (f"${lo:.0f}-${hi:.0f} · theta &gt; {min_theta:.2f} · strike ≥{otm_pts:.0f} pts OTM · "
-                f"3-18 DTE · spot ≥{wall_pts:.0f} pts de un muro · Magneto ≥{mag_pts:.0f} pts del spot")
+                f"3-18 DTE · spot ≥{wall_pts:.0f} pts de un muro · Magneto ≥{mag_pts:.0f} pts del spot"
+                + (" · (sin candidatos estrictos → bajé a theta 0.15 y precio hasta $150)" if relaxed else ""))
     if not rows:  # always render the section (even empty) so it never silently vanishes from the brief
         html = ("<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
                 f"margin:20px 0 4px'>{_title}</h2>"
