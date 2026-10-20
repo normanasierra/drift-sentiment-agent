@@ -185,7 +185,15 @@ def _quote_price(symbol: str) -> float | None:
 def _level_alerts(dry: bool, near_pct: float = 0.3) -> None:
     """Ping Telegram when a watched ticker's price comes within ``near_pct`` of a MarketSnack level
     (output/watch_levels.json), deduped once per level/day. Levels are refreshed by hand when Candy
-    re-pulls MarketSnack — the automated watcher can't reach it (browser-only)."""
+    re-pulls MarketSnack — the automated watcher can't reach it (browser-only).
+
+    Norman (2026-10-20): these price-proximity pings fire ONLY while the market is trading — NOT once
+    it has closed (>=4pm local/ET) nor on weekends (the price is static then, so a ping is pointless).
+    The Cramer/Infusion signal alerts and news headlines stay on after hours — those break anytime."""
+    from datetime import datetime as _dtm
+    now = _dtm.now()
+    if now.hour >= 16 or now.weekday() >= 5:  # market closed → no price pings
+        return
     try:
         cfg = json.loads(WATCH_LEVELS.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
