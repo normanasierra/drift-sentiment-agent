@@ -198,26 +198,35 @@ def _is_premarket() -> bool:
 
 
 def _movers_block() -> str:
-    """Companies up ≥5% — premarket in the morning, intraday in the afternoon."""
+    """Biggest movers — gainers AND losers, ≥3% (premarket in the morning, intraday in the
+    afternoon). Norman 2026-10-21: both directions, threshold lowered 5%→3% to see more."""
     try:
         from data_sources import movers
     except Exception:  # noqa: BLE001
         return ""
     pre = _is_premarket()
     try:
-        rows = movers.top_gainers(min_pct=5.0, premarket=pre)
+        gainers = movers.top_gainers(min_pct=3.0, premarket=pre)
+        losers = movers.top_losers(min_pct=3.0, premarket=pre)
     except Exception:  # noqa: BLE001
         return ""
-    if not rows:
+    if not gainers and not losers:
         return ""
-    label = ("MOVERS PRE-MERCADO (≥5% ANTES de abrir)" if pre
-             else "MOVERS DEL DÍA (≥5% en la sesión)")
-    lines = [f"{label} — reales (Yahoo). Lista los más notables con su % (y por qué "
-             "se mueven si lo encuentras en noticias):"]
-    for r in rows:
-        px = f" ${r['price']:.2f}" if r.get("price") else ""
-        nm = f" · {r['name']}" if r.get("name") else ""
-        lines.append(f"  {r['symbol']}: +{r['pct']:.1f}%{px}{nm}")
+    when = "PRE-MERCADO (ANTES de abrir)" if pre else "DEL DÍA (en la sesión)"
+    lines = [f"MAYORES MOVIMIENTOS {when} — reales (Yahoo), ≥3% en AMBAS direcciones. Lista los más "
+             "notables con su % (y por qué se mueven si lo encuentras en noticias):"]
+    if gainers:
+        lines.append("  SUBEN (≥3%):")
+        for r in gainers:
+            px = f" ${r['price']:.2f}" if r.get("price") else ""
+            nm = f" · {r['name']}" if r.get("name") else ""
+            lines.append(f"    {r['symbol']}: +{r['pct']:.1f}%{px}{nm}")
+    if losers:
+        lines.append("  BAJAN (≤-3%):")
+        for r in losers:
+            px = f" ${r['price']:.2f}" if r.get("price") else ""
+            nm = f" · {r['name']}" if r.get("name") else ""
+            lines.append(f"    {r['symbol']}: {r['pct']:.1f}%{px}{nm}")
     return "\n".join(lines)
 
 

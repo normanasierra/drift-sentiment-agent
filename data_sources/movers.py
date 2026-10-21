@@ -58,6 +58,52 @@ def top_gainers(
     return out[:limit]
 
 
+def top_losers(
+    *, min_pct: float = 3.0, premarket: bool = False,
+    limit: int = 12, timeout: int = 15,
+) -> list[dict]:
+    """Losers down at least ``min_pct``% (i.e. pct <= -min_pct), sorted by the biggest DROP first.
+    Same shape as :func:`top_gainers` (``pct`` is negative). Uses Yahoo's ``day_losers`` screener.
+    Empty on any failure."""
+    try:
+        r = requests.get(_URL, params={"count": 50, "scrIds": "day_losers"},
+                         headers=_HEADERS, timeout=timeout)
+        if r.status_code != 200:
+            return []
+        quotes = r.json()["finance"]["result"][0]["quotes"]
+    except Exception:  # noqa: BLE001 — best-effort source
+        return []
+
+    out: list[dict] = []
+    for q in quotes:
+        sym = q.get("symbol")
+        if not sym:
+            continue
+        pre = q.get("preMarketChangePercent")
+        reg = q.get("regularMarketChangePercent")
+        if premarket and pre is not None:
+            pct, kind = pre, "premarket"
+            price = q.get("preMarketPrice") or q.get("regularMarketPrice")
+        else:
+            pct, kind = reg, "día"
+            price = q.get("regularMarketPrice")
+        if pct is None or pct > -min_pct:  # keep only genuine drops of >= min_pct
+            continue
+        out.append({
+            "symbol": sym,
+            "name": q.get("shortName") or q.get("longName") or "",
+            "pct": round(float(pct), 2),
+            "price": float(price) if price is not None else None,
+            "kind": kind,
+        })
+    out.sort(key=lambda d: d["pct"])  # most negative (biggest drop) first
+    return out[:limit]
+
+
 if __name__ == "__main__":
-    for r in top_gainers():
-        print(f"{r['symbol']:6} +{r['pct']:.1f}%  {r['name']}")
+    print("GAINERS:")
+    for r in top_gainers(min_pct=3.0):
+        print(f"  {r['symbol']:6} +{r['pct']:.1f}%  {r['name']}")
+    print("LOSERS:")
+    for r in top_losers(min_pct=3.0):
+        print(f"  {r['symbol']:6} {r['pct']:.1f}%  {r['name']}")

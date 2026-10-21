@@ -141,11 +141,11 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   días (la **acción** + su **postura** comprar/añadir/mantener/vender + nivel/porqué), combinando los
   titulares del email con la **cobertura pública que buscaste en la web**. Es un **análisis**, NO solo
   titulares. Cierra con su **sesgo de la semana**.
-- **Movers ≥5%** (usa el bloque DATOS REALES: "MOVERS PRE-MERCADO" en la corrida de
-  la MAÑANA, o "MOVERS DEL DÍA" en la de la TARDE). Lista las compañías que suben
-  **≥5%** con su símbolo, el **%** y el precio; añade una frase de **por qué se
-  mueven** si lo encuentras en noticias (earnings, FDA, M&A, guidance…). En la mañana
-  son movimientos de **PRE-MERCADO antes de abrir**; en la tarde, **del día**. Si el
+- **Mayores movimientos ≥3% — los que SUBEN y los que BAJAN** (usa el bloque DATOS
+  REALES "MAYORES MOVIMIENTOS ..."). Lista en **DOS grupos** — 🟢 Suben (≥3%) y 🔴 Bajan
+  (≤−3%) — cada compañía con su símbolo, el **%** y el precio; añade una frase de **por
+  qué se mueven** si lo encuentras en noticias (earnings, FDA, M&A, guidance…). En la
+  mañana son movimientos de **PRE-MERCADO antes de abrir**; en la tarde, **del día**. Si el
   bloque no trae movers, OMITE esta sección.
 - **Sweeps / flujo institucional** (MarketSnack — SOLO si el bloque DATOS REALES
   trae "SWEEPS / FLUJO DE HOY"): 2-4 viñetas. La lista YA viene ordenada por
