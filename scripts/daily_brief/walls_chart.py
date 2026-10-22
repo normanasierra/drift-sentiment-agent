@@ -21,9 +21,10 @@ if str(REPO) not in sys.path:
 OUT = REPO / "output"
 
 
-def build_spx(max_exps: int = 4, band_pct: float = 5.0, max_dte: int = 10) -> bool:
-    """Save output/spx_walls_week.png from engine data (next ``max_exps`` expirations within
-    ``max_dte`` DTE). True on success, False (quietly) on any problem."""
+def build_spx(max_exps: int = 7, band_pct: float = 5.0, max_dte: int = 30) -> bool:
+    """Save output/spx_walls_week.png from engine data — the expirations within ``max_dte`` DTE,
+    sampled EVENLY across the window (up to ``max_exps``) so the chart spans the full horizon
+    instead of bunching at the nearest few. True on success, False (quietly) on any problem."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -45,7 +46,12 @@ def build_spx(max_exps: int = 4, band_pct: float = 5.0, max_dte: int = 10) -> bo
             d = (c.expiration - today).days
             if 0 <= d <= max_dte:
                 by_exp[c.expiration].append(c)
-        exps = sorted(by_exp)[:max_exps]
+        all_exps = sorted(by_exp)
+        if len(all_exps) <= max_exps:
+            exps = all_exps
+        else:  # SPX expires M/W/F — too many in 30d; spread evenly, keeping the nearest and ~max_dte
+            idxs = sorted({round(i * (len(all_exps) - 1) / (max_exps - 1)) for i in range(max_exps)})
+            exps = [all_exps[i] for i in idxs]
         if len(exps) < 2:
             return False
         rows = []  # (label, pw, mag, cw, flip)
@@ -80,6 +86,7 @@ def build_spx(max_exps: int = 4, band_pct: float = 5.0, max_dte: int = 10) -> bo
         ax.axhline(spot, color="#4dd0e1", ls=":", lw=1.2, alpha=0.85)
         ax.text(len(rows) - 0.94, spot, f"  Spot {spot:,.0f}", color="#4dd0e1", fontsize=9.5,
                 va="center", fontweight="bold", family="monospace")
+        end_labels = []  # (y, name, color) — drawn after, de-collided (walls converge at far DTE)
         for idx, col, name in [(1, "#ef5350", "Put Wall"), (3, "#1fae7e", "Call Wall"),
                                (4, "#ffd54f", "Gamma Flip"), (2, "#ffffff", "Magneto")]:
             pts = [(xi, r[idx]) for xi, r in zip(x, rows) if r[idx] is not None]
@@ -88,16 +95,25 @@ def build_spx(max_exps: int = 4, band_pct: float = 5.0, max_dte: int = 10) -> bo
             xs, yy = [p[0] for p in pts], [p[1] for p in pts]
             ax.plot(xs, yy, "-o", color=col, lw=2.4, ms=8, markeredgecolor="#0b0f17",
                     markeredgewidth=1.2)
-            ax.text(xs[-1] + 0.05, yy[-1], f"  {name}", color=col, fontsize=10, va="center",
-                    fontweight="bold", family="monospace")
+            end_labels.append((yy[-1], name, col))
             for xi, yv in zip(xs, yy):
                 ax.annotate(f"{yv:,.0f}", (xi, yv), color=col, fontsize=8.5, ha="center",
                             va="bottom", xytext=(0, 7), textcoords="offset points", family="monospace")
+        # push apart any end-of-line labels that would overprint each other
+        lo, hi = ax.get_ylim()
+        gap = (hi - lo) * 0.05
+        end_labels.sort()
+        for i in range(1, len(end_labels)):
+            if end_labels[i][0] - end_labels[i - 1][0] < gap:
+                end_labels[i] = (end_labels[i - 1][0] + gap, end_labels[i][1], end_labels[i][2])
+        for yv, name, col in end_labels:
+            ax.text(len(rows) - 1 + 0.08, yv, f"  {name}", color=col, fontsize=10, va="center",
+                    fontweight="bold", family="monospace")
         ax.set_xticks(x)
         ax.set_xticklabels([r[0] for r in rows], color="#cfd8e3", fontsize=10)
         ax.set_xlim(-0.35, len(rows) - 0.4 + 0.9)
         ax.set_ylabel("Precio (SPX)", color="#9aa7b5", fontsize=10)
-        ax.set_title(f"SPX — muros por vencimiento (motor · {today:%d-%b})  ·  educativo",
+        ax.set_title(f"SPX — muros por vencimiento (motor · ~{max_dte} días · {today:%d-%b})  ·  educativo",
                      color="#e8eaed", fontsize=12, fontweight="bold")
         OUT.mkdir(exist_ok=True)
         png = OUT / "spx_walls_week.png"
