@@ -56,16 +56,17 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
 
 3. **Noticias de HOY** (bien resumidas): saca los **3-5 titulares macro más
    importantes que muevan la renta variable de EE. UU. HOY** — de esta madrugada,
-   el overnight y el pre-mercado; **NO el recap de la sesión de ayer**. Si el bloque
-   de DATOS REALES incluye **NEWSLETTERS PAGADAS** (CNBC/Barron's/MarketSnacks del
-   inbox), úsalas como **fuente PRINCIPAL** (contenido de pago, más valioso que la
-   web abierta) y complementa buscando en la web (WebSearch) la cobertura de
-   **Bloomberg** (su sección de mercados — Norman la quiere SIEMPRE; suele estar tras
-   muro de pago, así que usa titulares/resúmenes públicos), **Yahoo Finance** y
-   **CNBC**, verificando que sea de HOY. Incluye al menos **1 titular de Bloomberg** si
-   lo hay. Cada titular: una frase clara de **qué pasó** y **por qué importa para el
-   mercado hoy**. Prioriza lo que mueve índices / tasas / sectores esta mañana. Resume
-   bien: claro, concreto y sin relleno.
+   el overnight y el pre-mercado; **NO el recap de la sesión de ayer**. El bloque
+   **NEWSLETTERS PAGADAS** de DATOS REALES ahora trae **Barron's, Bloomberg, WSJ, CNBC
+   y Yahoo Finance del inbox, con el CUERPO COMPLETO** (Norman **PAGA Barron's y Bloomberg**
+   y le llegan por email) → úsalas como **fuente PRINCIPAL** y **ANALÍZALAS a fondo**, no te
+   quedes en el titular: extrae la tesis, las cifras y las acciones que nombran. La web
+   (WebSearch) queda SOLO para **complementar o verificar** que algo sea de HOY. **ETIQUETA cada
+   noticia con su fuente entre paréntesis** — p.ej. `(Bloomberg)`, `(Barron's)`, `(WSJ)` — para que
+   Norman vea de dónde sale; **DEBES mostrar al menos 1 de Bloomberg y 1 de Barron's** si el bloque
+   las trae (son sus suscripciones pagadas). Cada titular:
+   una frase clara de **qué pasó** y **por qué importa para el mercado hoy**. Prioriza lo que
+   mueve índices / tasas / sectores esta mañana. Resume bien: claro, concreto y sin relleno.
 
 3b. **Jim Cramer / CNBC Investing Club** (Norman lo sigue MUY de cerca): **ANALIZA y RESUME sus
    jugadas** — upgrades/downgrades, compras/adds, ventas, niveles y las **acciones** que nombra,
@@ -77,6 +78,13 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
    tipranks. Verifica que sea reciente. Cierra con su **sesgo de la semana** (ej. "alcista en
    financieras: Goldman y Wells Fargo; añade Kimberly-Clark; cauto en AI nuevo"). Educativo, NO
    recomendación.
+
+3c. **Motley Fool** (análisis a fondo): el bloque DATOS REALES → **MOTLEY FOOL** trae artículos con
+   su **CUERPO COMPLETO** (ya bajado — fool.com es abierto). **Analiza CADA artículo de verdad**, no
+   el titular: la **tesis**, las **acciones** que nombra, las **cifras** clave y la **postura**
+   (comprar/mantener/vender + por qué). Prioriza los que tocan tickers que Norman sigue. Saca **2-4
+   viñetas** con lo más accionable y, si hay un hilo común entre varios (ej. rotación fuera de tech,
+   defensivas, dividendos), nómbralo. Educativo, NO recomendación.
 
 4. **Trump**: busca lo más reciente y relevante para el MERCADO que haya dicho
    o hecho Trump (declaraciones, aranceles, Fed, política económica, órdenes
@@ -141,6 +149,9 @@ limpio, legible en Gmail (fondo claro). Estructura (español):
   días (la **acción** + su **postura** comprar/añadir/mantener/vender + nivel/porqué), combinando los
   titulares del email con la **cobertura pública que buscaste en la web**. Es un **análisis**, NO solo
   titulares. Cierra con su **sesgo de la semana**.
+- **🧠 Motley Fool — análisis**: 2-4 viñetas que **analizan** los artículos COMPLETOS del bloque
+  MOTLEY FOOL (tesis + acción + cifras + postura), no el titular; nombra el **hilo común** si lo hay.
+  Omite la sección si el bloque no vino.
 - **Mayores movimientos ≥3% — los que SUBEN y los que BAJAN** (usa el bloque DATOS
   REALES "MAYORES MOVIMIENTOS ..."). Lista en **DOS grupos** — 🟢 Suben (≥3%) y 🔴 Bajan
   (≤−3%) — cada compañía con su símbolo, el **%** y el precio; añade una frase de **por

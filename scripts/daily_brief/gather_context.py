@@ -230,9 +230,29 @@ def _movers_block() -> str:
     return "\n".join(lines)
 
 
+# Admin/promo newsletter subjects with no market analysis — skip so a real edition takes the slot.
+_NL_SKIP = ("you've subscribed", "welcome to", "your receipt", "reminder:",
+            "is today at", "verify your", "confirm your", "unsubscribe", "sign in")
+
+
+def _nl_source(sender: str) -> str:
+    """Bucket a newsletter sender into its source, so the brief shows a DIVERSE set
+    (Barron's + Bloomberg + Yahoo + WSJ + CNBC) instead of just whichever sender sorts first."""
+    s = (sender or "").lower()
+    if "bloomberg" in s:                   return "Bloomberg"
+    if "barrons" in s or "dowjones" in s:  return "Barron's"
+    if "wsj" in s:                         return "WSJ"
+    if "yahoo" in s:                       return "Yahoo"
+    if "cnbc" in s:                        return "CNBC"
+    if "snack" in s:                       return "MarketSnacks"
+    return "Otros"
+
+
 def _newsletters_block() -> str:
-    """Content from the reader's PAID newsletters (CNBC/Barron's/MarketSnacks…),
-    read from his Gmail inbox, for the brief to summarize. '' if none/unconfigured."""
+    """Content from the reader's PAID newsletters, read from his Gmail inbox, for the brief to
+    analyze. Picks a DIVERSE set — up to 2 per source, round-robin — so Norman's paid Barron's
+    AND Bloomberg AND Yahoo all get analyzed (they arrive from senders that sort LAST, so a plain
+    top-N would drop them). '' if none/unconfigured."""
     try:
         from data_sources import email_inbox
         items = email_inbox.recent_newsletters(since_days=1)
@@ -240,10 +260,28 @@ def _newsletters_block() -> str:
         return ""
     if not items or (len(items) == 1 and items[0].get("sender") == "error"):
         return ""
-    lines = ["NEWSLETTERS PAGADAS (del inbox — RESUME lo relevante para el mercado hoy):"]
-    for it in items[:6]:
+    from collections import OrderedDict
+    buckets: "OrderedDict[str, list]" = OrderedDict()
+    for it in items:
+        subj = (it.get("subject") or "").lower()
+        if any(k in subj for k in _NL_SKIP):
+            continue
+        buckets.setdefault(_nl_source(it.get("sender", "")), []).append(it)
+    for lst in buckets.values():  # newest-fetched first within each source
+        lst.reverse()
+    picked: list[tuple[str, dict]] = []  # round-robin up to 2 per source, interleaved
+    for rnd in range(2):
+        for src, lst in buckets.items():
+            if len(lst) > rnd:
+                picked.append((src, lst[rnd]))
+    picked = picked[:9]
+    if not picked:
+        return ""
+    lines = ["NEWSLETTERS PAGADAS (del inbox — ANALIZA A FONDO cada una, no solo el titular; "
+             "Barron's y Bloomberg son PAGADAS, dales peso; resume lo relevante para HOY):"]
+    for src, it in picked:
         body = " ".join((it.get("body") or "").split())[:1200]
-        lines.append(f"  · [{it.get('sender','')[:40]}] {it.get('subject','')}")
+        lines.append(f"  · [{src}] {it.get('subject','')}")
         if body:
             lines.append(f"    {body}")
     return "\n".join(lines) if len(lines) > 1 else ""
@@ -268,6 +306,28 @@ def _cramer_block() -> str:
         lines.append(f"  · [{it.get('when', '')}] {it.get('subject', '')}")
         if body:
             lines.append(f"    {body}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _motley_block() -> str:
+    """Motley Fool articles pulled in FULL (fool.com isn't paywalled) and injected so the brief
+    analyzes the WHOLE piece, not the headline — Norman (2026-10-22): 'entra a cada artículo y
+    analiza toda la noticia'. The headless LLM has no web_fetch, so motley_news does the fetch in
+    Python; body falls back to Polygon's summary if a fetch is blocked. '' if none."""
+    try:
+        import motley_news
+        items = motley_news.fetch_motley()
+    except Exception:  # noqa: BLE001
+        return ""
+    if not items:
+        return ""
+    lines = ["MOTLEY FOOL — artículos COMPLETOS (analiza CADA uno a fondo: tesis, acciones, cifras, "
+             "postura comprar/mantener/vender y la conclusión accionable; NO te quedes en el titular):"]
+    for it in items:
+        tks = ", ".join(it.get("tickers") or [])
+        lines.append(f"  · {it.get('title','')}" + (f" [{tks}]" if tks else ""))
+        if it.get("body"):
+            lines.append(f"    {it['body']}")
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
@@ -406,7 +466,8 @@ def gather() -> str:
         _indices_block(), _bonds_block(), _world_block(), _etfs_block(),
         _watchlist_block(), _movers_block(), _portfolio_block(), _breakeven_block(),
         _support_bounce_block(),
-        _cramer_block(), _newsletters_block(), _sweeps_block(), _hyperliquid_block(), _schwab_block(),
+        _cramer_block(), _newsletters_block(), _motley_block(),
+        _sweeps_block(), _hyperliquid_block(), _schwab_block(),
     ]
     body = "\n\n".join(b for b in blocks if b)
     if not body:

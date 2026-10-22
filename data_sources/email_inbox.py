@@ -21,12 +21,16 @@ load_dotenv()
 IMAP_HOST = os.getenv("IMAP_HOST", "imap.gmail.com")
 
 # Senders whose newsletters we care about. Extend freely.
-# Note: Norman's Barron's arrives from mail.dowjones.com (not barrons.com), and WSJ
-# from interactive.wsj.com — so match on dowjones.com / wsj.com. CNBC Pro/Spotlight
-# both live under response.cnbc.com, caught by "cnbc.com".
+# Note: Norman's Barron's arrives BOTH from mail.dowjones.com (the "Must-Read" roundups,
+# text/plain) and from access@barrons.com (The Barron's Daily, Barron's Tech — HTML-only,
+# so they NEED _readable_body, not _plain_body, or they come through EMPTY). WSJ from
+# interactive.wsj.com → match wsj.com. CNBC Pro/Spotlight live under response.cnbc.com
+# → "cnbc.com". Bloomberg (Markets Daily, AI Today, Matt Levine's Money Stuff, Businessweek)
+# is PAID and arrives from noreply@news.bloomberg.com → "bloomberg" (text/plain present).
 NEWSLETTER_SENDERS = [
     "marketsnacks", "snacks", "barrons.com", "dowjones.com",
     "cnbcpro", "cnbc.com", "wsj.com", "yahoofinance", "finance.yahoo",
+    "bloomberg",
 ]
 
 # Jim Cramer / CNBC Investing Club — a source Norman follows closely, so his emails get a
@@ -117,7 +121,9 @@ def recent_newsletters(*, since_days: int = 1, max_msgs: int = 8) -> list[dict]:
                 out.append({
                     "sender": _decode(msg.get("From")),
                     "subject": _decode(msg.get("Subject")),
-                    "body": _plain_body(msg)[:4000],
+                    # _readable_body (not _plain_body): Barron's access@ + many Bloomberg/CNBC
+                    # editions are HTML-only, so _plain_body returns "" and they'd arrive EMPTY.
+                    "body": _readable_body(msg)[:4000],
                 })
         M.logout()
     except Exception as exc:  # noqa: BLE001
@@ -141,9 +147,10 @@ def _readable_body(msg: email.message.Message) -> str:
                 break
     if not html:
         return ""
-    import re
+    import html as _html, re
     html = re.sub(r"<(style|script)\b[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+    return _html.unescape(text)  # decode &rsquo; &amp; &ndash; … so the LLM reads clean prose
 
 
 def _declutter_cramer(text: str) -> str:
