@@ -287,6 +287,17 @@ def _fmt(a: dict) -> str:
     return f"{icon} {pub}{tag}\n{a.get('title', '')}\n{a.get('article_url', '')}"
 
 
+# Norman (2026-10-22): don't ping individual Motley Fool items — they FLOOD the feed (~28 of 50) and
+# are evergreen "which stock is the better buy" analysis, not breaking news. They go into the
+# consolidated Cramer+Motley summary instead, so Telegram isn't spammed one article at a time.
+_PING_EXCLUDE_PUBLISHERS = ("motley fool", "fool.com", "fool")
+
+
+def _excluded_publisher(a: dict) -> bool:
+    pub = ((a.get("publisher") or {}).get("name") or "").lower()
+    return any(x in pub for x in _PING_EXCLUDE_PUBLISHERS)
+
+
 def main() -> None:
     load_env()
     if "--hello" in sys.argv:
@@ -316,7 +327,7 @@ def main() -> None:
         if not aid or aid in seen:
             continue
         seen.add(aid)
-        if _age_min(a) <= FRESH_MIN and _relevant(a):
+        if _age_min(a) <= FRESH_MIN and _relevant(a) and not _excluded_publisher(a):
             fresh.append(a)
 
     if dry:
