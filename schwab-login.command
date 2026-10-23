@@ -19,7 +19,18 @@ echo ""
 
 PY=".venv/bin/python"
 [ -x "$PY" ] || PY="python3"
-"$PY" scripts/schwab_auto_login.py
+
+# macOS needs admin to open the 127.0.0.1:443 callback port (ports <1024). Windows does not.
+# sudo binds the local server; the browser (your user) still reaches it — paste the URL below if
+# it doesn't auto-open under sudo.
+if [ "$(uname)" = "Darwin" ]; then
+  echo "  NOTA (Mac): el puerto local 443 pide permiso de admin -> te pedira tu contrasena (sudo)."
+  echo "  Es seguro. Si el navegador no abre solo, copia/pega en Safari/Chrome la URL que saldra abajo."
+  echo ""
+  sudo "$PY" scripts/schwab_auto_login.py
+else
+  "$PY" scripts/schwab_auto_login.py
+fi
 
 echo ""
 echo "  (Puedes cerrar esta ventana.)"

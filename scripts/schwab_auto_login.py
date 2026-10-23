@@ -134,7 +134,11 @@ def main() -> None:
     _ensure_cert()
 
     port = urllib.parse.urlparse(redirect).port or 443
-    httpd = HTTPServer(("127.0.0.1", port), _Handler)
+    try:
+        httpd = HTTPServer(("127.0.0.1", port), _Handler)
+    except PermissionError:
+        sys.exit(f"Sin permiso para abrir el puerto {port} (en Mac/Linux los puertos <1024 piden "
+                 f"admin). Vuelve a correr con sudo:  sudo .venv/bin/python scripts/schwab_auto_login.py")
     httpd.k, httpd.s, httpd.r = key, secret, redirect  # type: ignore[attr-defined]
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(certfile=str(CERT), keyfile=str(KEY))
