@@ -305,7 +305,7 @@ def _embed_walls_charts() -> list[str]:
         f'<div style="margin:8px 0 14px"><img src="cid:{cid}" alt="SPX muros" '
         'style="max-width:100%;height:auto;border-radius:8px"/>'
         '<div style="color:#9aa7b5;font-size:12px;font-family:system-ui,Segoe UI,sans-serif;'
-        f'margin-top:3px">SPX · niveles MarketSnack · {stamp}</div></div>')
+        f'margin-top:3px">SPX · MarketSnack (sólido) vs Motor ±5% (punteado) · {stamp}</div></div>')
     try:
         html = EMAIL.read_text(encoding="utf-8")
         if "<!--WALLS_CHART-->" in html:  # slot it just above the break-even table (which stays dead last)
