@@ -268,38 +268,42 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + cr_tg) if wa else cr_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
-    try:  # ONE merged money report, after-close only (Norman, 2026-10-16): today's P&L by account
-        # (realized + unrealized + balance) with the closed-trades table joined right below it, and on
-        # Fridays the week's realized total (Mon–Fri) underneath. Replaces the old separate
-        # realized_today / daily_pnl / weekly_entries / closed_trades sections. Break-even table is kept.
+    try:  # Money section, after-close (Norman 2026-10-23): WEEKLY P&L by account + trades (closed +
+        # open). The old DAILY "P&L diario por cuenta" report was removed at his request; break-even
+        # table (at the bottom) and the per-stock portfolio analysis stay.
         if local.hour >= 16:
             for _p in (REPO / "scripts", REPO / "scripts" / "daily_brief"):
                 if str(_p) not in sys.path:
                     sys.path.insert(0, str(_p))
-            import daily_pnl
-            import closed_trades
-            dp_html, dp_tg = daily_pnl.brief_section()
-            ct_html, ct_tg = closed_trades.build(recent_days=1)  # today's closes (the daily report)
-            wk_html = ""
-            if local.weekday() == 4:  # Friday: week's realized total (Mon–Fri) below the daily report
-                try:
-                    from data_sources import schwab_trades
-                    tw = schwab_trades.realized_totals(180, 5) or {}
-                    per = tw.get("per_account") or {}
-                    grand = tw.get("grand")
-                    if grand is not None:
-                        bits = " · ".join(f"{k} ${v:+,.2f}" for k, v in per.items())
-                        wk_html = ("<p style='font:13px -apple-system,Segoe UI,Arial,sans-serif;"
-                                   "color:#0f172a;margin:10px 0 0'>📅 <b>Semana (Lun–Vie) — realizado:</b> "
-                                   + (bits + " · " if bits else "") + f"<b>Total ${grand:+,.2f}</b></p>")
-                except Exception:  # noqa: BLE001
-                    pass
-            combined = "".join(x for x in (dp_html, ct_html, wk_html) if x)
-            if combined.strip():
-                top.append(combined)  # single entry → no <hr> between daily P&L and closed trades
-            for _tg in (dp_tg, ct_tg):
-                if _tg:
-                    wa = (wa.rstrip() + "\n\n" + _tg) if wa else _tg
+            money: list[str] = []
+            try:  # weekly realized P&L BY ACCOUNT — this week, Monday-to-date
+                from data_sources import schwab_trades
+                tw = schwab_trades.realized_totals(180, local.weekday() + 1) or {}
+                per = tw.get("per_account") or {}
+                grand = tw.get("grand")
+                if grand is not None:
+                    bits = " · ".join(f"{k} ${v:+,.2f}" for k, v in per.items())
+                    money.append(
+                        "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
+                        "margin:20px 0 4px'>📅 P&L de la semana por cuenta (realizado)</h2>"
+                        "<p style='font:13px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
+                        "margin:0 0 6px'>" + (bits + " · " if bits else "")
+                        + f"<b>Total ${grand:+,.2f}</b> <span style='color:#64748b'>(lun–hoy)</span></p>")
+                    wk_tg = "📅 Semana por cuenta: " + (bits + " · " if bits else "") + f"Total ${grand:+,.2f}"
+                    wa = (wa.rstrip() + "\n\n" + wk_tg) if wa else wk_tg
+            except Exception:  # noqa: BLE001
+                pass
+            try:  # trades: today's CLOSED + currently OPEN (unrealized)
+                import closed_trades
+                ct_html, ct_tg = closed_trades.build(recent_days=1, include_open=True)
+                if ct_html:
+                    money.append(ct_html)
+                if ct_tg:
+                    wa = (wa.rstrip() + "\n\n" + ct_tg) if wa else ct_tg
+            except Exception:  # noqa: BLE001
+                pass
+            if money:
+                top.append("".join(money))
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
     try:
