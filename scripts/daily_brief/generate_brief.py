@@ -330,7 +330,7 @@ def generate() -> None:
             wa = (wa.rstrip() + "\n\n" + t_tg) if wa else t_tg
     except Exception:  # noqa: BLE001 — best-effort; never block the brief
         pass
-    be_table = ""  # break-even table — prepended FIRST and PROTECTED from the size trim (see assembly)
+    be_table = ""  # break-even table — appended DEAD LAST (Norman 2026-10-23), still PROTECTED from the trim
     try:
         from data_sources import schwab_breakeven
         be_table = schwab_breakeven.report_fragment() or ""
@@ -354,7 +354,7 @@ def generate() -> None:
     # tail was trimmed, silently dropping the agenda/news/movers on heavy-table days.)
     llm = email
     CLIP_SAFE = 100_000
-    be_part = (be_table + _hr) if be_table else ""
+    be_part = (_hr + be_table) if be_table else ""   # leading rule; break-even goes DEAD LAST
     tables = (_hr.join(top) + _hr) if top else ""
     fixed_budget = CLIP_SAFE - len((be_part + llm).encode("utf-8"))
     if fixed_budget < 0:
@@ -363,7 +363,10 @@ def generate() -> None:
         tables = _close_html(tables.encode("utf-8")[:fixed_budget].decode("utf-8", "ignore")) + (
             "<p style='font:11px -apple-system,Segoe UI,Arial,sans-serif;color:#94a3b8;"
             "margin:8px 0'>…(tablas recortadas para no pasar el límite de Gmail)</p>")
-    email = be_part + tables + llm
+    # Order (Norman 2026-10-23): fixed tables, then the LLM brief, then the SPX walls chart (slotted
+    # at the <!--WALLS_CHART--> marker by run_brief_local._embed_walls_charts), and the break-even
+    # table DEAD LAST at the very bottom. The LLM brief + break-even stay WHOLE; only `tables` is trimmed.
+    email = tables + llm + "<!--WALLS_CHART-->" + be_part
 
     OUT_DIR.mkdir(exist_ok=True)
     EMAIL_FILE.write_text(email, encoding="utf-8")

@@ -308,8 +308,12 @@ def _embed_walls_charts() -> list[str]:
         f'margin-top:3px">SPX · niveles MarketSnack · {stamp}</div></div>')
     try:
         html = EMAIL.read_text(encoding="utf-8")
-        html = (html.replace("</body>", block + "\n</body>")
-                if "</body>" in html else html + "\n" + block)
+        if "<!--WALLS_CHART-->" in html:  # slot it just above the break-even table (which stays dead last)
+            html = html.replace("<!--WALLS_CHART-->", block, 1)
+        elif "</body>" in html:
+            html = html.replace("</body>", block + "\n</body>")
+        else:
+            html = html + "\n" + block
         EMAIL.write_text(html, encoding="utf-8")
         log("gráfica SPX (MarketSnack) embebida en el brief.")
     except Exception as exc:  # noqa: BLE001 — never let chart embedding break the brief
