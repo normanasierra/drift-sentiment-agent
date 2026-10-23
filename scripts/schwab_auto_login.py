@@ -104,14 +104,34 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(html.encode("utf-8"))
 
 
+def _ensure_cert() -> None:
+    """Generate the self-signed 127.0.0.1 cert if it's missing, so this runs on ANY machine (the
+    Mac during travel, a fresh clone) — output/ is gitignored, so the cert never syncs via git.
+    It's a throwaway localhost cert (no secret); the browser warning Norman clicks through is
+    expected either way. Needs openssl (pre-installed on macOS/LibreSSL and in Git Bash)."""
+    if CERT.exists() and KEY.exists():
+        return
+    import subprocess
+    CERT.parent.mkdir(exist_ok=True)
+    try:
+        subprocess.run(
+            ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-sha256", "-days", "3650",
+             "-nodes", "-keyout", str(KEY), "-out", str(CERT), "-subj", "/CN=127.0.0.1"],
+            check=True, capture_output=True,
+        )
+        _log("generated self-signed 127.0.0.1 cert (was missing)")
+        print("(Generé el certificado local 127.0.0.1 — solo la primera vez en esta máquina.)")
+    except Exception as exc:  # noqa: BLE001
+        sys.exit(f"No pude generar el certificado 127.0.0.1 ({exc}). Instala openssl o avísame.")
+
+
 def main() -> None:
     key = os.getenv("SCHWAB_APP_KEY")
     secret = os.getenv("SCHWAB_APP_SECRET")
     redirect = os.getenv("SCHWAB_REDIRECT_URI", "https://127.0.0.1")
     if not key or not secret:
         sys.exit("Faltan SCHWAB_APP_KEY / SCHWAB_APP_SECRET en .env.")
-    if not (CERT.exists() and KEY.exists()):
-        sys.exit(f"Falta el certificado ({CERT.name}/{KEY.name}). Avísame y lo regenero.")
+    _ensure_cert()
 
     port = urllib.parse.urlparse(redirect).port or 443
     httpd = HTTPServer(("127.0.0.1", port), _Handler)
