@@ -282,18 +282,20 @@ def main() -> None:
 
 
 def _embed_walls_charts() -> list[str]:
-    """Generate the SPX walls-per-expiration chart FRESH from the engine and embed it in the brief,
-    returning the ``--inline-image`` arg for send_email.py. Norman (2026-10-20): only SPX now (AMD
-    dropped), and it must update by itself — MarketSnack needs a browser the headless brief can't
-    reach, so the levels come from the options engine (`walls_chart.build_spx`) and refresh every run."""
-    try:
-        import walls_chart
-        walls_chart.build_spx()  # (re)generate output/spx_walls_week.png from engine data
-    except Exception as exc:  # noqa: BLE001
-        log(f"aviso: no pude generar la gráfica SPX ({exc}).")
-    p = OUT / "spx_walls_week.png"
+    """Embed the SPX walls-per-expiration chart in the brief. Norman wants MARKETSNACK levels (his
+    primary source) — the raw-OI engine did NOT match them (its ±5% band even clipped the real Put
+    Wall), so the engine chart is gone. MarketSnack needs a logged-in browser the headless brief
+    can't reach, so the chart is captured MANUALLY (marketsnack_walls_chart.py, refreshed via Edge)
+    and only embedded while it's FRESH (<=10h); otherwise it's OMITTED rather than send stale or
+    approximate levels — money is at stake (2026-10-23). See [[use-marketsnack-for-analysis]]."""
+    import time
+    p = OUT / "spx_walls_marketsnack.png"
     if not fresh(p):
-        log("aviso: no hay gráfica SPX para embeber.")
+        log("aviso: no hay gráfica SPX de MarketSnack; la omito (el motor no coincide, no lo uso).")
+        return []
+    age_h = (time.time() - p.stat().st_mtime) / 3600.0
+    if age_h > 10:  # only a capture from today's session; else skip rather than mislead
+        log(f"aviso: gráfica SPX de MarketSnack vieja ({age_h:.0f}h); la omito (niveles stale).")
         return []
     cid = "spx_walls"
     stamp = datetime.datetime.fromtimestamp(p.stat().st_mtime).strftime("%d-%b %I:%M%p")
@@ -303,13 +305,13 @@ def _embed_walls_charts() -> list[str]:
         f'<div style="margin:8px 0 14px"><img src="cid:{cid}" alt="SPX muros" '
         'style="max-width:100%;height:auto;border-radius:8px"/>'
         '<div style="color:#9aa7b5;font-size:12px;font-family:system-ui,Segoe UI,sans-serif;'
-        f'margin-top:3px">SPX · niveles del motor · generada {stamp}</div></div>')
+        f'margin-top:3px">SPX · niveles MarketSnack · {stamp}</div></div>')
     try:
         html = EMAIL.read_text(encoding="utf-8")
         html = (html.replace("</body>", block + "\n</body>")
                 if "</body>" in html else html + "\n" + block)
         EMAIL.write_text(html, encoding="utf-8")
-        log("gráfica SPX (motor) embebida en el brief.")
+        log("gráfica SPX (MarketSnack) embebida en el brief.")
     except Exception as exc:  # noqa: BLE001 — never let chart embedding break the brief
         log(f"aviso: no pude embeber la gráfica SPX ({exc}); sigo sin ella.")
         return []
