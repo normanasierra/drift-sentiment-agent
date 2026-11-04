@@ -109,7 +109,11 @@ no encuentres como "n/d"). Sé eficiente con las búsquedas (agrupa, prioriza).
      el **consenso** vs. el dato previo.
    - **Fed**: discursos de miembros, subastas del Tesoro, actas/decisiones.
    - **Earnings de hoy** (antes de abrir / después del cierre); **marca** si alguno
-     es de un ticker del portafolio de Norman.
+     es de un ticker del portafolio de Norman. **IMPORTANTE:** para las FECHAS de
+     earnings usa ÚNICAMENTE el bloque "DATOS AUTORITATIVOS — EARNINGS" del contexto
+     (calendario oficial Nasdaq). NUNCA digas que una acción reporta hoy/mañana/after
+     hours si el ticker no está en ese bloque, aunque una noticia o aggregator lo diga;
+     si una noticia contradice ese bloque, el bloque manda.
    - Otros catalizadores (testimonios, vencimientos, decisiones regulatorias).
    Si un dato ya salió esta mañana, di el **resultado vs. lo esperado** y la reacción
    del mercado. Ordena por hora / importancia. Solo si de verdad no hay nada, dilo en

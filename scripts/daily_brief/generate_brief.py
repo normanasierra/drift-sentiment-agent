@@ -121,6 +121,38 @@ def _real_data() -> str:
         return ""
 
 
+def _earnings_authority() -> str:
+    """Authoritative earnings list (official Nasdaq calendar) for TODAY and the next trading
+    day, as a context block the LLM MUST treat as the ONLY source for earnings dates. Fixes the
+    bug where the narrative repeated a bad aggregator ('AMD reports today') that contradicted the
+    data-driven earnings table. Best-effort → '' so the brief always sends (Norman 2026-11-04)."""
+    try:
+        import earnings_today as et
+        today = datetime.date.today()
+        nxt = et._next_trading_day(today)
+
+        def _line(day):
+            items, _ = et.screen(day)
+            if not items:
+                return "ninguna empresa grande"
+            return ", ".join(
+                f"{d['sym']} ({'antes de abrir' if 'antes' in d['when'] else 'después del cierre' if 'después' in d['when'] else 'hora n/d'})"
+                for d in items)
+
+        return (
+            "DATOS AUTORITATIVOS — EARNINGS (calendario oficial Nasdaq; esta es la ÚNICA fuente "
+            "válida para FECHAS de earnings, por encima de cualquier noticia, newsletter o búsqueda web):\n"
+            f"• Reportan HOY ({today.isoformat()}): {_line(today)}.\n"
+            f"• Reportan el próximo día hábil ({nxt.isoformat()}): {_line(nxt)}.\n"
+            "REGLA: NO afirmes que una acción reporta 'hoy', 'mañana', 'after hours' ni des una fecha "
+            "de earnings si el ticker NO está en las listas de arriba, aunque una noticia o aggregator "
+            "lo diga (esas fuentes a veces tienen la fecha equivocada). Si una noticia contradice estas "
+            "listas, la lista manda.\n"
+        )
+    except Exception:  # noqa: BLE001 — best-effort; the earnings table still carries the truth
+        return ""
+
+
 def _close_html(html: str) -> str:
     """Repair truncated LLM HTML so a half-written tag can't turn the rest of the email
     (the appended break-even table) into raw text: drop any dangling '<...' with no
@@ -141,11 +173,13 @@ def generate() -> None:
     local = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=4)
     today = local.strftime("%Y-%m-%d")
     real = _real_data()
+    earn = _earnings_authority()
     prompt = (
         f"CONTEXTO: hoy es {today}, hora local aprox {local.strftime('%H:%M')} (UTC-4).\n"
         "Ajusta el enfoque a la hora: antes de 9:30am = pre-mercado; durante la "
         "sesion (9:30am-4pm) = actualizacion intradia con precios en curso; despues "
         "del cierre = resumen del dia.\n\n"
+        + (earn + "\n" if earn else "")
         + (real + "\n" if real else "")
         + PROMPT_FILE.read_text(encoding="utf-8")
         + OUTPUT_RULE

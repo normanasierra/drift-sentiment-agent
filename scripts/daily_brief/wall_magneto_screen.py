@@ -26,10 +26,13 @@ UNIVERSE = [
 MIN_GAP_PCT = 8.0     # earnings ⭐: magneto at least this far (% of spot) from the dominant wall
 MAX_LEVEL_PCT = 35.0  # ignore magneto/walls beyond this % of spot — not a near-term level
 
-# --- Wall-glue setup (Norman 2026-10-16): stocks GLUED (within GLUE_PTS points) to a wall while the
-#     strongest Magneto sits MORE than MAG_FAR_PTS points away. Absolute POINTS ($), not percent. ---
-GLUE_PTS = 5.0        # spot within this many points ($) of a wall = "pegada al muro" (Norman: ≤5)
-MAG_FAR_PTS = 20.0    # ...and the Magneto must be MORE than this many points ($) from spot
+# --- Wall-glue setup (Norman 2026-10-16; switched to PERCENT 2026-11-04): stocks GLUED (within
+#     GLUE_PCT of spot) to a wall while the strongest Magneto sits MORE than MAG_FAR_PCT away. PERCENT
+#     of spot, NOT absolute $ — the old $5/$20 points never scaled, so this section came out EMPTY on
+#     high-priced names (a $20 magnet gap is 30% on a $66 NFLX but 2.5% on an $800 MU). Percent fires
+#     consistently across the whole universe, like the PC. ---
+GLUE_PCT = 1.5        # spot within this % of a wall = "pegada al muro" (Norman 2026-11-04)
+MAG_FAR_PCT = 5.0     # ...and the Magneto must be MORE than this % from spot
 MIN_MAGDIST_PCT = 8.0  # 2nd table (magdist): spot at least this % away from the Magneto
 MAX_MAGNET_DTE = 14   # scan 0-14 DTE for the REAL magnet (strong magnets live at ~1-2 weeks, not 0DTE)
 MIN_STRENGTH = 0.20   # only trust a magnet this concentrated — below this the flow is noise
@@ -438,49 +441,54 @@ def build_bounce() -> tuple[str, str]:
     return html, tg
 
 
-def _glue(spot, contracts, as_of):
-    """Setup dict for a stock GLUED within GLUE_PTS points of its nearest wall (put OR call) while
-    its strongest Magneto sits MORE than MAG_FAR_PTS points away — price pinned to a wall with the
-    magnet pulling from far (Norman 2026-10-16). Levels come from the expiration with the STRONGEST
-    magnet (0-14 DTE). None if it doesn't qualify."""
-    from drift_sentiment.walls import call_wall, put_wall
-    sm = _strong_magnet(contracts, spot, as_of)   # strongest (real) magnet + its expiration
-    if not sm:
+def _glue(spot, cw, pw, mag, dte):
+    """Setup dict for a stock GLUED within GLUE_PCT of its nearest wall (put OR call) while the
+    engine Magneto sits MORE than MAG_FAR_PCT away — price pinned to a wall with the magnet pulling
+    from far (Norman 2026-10-16; rebuilt 2026-11-04 on the engine's nearest-bucket levels, the SAME
+    walls/magneto source as the rest of the brief + the PC, with percent thresholds).
+
+    The magneto must be a PLAUSIBLE near-term level (_near: <= MAX_LEVEL_PCT of spot) so a deep-OTM
+    monthly net-notional magnet (e.g. MU $2500 vs an $800 spot) can't qualify. ``cw``/``pw`` are
+    (strike, open_interest) tuples or None, ``mag`` the magneto center, ``dte`` the bucket's DTE.
+    None if it doesn't qualify."""
+    if not (spot and mag and cw and pw and cw[0] is not None and pw[0] is not None):
         return None
-    strength, e, cs, mag_s = sm
-    cw, pw = call_wall(cs), put_wall(cs)
-    if not (cw and pw):
+    if not _near(mag, spot):                 # magneto must be a plausible near-term magnet
         return None
     # the wall (put or call) NEAREST to the price — the one it's glued to
-    call = ("call", cw.strike, cw.open_interest or 0)
-    put = ("put", pw.strike, pw.open_interest or 0)
-    near = call if abs(cw.strike - spot) <= abs(pw.strike - spot) else put
+    call = ("call", cw[0], cw[1] or 0)
+    put = ("put", pw[0], pw[1] or 0)
+    near = call if abs(cw[0] - spot) <= abs(pw[0] - spot) else put
     wall_dist = abs(near[1] - spot)
-    if wall_dist > GLUE_PTS:                 # must be GLUED (<= 2 pts) to a wall
+    wall_dist_pct = wall_dist / spot * 100
+    if wall_dist_pct > GLUE_PCT:             # must be GLUED (<= GLUE_PCT of spot) to a wall
         return None
-    mag_dist = abs(mag_s - spot)
-    if mag_dist <= MAG_FAR_PTS:              # ...and the Magneto must be MORE than 20 pts away
+    mag_dist = abs(mag - spot)
+    mag_dist_pct = mag_dist / spot * 100
+    if mag_dist_pct <= MAG_FAR_PCT:          # ...and the Magneto must be MORE than MAG_FAR_PCT away
         return None
-    return {"side": near[0], "wall": near[1], "wall_oi": near[2], "wall_dist": wall_dist,
-            "mag": mag_s, "mag_dist": mag_dist, "fuerza": strength,
-            "dir": "↑" if mag_s > spot else "↓", "dte": (e - as_of).days, "spot": spot}
+    return {"side": near[0], "wall": near[1], "wall_oi": near[2],
+            "wall_dist": wall_dist, "wall_dist_pct": wall_dist_pct,
+            "mag": mag, "mag_dist": mag_dist, "mag_dist_pct": mag_dist_pct,
+            "dir": "↑" if mag > spot else "↓", "dte": dte, "spot": spot}
 
 
 def screen_wallglue() -> list[dict]:
-    """Universe names glued (<= GLUE_PTS pts) to a wall with the Magneto > MAG_FAR_PTS pts away,
-    0-14 DTE, farthest magnet first."""
+    """Universe names glued (<= GLUE_PCT of spot) to a wall with the engine Magneto > MAG_FAR_PCT
+    away (nearest DTE bucket, plausible magneto <= MAX_LEVEL_PCT of spot), farthest magnet (as %
+    of spot) first. Uses the SAME walls/magneto source as the rest of the brief + the PC."""
     import time
     out: list[dict] = []
     for s in UNIVERSE:
-        ch = _chain(s)
+        r = _levels(s)                        # (spot, call_wall, put_wall, magneto, dte)
         time.sleep(0.02)
-        if not ch:
+        if not r:
             continue
-        g = _glue(ch[0], ch[1], date.today())
+        g = _glue(*r)
         if g:
             g["sym"] = s
             out.append(g)
-    out.sort(key=lambda d: -d["mag_dist"])
+    out.sort(key=lambda d: -d["mag_dist_pct"])
     return out
 
 
@@ -507,22 +515,21 @@ def build_wallglue() -> tuple[str, str]:
             f"<tr><td style='{tdl}'>{d['sym']}</td>"
             f"<td style='{td}'>${d['spot']:,.2f}</td>"
             f"<td style='{tdl}'>{d['side']} ${d['wall']:g}</td>"
-            f"<td style='{td}'>${d['wall_dist']:.2f}</td>"
+            f"<td style='{td}'>${d['wall_dist']:.2f} ({d['wall_dist_pct']:.1f}%)</td>"
             f"<td style='{tdl}'>${d['mag']:g}</td>"
-            f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} ${d['mag_dist']:.2f}</td>"
+            f"<td style='{td};font-weight:600;background:#fef9c3'>{d['dir']} ${d['mag_dist']:.2f} ({d['mag_dist_pct']:.1f}%)</td>"
             f"<td style='{td}'>{d['dte']}d</td></tr>")
     html = (
         "<h2 style='font:700 16px -apple-system,Segoe UI,Arial,sans-serif;color:#0f172a;"
-        f"margin:20px 0 4px'>🧱 Pegadas a un muro — imán lejos (&gt;{MAG_FAR_PTS:.0f} pts)</h2>"
+        f"margin:20px 0 4px'>🧱 Pegadas a un muro — imán lejos (&gt;{MAG_FAR_PCT:.0f}%)</h2>"
         "<p style='font:12px -apple-system,Segoe UI,Arial,sans-serif;color:#334155;margin:0 0 6px'>"
-        f"Acciones pegadas (≤{GLUE_PTS:.0f} pts) a un muro (put o call) con el imán a MÁS de "
-        f"{MAG_FAR_PTS:.0f} pts del precio (↑ imán arriba / ↓ abajo). Imán = la expiración con la "
-        f"concentración más fuerte (≥{MIN_STRENGTH:.2f}, hasta {MAX_MAGNET_DTE} DTE). Niveles del "
-        "MOTOR (pueden diferir de MarketSnack). Data factual, NO es asesoría.</p>"
+        f"Acciones pegadas (≤{GLUE_PCT:.1f}%) a un muro (put o call) con el imán (Magneto) a MÁS de "
+        f"{MAG_FAR_PCT:.0f}% del precio (↑ imán arriba / ↓ abajo). Niveles del MOTOR, vencimiento más "
+        "cercano (pueden diferir de MarketSnack). Data factual, NO es asesoría.</p>"
         "<table style='border-collapse:collapse'><thead><tr>" + heads
         + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>")
-    tg = f"🧱 Pegadas a muro, imán >{MAG_FAR_PTS:.0f}pts: " + ", ".join(
-        f"{d['sym']} {d['side']}${d['wall']:g} imán{d['dir']}${d['mag_dist']:.0f}" for d in items[:8])
+    tg = f"🧱 Pegadas a muro, imán >{MAG_FAR_PCT:.0f}%: " + ", ".join(
+        f"{d['sym']} {d['side']}${d['wall']:g} imán{d['dir']}{d['mag_dist_pct']:.0f}%" for d in items[:8])
     return html, tg
 
 
