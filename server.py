@@ -756,6 +756,13 @@ _TASK_JOBS = {
     # After-close 4:15pm report: --close forces the realized-P&L section (daily + Friday weekly) and
     # uses a distinct 'Cierre de Mercado' subject so it dedups independently from the morning run.
     "brief_close": ["daily_brief/run_brief_local.py --force --close"],
+    # The 5 weekday delivery slots (8:30/10:30/12:00/3:00/4:30, Norman's local clock — see SLOTS in
+    # run_brief_local.py). Fired ~10 min early by cron-job.org; per-slot inbox dedup + window guard inside.
+    "brief_s0830": ["daily_brief/run_brief_local.py --slot 0830"],
+    "brief_s1030": ["daily_brief/run_brief_local.py --slot 1030"],
+    "brief_s1200": ["daily_brief/run_brief_local.py --slot 1200"],
+    "brief_s1500": ["daily_brief/run_brief_local.py --slot 1500"],
+    "brief_s1630": ["daily_brief/run_brief_local.py --slot 1630"],
     "morning": ["breakeven_report.py", "gamma_levels_report.py"],
     "breakeven": ["breakeven_report.py"],
     "gamma": ["gamma_levels_report.py"],

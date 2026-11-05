@@ -105,41 +105,116 @@ def _release_lock() -> None:
         pass
 
 
-def _cloud_already_sent_today(phrase: str = "Brief de Mercado") -> bool:
-    """CLOUD (Render) cross-machine dedup: True if an email whose SUBJECT contains ``phrase`` is
-    ALREADY in the Gmail inbox today — i.e. the PC (on time) or an earlier cloud run already sent that
-    report. ``phrase`` is the per-report-type subject ('Brief de Mercado' = the regular/morning run,
-    'Cierre de Mercado' = the 4:15pm after-close run) so the two types dedup INDEPENDENTLY. Makes the
-    cloud a pure FALLBACK for when the PC is off, never duplicating the on-time PC run. Needs Gmail
-    IMAP creds in Render's env (GMAIL_USER + GMAIL_APP_PASSWORD). Returns False on any error (deliver —
-    the fallback must not MISS); the cloud runs well after the PC, so a false 'not found' is rare."""
+# ---- Delivery SLOTS (Norman 2026-11-04): 5 intentional briefs a weekday, at fixed WALL-CLOCK times --------------
+# 8:30 / 10:30 / 12:00 / 3:00 / 4:30 in Norman's CURRENT timezone. He is in Miami (America/New_York, EST) until
+# 2026-11-08 and back in Puerto Rico (America/Puerto_Rico, AST) from 2026-11-09 — the clock times stay the same,
+# only the zone (hence UTC) changes, so the switch is automatic here by date (override: BRIEF_TZ env var).
+SLOTS = ("0830", "1030", "1200", "1500", "1630")
+TZ_SCHEDULE = (("2026-11-09", "America/Puerto_Rico"),)   # (from-date inclusive, tz); default before = New_York
+_TZ_FIXED = {"America/New_York": -5, "America/Puerto_Rico": -4}   # last-resort offsets if tzdata is missing
+SLOT_EARLY_MIN = 25          # a slot run may start up to this many minutes BEFORE its clock time (generation
+#                              takes ~9 min, so the trigger fires ~10 min early so the email lands ~on the slot)
+SLOT_LATE_MIN = 75           # ...and is skipped if it would start more than this late (stale: the next slot covers)
+
+
+def _brief_tz_name(utc_date: "datetime.date | None" = None) -> str:
+    env = os.getenv("BRIEF_TZ")
+    if env:
+        return env
+    d = (utc_date or datetime.datetime.now(datetime.timezone.utc).date()).isoformat()
+    name = "America/New_York"
+    for frm, tz in TZ_SCHEDULE:
+        if d >= frm:
+            name = tz
+    return name
+
+
+def _now_local() -> datetime.datetime:
+    """Aware 'now' in Norman's active zone (see TZ_SCHEDULE). Never raises."""
+    name = _brief_tz_name()
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.datetime.now(ZoneInfo(name))
+    except Exception:  # noqa: BLE001 — no tzdata (bare Windows) → fixed offset
+        off = _TZ_FIXED.get(name, -5)
+        return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=off)))
+
+
+def _slot_arg() -> str | None:
+    """The ``--slot HHMM`` value (e.g. 0830), or None for the old non-slotted runs (Sunday preview, Cierre)."""
+    for i, a in enumerate(sys.argv):
+        v = a.split("=", 1)[1] if a.startswith("--slot=") else (
+            sys.argv[i + 1] if a == "--slot" and i + 1 < len(sys.argv) else None)
+        if v:
+            return v.strip().replace(":", "")
+    return None
+
+
+def _slot_label(slot: str) -> str:
+    h, m = int(slot[:2]), int(slot[2:])
+    return f"{(h % 12) or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
+
+
+def _slot_timing(slot: str, now: datetime.datetime) -> tuple[bool, int]:
+    """(in_window, minutes_from_slot) — minutes is negative while still before the slot's clock time."""
+    h, m = int(slot[:2]), int(slot[2:])
+    delta = round((now - now.replace(hour=h, minute=m, second=0, microsecond=0)).total_seconds() / 60)
+    return (-SLOT_EARLY_MIN <= delta <= SLOT_LATE_MIN), delta
+
+
+def _subject_for(phrase: str, now: datetime.datetime, slot: str | None) -> str:
+    """'Brief de Mercado - 11/05/2026 (8:30 AM)' for a slot run; the legacy '<phrase> - MM/DD/YYYY' otherwise
+    (Cierre + Sunday preview keep their subject). The slot label is what makes the dedup PER SLOT."""
+    base = f"{phrase} - {now:%m/%d/%Y}"
+    return f"{base} ({_slot_label(slot)})" if slot else base
+
+
+def _already_sent(key: str, since: datetime.date | None = None) -> bool:
+    """Cross-machine dedup: True if an email whose SUBJECT contains ``key`` is ALREADY in the Gmail inbox since
+    ``since`` (default: Norman's today). ``key`` is the per-report/per-slot subject ('Brief de Mercado - 11/05/2026
+    (8:30 AM)' → each slot dedups INDEPENDENTLY; 'Cierre de Mercado' for the after-close report; 'Brief de Mercado'
+    for the legacy daily one). Gmail's IMAP SUBJECT search tokenizes loosely, so we search the base words and then
+    VERIFY the exact key client-side on the fetched subject. Needs Gmail IMAP creds (GMAIL_USER +
+    GMAIL_APP_PASSWORD). Returns False on any error (deliver — a fallback must not MISS)."""
+    import email as _email
+    import email.header as _eh
     import imaplib
     user = os.getenv("IMAP_USER") or os.getenv("GMAIL_USER")
     pw = os.getenv("IMAP_PASSWORD") or os.getenv("GMAIL_APP_PASSWORD")
     if not user or not pw:
         return False
-    # "Today" must be NORMAN's day (Puerto Rico / AST, UTC-4), not Render's UTC clock: GitHub's cron
-    # lags 2.5h+, so the 4:15pm-close cloud run can land after 00:00 UTC (= 8pm AST), where UTC-today is
-    # TOMORROW → SINCE tomorrow finds nothing → the cloud re-sent a Cierre the PC had already sent.
-    try:
-        from zoneinfo import ZoneInfo
-        today = datetime.datetime.now(ZoneInfo("America/Puerto_Rico")).date()
-    except Exception:  # noqa: BLE001 — no tzdata → fall back to the machine clock
-        today = datetime.date.today()
-    since = today.strftime("%d-%b-%Y")
+    # "Today" is NORMAN's day (his zone), not Render's UTC clock: GitHub/cron lag can push a run past 00:00 UTC.
+    since_s = (since or _now_local().date()).strftime("%d-%b-%Y")
+    base = key.split(" - ")[0]                       # e.g. 'Brief de Mercado' / 'Cierre de Mercado'
     for attempt in range(2):
         try:
             M = imaplib.IMAP4_SSL("imap.gmail.com", timeout=30)
             M.login(user, pw)
             M.select("INBOX", readonly=True)
-            typ, data = M.search(None, "SINCE", since, "SUBJECT", f'"{phrase}"')  # quote the phrase
+            typ, data = M.search(None, "SINCE", since_s, "SUBJECT", f'"{base}"')
+            found = False
+            if typ == "OK" and data and data[0].split():
+                for num in data[0].split():
+                    t, msg = M.fetch(num, "(BODY.PEEK[HEADER.FIELDS (SUBJECT)])")
+                    if t != "OK" or not msg or not isinstance(msg[0], tuple):
+                        continue
+                    hdr = _email.message_from_bytes(msg[0][1]).get("Subject", "")
+                    subj = str(_eh.make_header(_eh.decode_header(hdr))).replace("\r\n", "").replace("\n", "")
+                    if key in " ".join(subj.split()):
+                        found = True
+                        break
             M.logout()
-            return typ == "OK" and bool(data and data[0].split())
+            return found
         except Exception:  # noqa: BLE001
             if attempt == 0:
                 import time as _t
                 _t.sleep(2)
     return False
+
+
+def _cloud_already_sent_today(phrase: str = "Brief de Mercado") -> bool:
+    """Back-compat wrapper (verify_close.py-era callers / legacy non-slot runs)."""
+    return _already_sent(phrase)
 
 
 def main() -> None:
@@ -150,13 +225,28 @@ def main() -> None:
     report_phrase = "Cierre de Mercado" if is_close else "Brief de Mercado"  # distinct subject per type
     if is_close:
         os.environ["BRIEF_WITH_REALIZED"] = "1"  # tells generate_brief to include the realized section
+    slot = _slot_arg()        # --slot HHMM → one of the 5 daily delivery slots (see SLOTS); None = legacy run
+    if slot is not None and slot not in SLOTS:
+        log(f"--slot {slot!r} no es una franja válida {SLOTS} — salgo.")
+        sys.exit(2)
+    subject_key = _subject_for(report_phrase, _now_local(), slot)
+    if slot and "--force" not in sys.argv:    # window guard: an early/late/wrong-zone trigger is a harmless no-op
+        ok, delta = _slot_timing(slot, _now_local())
+        if not ok:
+            log(f"franja {_slot_label(slot)}: ahora es {delta:+d} min de la hora (ventana "
+                f"-{SLOT_EARLY_MIN}/+{SLOT_LATE_MIN}) — no es su turno; salgo sin enviar.")
+            return
+    slot_mark = OUT / f"brief_slot_{_now_local():%Y-%m-%d}_{slot}.sent" if slot else None
+    if slot_mark is not None and slot_mark.exists() and "--force" not in sys.argv and not dry:
+        log(f"franja {_slot_label(slot)} ya enviada desde esta máquina — salgo para no duplicar.")
+        return
     if not _acquire_lock():   # another instance is already running (morning trigger fires 2x on wake)
         log("otra instancia del brief ya está corriendo — salgo para no duplicar el reporte.")
         return
     _own_lock = True
     # Cooldown: don't re-send if a brief already went out recently (a missed-task catch-up firing
     # minutes after the real run). --force (manual regens) bypasses it; real scheduled runs are 7h+ apart.
-    if "--force" not in sys.argv and not dry:
+    if "--force" not in sys.argv and not dry and not slot:   # slot runs dedup PER SLOT (marker + inbox), not by time
         try:
             prev_sent = float(LAST_SENT.read_text(encoding="utf-8").strip()) if LAST_SENT.exists() else 0.0
         except Exception:  # noqa: BLE001
@@ -167,8 +257,10 @@ def main() -> None:
     # Cloud fallback cross-machine dedup: on Render, skip if the PC already emailed today's brief, so
     # the always-on cloud run never duplicates the on-time PC run. Applies even with --force (which
     # only bypasses the closed-market guard). No-op off Render (the PC).
-    if os.getenv("RENDER") and not dry and _cloud_already_sent_today(report_phrase):
-        log(f"la PC ya envió '{report_phrase}' hoy (en el inbox) — la nube no duplica.")
+    # Slot runs check the inbox on EVERY machine (PC, Mac, GitHub runner, Render) for THIS slot's subject only —
+    # so the same slot is never delivered twice, while the other four slots are untouched.
+    if (os.getenv("RENDER") or slot) and not dry and _already_sent(subject_key if slot else report_phrase):
+        log(f"'{subject_key if slot else report_phrase}' ya está en el inbox — no duplico.")
         return
     _stay_awake()  # keep the PC awake through generation (idle-sleep killed the 3pm run 2026-09-09)
 
@@ -266,9 +358,14 @@ def main() -> None:
         log("===== DRY run done (not sending) =====")
         return
 
-    date_es = datetime.date.today().strftime("%m/%d/%Y")
+    # Generation takes ~9 min: re-check right before sending so two machines that fired the SAME slot together
+    # (both passed the early check) still collapse to one email.
+    if (os.getenv("RENDER") or slot) and _already_sent(
+            subject_key if slot else report_phrase):
+        log(f"'{subject_key if slot else report_phrase}' llegó al inbox mientras generaba — no duplico.")
+        return
     log("emailing...")
-    re_ = run("send_email.py", "--subject", f"{report_phrase} - {date_es}",
+    re_ = run("send_email.py", "--subject", subject_key,
               "--body-file", str(EMAIL), "--html", *inline_args)
     log(f"email rc={re_.returncode} {(re_.stdout or re_.stderr).strip()[:200]}")
     log("mensajería móvil (Telegram)...")
@@ -282,6 +379,8 @@ def main() -> None:
 
     if re_.returncode == 0:  # record a successful send so a catch-up within COOLDOWN won't re-send
         try:
+            if slot_mark is not None:
+                slot_mark.write_text(str(datetime.datetime.now().timestamp()), encoding="utf-8")
             LAST_SENT.write_text(str(datetime.datetime.now().timestamp()), encoding="utf-8")
         except Exception:  # noqa: BLE001
             pass
