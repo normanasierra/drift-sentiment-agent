@@ -4,7 +4,7 @@ Replaces the 3 legacy jobs (8:30/12:00/16:15 NY -> daily-brief.yml, which has no
 RENDER_API_KEY and RENDER_SERVICE_ID from .env; TASKS_KEY is read from Render and only ever goes into the
 cron-job.org job URL (never printed).
 
-  .venv/bin/python scripts/cron_brief_slots.py --create     # create/refresh the 6 new jobs, DISABLED
+  .venv/bin/python scripts/cron_brief_slots.py --create     # create/refresh the 6 new jobs (DISABLED) + keep-warm (ON)
   .venv/bin/python scripts/cron_brief_slots.py --cutover    # enable the 6 new + disable the 3 legacy, in one go
   .venv/bin/python scripts/cron_brief_slots.py --rollback   # disable the 6 new + re-enable the 3 legacy
   .venv/bin/python scripts/cron_brief_slots.py --status
@@ -29,6 +29,11 @@ load_dotenv(REPO / ".env")
 API = "https://api.cron-job.org"
 APP = "https://drift-sentiment-web.onrender.com/tasks/run"
 LEGACY = [8547355, 8547356, 8547357]
+# Keep-warm: Render's web tier spins down after ~15 min idle, so a slot trigger can hit a cold service
+# and get a 503 (happened 2026-11-05 to the 8:30 slot). This job pings the root every 10 min on weekdays
+# across market hours so every slot/Cierre trigger lands on an already-warm service (root responds ~0.2s).
+KEEPWARM = ("Keep-warm (Render)", "https://drift-sentiment-web.onrender.com/",
+            list(range(11, 23)), [0, 10, 20, 30, 40, 50])
 # (title, render job, timezone, UTC hours / local hours, minute)
 NEW = [
     ("Brief 8:30 (slot)", "brief_s0830", "UTC", [12, 13], 20),
@@ -64,7 +69,22 @@ def _new_ids() -> dict[str, int]:
     return {j["title"]: j["jobId"] for j in _jobs() if j.get("title") in titles}
 
 
+def _keepwarm() -> None:
+    title, url, hrs, mins = KEEPWARM
+    body = {"job": {"title": title, "url": url, "enabled": True, "saveResponses": False,
+                    "requestTimeout": 30, "requestMethod": 0,
+                    "schedule": {"timezone": "UTC", "hours": hrs, "minutes": mins, "mdays": [-1],
+                                 "months": [-1], "wdays": [1, 2, 3, 4, 5], "expiresAt": 0}}}
+    jid = next((j["jobId"] for j in _jobs() if j.get("title") == title), None)
+    if jid:   # idempotent
+        r = requests.patch(f"{API}/jobs/{jid}", headers=_h(), data=json.dumps(body), timeout=30)
+    else:
+        r = requests.put(f"{API}/jobs", headers=_h(), data=json.dumps(body), timeout=30)
+    print(f"  {title}: {r.status_code}")
+
+
 def create() -> None:
+    _keepwarm()
     tk, have = _tasks_key(), _new_ids()
     for title, job, tz, hrs, mn in NEW:
         body = {"job": {"title": title, "url": f"{APP}?job={job}&key={tk}", "enabled": False, "saveResponses": True,
