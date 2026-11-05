@@ -30,11 +30,13 @@ name: Cloud brief (Render trigger)
 # syncs to Render (scripts/render_push_token.py). Delivery to mobile goes via
 # Telegram (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID must be set in Render's env).
 # =============================================================================
+# 2026-11-04: weekday deliveries MOVED to cron-job.org -> Render directly (punctual, per-slot dedup):
+#   5 slots 8:30/10:30/12:00/3:00/4:30 (job=brief_sHHMM, Miami EST until 11-08, PR AST from 11-09) and the
+#   after-close report (job=brief_close, 16:15 America/New_York). GitHub's cron lagged 1-2h, so only the
+#   Sunday preview stays here. Manual dispatch still works for every job.
 on:
   schedule:
     - cron: '30 20 * * 0'     # Sun 20:30 UTC -> lands ~Sun 19:00 AST (7pm) after GitHub's lag (job=brief_force)
-    - cron: '45 12 * * 1-5'   # 12:45 UTC = 8:45am EDT weekdays -> ~11am AST fallback (job=brief)
-    - cron: '30 20 * * 1-5'   # 20:30 UTC weekdays -> after the PC's 4:15pm close -> job=brief_close (realized P&L)
   workflow_dispatch:
     inputs:
       job:

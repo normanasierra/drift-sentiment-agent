@@ -71,3 +71,9 @@ def test_already_sent_verifies_exact_slot(monkeypatch):
     assert rb._already_sent("Brief de Mercado - 11/05/2026 (8:30 AM)")
     assert rb._already_sent("Brief de Mercado - 11/05/2026 (10:30 AM)")
     assert not rb._already_sent("Brief de Mercado - 11/05/2026 (12:00 PM)")   # other slot NOT blocked
+
+
+def test_1630_inactive_until_nov_9():
+    assert rb.SLOT_ACTIVE_FROM["1630"] == "2026-11-09"
+    assert "2026-11-08" < rb.SLOT_ACTIVE_FROM["1630"] <= "2026-11-09"
+    assert all(s not in rb.SLOT_ACTIVE_FROM for s in ("0830", "1030", "1200", "1500"))

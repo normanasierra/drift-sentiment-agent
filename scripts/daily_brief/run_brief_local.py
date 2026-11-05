@@ -112,6 +112,9 @@ def _release_lock() -> None:
 SLOTS = ("0830", "1030", "1200", "1500", "1630")
 TZ_SCHEDULE = (("2026-11-09", "America/Puerto_Rico"),)   # (from-date inclusive, tz); default before = New_York
 _TZ_FIXED = {"America/New_York": -5, "America/Puerto_Rico": -4}   # last-resort offsets if tzdata is missing
+SLOT_ACTIVE_FROM = {"1630": "2026-11-09"}   # 4:30 PM slot is SKIPPED while Norman is in Miami (it lands 30 min
+#                                              after the 4pm-ET close and would near-duplicate the Cierre report);
+#                                              it switches ON by itself on the date he is back in Puerto Rico.
 SLOT_EARLY_MIN = 25          # a slot run may start up to this many minutes BEFORE its clock time (generation
 #                              takes ~9 min, so the trigger fires ~10 min early so the email lands ~on the slot)
 SLOT_LATE_MIN = 75           # ...and is skipped if it would start more than this late (stale: the next slot covers)
@@ -230,6 +233,9 @@ def main() -> None:
         log(f"--slot {slot!r} no es una franja válida {SLOTS} — salgo.")
         sys.exit(2)
     subject_key = _subject_for(report_phrase, _now_local(), slot)
+    if slot and SLOT_ACTIVE_FROM.get(slot, "") > _now_local().date().isoformat() and "--force" not in sys.argv:
+        log(f"franja {_slot_label(slot)} aún no activa (desde {SLOT_ACTIVE_FROM[slot]}) — salgo.")
+        return
     if slot and "--force" not in sys.argv:    # window guard: an early/late/wrong-zone trigger is a harmless no-op
         ok, delta = _slot_timing(slot, _now_local())
         if not ok:
