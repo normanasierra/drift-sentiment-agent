@@ -118,7 +118,15 @@ def _cloud_already_sent_today(phrase: str = "Brief de Mercado") -> bool:
     pw = os.getenv("IMAP_PASSWORD") or os.getenv("GMAIL_APP_PASSWORD")
     if not user or not pw:
         return False
-    since = datetime.date.today().strftime("%d-%b-%Y")
+    # "Today" must be NORMAN's day (Puerto Rico / AST, UTC-4), not Render's UTC clock: GitHub's cron
+    # lags 2.5h+, so the 4:15pm-close cloud run can land after 00:00 UTC (= 8pm AST), where UTC-today is
+    # TOMORROW → SINCE tomorrow finds nothing → the cloud re-sent a Cierre the PC had already sent.
+    try:
+        from zoneinfo import ZoneInfo
+        today = datetime.datetime.now(ZoneInfo("America/Puerto_Rico")).date()
+    except Exception:  # noqa: BLE001 — no tzdata → fall back to the machine clock
+        today = datetime.date.today()
+    since = today.strftime("%d-%b-%Y")
     for attempt in range(2):
         try:
             M = imaplib.IMAP4_SSL("imap.gmail.com", timeout=30)

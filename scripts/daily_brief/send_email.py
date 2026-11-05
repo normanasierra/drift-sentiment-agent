@@ -8,7 +8,7 @@ password. Generate one at https://myaccount.google.com/apppasswords.
 Env vars:
     GMAIL_USER          sender Gmail address (default: BRIEF_EMAIL_TO)
     GMAIL_APP_PASSWORD  16-char Google app password (required)
-    BRIEF_EMAIL_TO      recipient (default: GMAIL_USER)
+    BRIEF_EMAIL_TO      recipient(s), comma-separated for several (default: GMAIL_USER)
 
 Usage:
     python send_email.py --subject "Daily Brief" --body-file brief.html --html
@@ -41,10 +41,23 @@ class EmailError(RuntimeError):
     pass
 
 
-def _config() -> tuple[str, str, str]:
-    user = os.getenv("GMAIL_USER") or os.getenv("BRIEF_EMAIL_TO")
+def _recipients(raw: str | None) -> list[str]:
+    """Split a ``BRIEF_EMAIL_TO`` value ("a@x.com, b@y.com", also ';' separated) into a clean,
+    de-duplicated (case-insensitive, order-preserving) list. A single address → a 1-item list."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for part in (raw or "").replace(";", ",").split(","):
+        addr = part.strip()
+        if addr and addr.lower() not in seen:
+            seen.add(addr.lower())
+            out.append(addr)
+    return out
+
+
+def _config() -> tuple[str, str, list[str]]:
+    to = _recipients(os.getenv("BRIEF_EMAIL_TO")) or _recipients(os.getenv("GMAIL_USER"))
+    user = os.getenv("GMAIL_USER") or (to[0] if to else "")  # sender = first recipient if unset
     password = os.getenv("GMAIL_APP_PASSWORD")
-    to = os.getenv("BRIEF_EMAIL_TO") or user
     if not password:
         raise EmailError(
             "GMAIL_APP_PASSWORD not set. Add it to .env "
@@ -55,7 +68,7 @@ def _config() -> tuple[str, str, str]:
     return user, password, to
 
 
-def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: str, sender: str,
+def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: list[str], sender: str,
                  inline_images: dict[str, str] | None = None) -> None:
     """Send via Resend's HTTPS API — used in the cloud (Render), where outbound SMTP is
     blocked. Stdlib only (urllib), like send_whatsapp.py. ``inline_images`` (cid -> path) ride
@@ -66,7 +79,7 @@ def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: str, 
     import urllib.request
 
     body_payload: dict[str, object] = {
-        "from": sender, "to": [to], "subject": subject,
+        "from": sender, "to": to, "subject": subject,
         ("html" if html else "text"): body,
     }
     attachments = []
@@ -101,7 +114,7 @@ def _send_resend(subject: str, body: str, *, html: bool, api_key: str, to: str, 
                          f"{exc.read()[:200].decode('utf-8', 'replace')}") from exc
     except urllib.error.URLError as exc:
         raise EmailError(f"Resend: error de red — {exc}") from exc
-    print(f"Email sent to {to} via Resend ({'HTML' if html else 'plain'}).")
+    print(f"Email sent to {', '.join(to)} via Resend ({'HTML' if html else 'plain'}).")
 
 
 def send_email(
@@ -119,7 +132,7 @@ def send_email(
     # configured; locally keep using Gmail SMTP (works there, keeps your own From).
     resend_key = os.getenv("RESEND_API_KEY")
     if resend_key and os.getenv("RENDER"):
-        to = os.getenv("BRIEF_EMAIL_TO") or os.getenv("GMAIL_USER")
+        to = _recipients(os.getenv("BRIEF_EMAIL_TO")) or _recipients(os.getenv("GMAIL_USER"))
         if not to:
             raise EmailError("BRIEF_EMAIL_TO / GMAIL_USER no está seteado.")
         sender = os.getenv("RESEND_FROM", "Brief de Mercado <onboarding@resend.dev>")
@@ -132,7 +145,7 @@ def send_email(
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = user
-    msg["To"] = to
+    msg["To"] = ", ".join(to)
     if html:
         msg.set_content("This message requires an HTML-capable email client.")
         msg.add_alternative(body, subtype="html")
@@ -163,7 +176,7 @@ def send_email(
             "GMAIL_APP_PASSWORD is a valid 16-char app password."
         ) from exc
 
-    print(f"Email sent to {to} ({'HTML' if html else 'plain'}).")
+    print(f"Email sent to {', '.join(to)} ({'HTML' if html else 'plain'}).")
 
 
 def main() -> int:
