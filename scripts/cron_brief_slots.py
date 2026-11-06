@@ -32,7 +32,7 @@ LEGACY = [8547355, 8547356, 8547357]
 # Keep-warm: Render's web tier spins down after ~15 min idle, so a slot trigger can hit a cold service
 # and get a 503 (happened 2026-11-05 to the 8:30 slot). This job pings the root every 10 min on weekdays
 # across market hours so every slot/Cierre trigger lands on an already-warm service (root responds ~0.2s).
-KEEPWARM = ("Keep-warm (Render)", "https://drift-sentiment-web.onrender.com/healthz",
+KEEPWARM = ("Keep-warm (Render)", "https://drift-sentiment-web.onrender.com/login",
             list(range(11, 23)), [0, 10, 20, 30, 40, 50])
 # (title, render job, timezone, UTC hours / local hours, minute)
 NEW = [

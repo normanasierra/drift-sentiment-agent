@@ -178,6 +178,52 @@ def send_email(
 
     print(f"Email sent to {', '.join(to)} ({'HTML' if html else 'plain'}).")
 
+    # Gmail delivers mail you send to yourself already marked READ, with no
+    # notification — so a brief the local path sends to GMAIL_USER lands silent
+    # and invisible in the inbox. If the sender is also a recipient, flip that
+    # copy back to UNREAD (and star it) so it shows up bold as a new message.
+    # Best-effort: a hiccup here must never fail an already-sent brief.
+    if any(addr.lower() == user.lower() for addr in to):
+        _mark_self_unread(subject, user, password)
+
+
+BRIEF_LABEL = os.getenv("BRIEF_GMAIL_LABEL", "BRIEF")
+
+
+def _mark_self_unread(subject: str, user: str, password: str) -> None:
+    """Make the self-addressed copy of ``subject`` impossible to miss in a noisy
+    inbox: flip it to UNREAD, STAR it, and file it under a dedicated Gmail label
+    (default "BRIEF") so there's a clean view of just the briefs. Gmail otherwise
+    hides self-sent mail as already-read, where it drowns under newsletters."""
+    import datetime
+    import imaplib
+
+    try:
+        M = imaplib.IMAP4_SSL("imap.gmail.com", timeout=30)
+        M.login(user, password)
+        # Ensure the label exists (Gmail exposes labels as IMAP folders; CREATE is
+        # idempotent-ish — ignore the "already exists" error).
+        try:
+            M.create(BRIEF_LABEL)
+        except Exception:  # noqa: BLE001
+            pass
+        M.select("INBOX")
+        since = datetime.date.today().strftime("%d-%b-%Y")
+        typ, data = M.search(None, "SINCE", since, "SUBJECT", f'"{subject}"')
+        ids = data[0].split() if data and data[0] else []
+        for mid in ids:
+            M.store(mid, "-FLAGS", "\\Seen")               # unread / bold
+            M.store(mid, "+FLAGS", "\\Flagged")            # star
+            try:
+                M.store(mid, "+X-GM-LABELS", BRIEF_LABEL)  # file under "BRIEF"
+            except Exception:  # noqa: BLE001
+                pass
+        M.logout()
+        if ids:
+            print(f"Inbox copy marcada no-leída + estrella + etiqueta '{BRIEF_LABEL}' ({len(ids)}).")
+    except Exception as exc:  # noqa: BLE001 — never block a sent brief
+        print(f"aviso: no pude marcar no-leído el correo propio: {exc!r}")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Send the daily brief by email.")
