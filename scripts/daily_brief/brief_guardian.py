@@ -93,13 +93,16 @@ def _inbox_has(subject: str, since: datetime.date) -> bool | None:
 
 
 def _alert(subject: str, body: str) -> None:
-    env = dict(os.environ, BRIEF_EMAIL_TO=ALERT_TO)
+    # Plumbing alerts ("the cloud failed / resent") go to TELEGRAM only, never to
+    # the email inbox — the inbox is for the briefs themselves, and a per-resend
+    # alert email there is just noise. Telegram already delivers reliably.
+    msg = f"{subject}\n\n{body}"
     try:
-        subprocess.run([PY, str(BRIEF / "send_email.py"), "--subject", subject],
-                       input=body, text=True, env=env, timeout=60, capture_output=True)
-        log(f"alerta enviada a {ALERT_TO}: {subject}")
+        subprocess.run([PY, str(BRIEF / "send_telegram.py")],
+                       input=msg, text=True, timeout=60, capture_output=True)
+        log(f"alerta enviada a Telegram: {subject}")
     except Exception as e:  # noqa: BLE001
-        log(f"no pude enviar alerta: {e!r}")
+        log(f"no pude enviar alerta Telegram: {e!r}")
 
 
 def _resend(slot: str) -> bool:
