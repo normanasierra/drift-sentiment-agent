@@ -171,7 +171,13 @@ def main() -> None:
     args = sys.argv[1:]
     check_only = "--check-only" in args
     if "--sweep" in args:
-        slots = _due_slots(RBL._now_local())
+        now = RBL._now_local()
+        # Market-hours gate: slots run 8:30-16:30; sweeping 8:00-17:30 local covers every resend window.
+        # Outside that (and on weekends/holidays, handled in verify) a sweep is a pure no-op, so skip the
+        # IMAP round-trips entirely — lets the launchd agent fire every 15 min, 24/7, cheaply.
+        if not (8 <= now.hour < 18) and "--anytime" not in args:
+            sys.exit(0)
+        slots = _due_slots(now)
         if not slots:
             log("ninguna franja vencida todavía hoy — nada que verificar.")
             sys.exit(0)
