@@ -20,7 +20,7 @@ from pathlib import Path
 import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import (
-    HTMLResponse, JSONResponse, RedirectResponse, Response,
+    HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response,
 )
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -117,7 +117,8 @@ def _valid_token(token: str | None) -> bool:
 async def _require_login(request: Request, call_next):
     if APP_PASSWORD:
         path = request.url.path
-        allowed = (path == "/login" or path.startswith("/static/")
+        allowed = (path == "/login" or path == "/healthz"
+                   or path.startswith("/static/")
                    or path.startswith("/tasks/"))  # /tasks/* self-guards with TASKS_KEY
         if not allowed and not _valid_token(request.cookies.get(_COOKIE)):
             if path.startswith("/api/"):
@@ -159,6 +160,14 @@ def _load(ticker: str, ttl: int = _CACHE_TTL):
 
 
 # ----------------------------- pages ---------------------------------------
+@app.get("/healthz", response_class=PlainTextResponse)
+def healthz():
+    """Unauthenticated 200 for uptime/keep-warm pings. Root (/) 303-redirects to
+    /login, which cron-job.org counts as a failure and auto-disables the job; this
+    always returns 200 so the keep-warm stays enabled."""
+    return "ok"
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
     return render("index.html", page="drift", title="Drift Sentiment + GEX")
